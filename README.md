@@ -22,13 +22,14 @@ using Ripple
 
 grid = RectilinearGrid(CPU();
                        size=(16, 8, 4),
+                       halo=(3, 3, 3),
                        x=(0, 16),
                        y=(0, 8),
                        z=(-1, 0))
 
-spectral_grid = PolarWaveVectorGrid(Float64;
-                                    kappa=range(0.3, 1.2; length=6),
-                                    theta=range(0, 2pi; length=9)[1:8])
+spectral_grid = PolarWaveVectorGrid(CPU(), Float64;
+                                    κ=range(0.3, 1.2; length=6),
+                                    φ=range(0, 2pi; length=9)[1:8])
 
 sources = SourceTermSet(
     ExponentialWindInput(rate=0.04, direction=0.0, spreading_power=2),
@@ -37,7 +38,6 @@ sources = SourceTermSet(
 
 model = SpectralWaveModel(; grid,
                             spectral_grid,
-                            advection=nothing,
                             sources,
                             timestepper=:SemiImplicitEuler)
 
@@ -55,11 +55,17 @@ total = total_action(model.action)
   space x spectral coordinate space without flattening the spectrum.
 - Spectral integrals treat entries as finite-volume cell averages and multiply
   by exact spectral cell measures, not point-sample quadrature weights.
-- Physical transport is computed with Oceananigans tracer advection operators,
-  so schemes like `Centered()`, `UpwindBiased()`, `WENO()`, and
-  `FluxFormAdvection(...)` can be passed directly as `advection`.
+- Physical transport is computed with Oceananigans tracer advection operators.
+  The default `advection=WENO()` matches Oceananigans' fifth-order WENO; other
+  schemes like `Centered()`, `UpwindBiased()`, and `FluxFormAdvection(...)` can
+  be passed instead. Pass `advection=nothing` to disable transport (e.g. in
+  source-only column tests).
 - Absent optional model components follow Oceananigans/Breeze-style `nothing`
-  semantics: `advection=nothing`, `sources=nothing`, and `coupling=nothing`.
+  semantics: `sources=nothing` and `coupling=nothing` opt out cleanly.
+- Spectral grids use unicode coordinates: `κ` for radial wavenumber and `φ` for
+  the directional/azimuthal angle (chosen so the symbol does not clash with
+  Breeze's `θ` for potential temperature). Wave grids match Oceananigans
+  signatures, e.g. `PolarWaveVectorGrid(CPU(), Float64; κ=..., φ=...)`.
 - `QTransform` takes the physical `RectilinearGrid` directly and uses its
   vertical faces for perfect finite-volume integration.
 - Oceananigans is a hard dependency. CairoMakie is used by the literate

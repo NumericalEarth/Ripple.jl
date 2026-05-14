@@ -100,7 +100,7 @@ function mean_direction(N::ProductField)
     return atan.(my, mx)
 end
 
-spectral_direction(g::Union{PolarWaveVectorGrid, FrequencyDirectionGrid}, m, n) = g.theta[n]
+spectral_direction(g::Union{PolarWaveVectorGrid, FrequencyDirectionGrid}, m, n) = g.φ[n]
 function spectral_direction(g, m, n)
     kx, ky = k_components(g, m, n)
     return atan(ky, kx)

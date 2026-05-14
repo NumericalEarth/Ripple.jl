@@ -18,9 +18,9 @@
     @test all(interior(N) .>= 0)
     @test isfinite(total_action(N))
 
-    pgrid = PolarWaveVectorGrid(Float64;
-                                kappa=[0.5, 1.0],
-                                theta=[0.0, pi/2, pi, 3pi/2])
+    pgrid = PolarWaveVectorGrid(;
+                                κ=[0.5, 1.0],
+                                φ=[0.0, pi/2, pi, 3pi/2])
     P = WaveActionField(grid, pgrid)
     polar_packet = GaussianWavePacket(; x0=1.5,
                                       y0=0.5,

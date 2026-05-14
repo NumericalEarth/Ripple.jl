@@ -892,10 +892,10 @@ function source_split(s::DirectionalDiffusion, model, i, j, m, n)
     rate = source_value(s.rate, model, i, j)
     rate >= 0 || throw(ArgumentError("directional diffusion rate must be nonnegative"))
     _, Neta = coordinate_size(model.spectral_grid)
-    Δθ = directional_diffusion_spacing(model.spectral_grid)
+    Δφ = directional_diffusion_spacing(model.spectral_grid)
     left = periodic_index(n - 1, Neta)
     right = periodic_index(n + 1, Neta)
-    coefficient = rate / Δθ^2
+    coefficient = rate / Δφ^2
     positive = coefficient * (model.action[i, j, m, left] + model.action[i, j, m, right])
     damping = 2coefficient
     return positive, damping
@@ -1369,27 +1369,27 @@ function nonnegative_integer_spreading_power(spreading_power)
     return Int(spreading_power)
 end
 
-function cosine_power_antiderivative(φ, power::Int)
-    power == 0 && return φ
-    power == 1 && return sin(φ)
-    return sin(φ) * cos(φ)^(power - 1) / power +
-           (power - 1) / power * cosine_power_antiderivative(φ, power - 2)
+function cosine_power_antiderivative(α, power::Int)
+    power == 0 && return α
+    power == 1 && return sin(α)
+    return sin(α) * cos(α)^(power - 1) / power +
+           (power - 1) / power * cosine_power_antiderivative(α, power - 2)
 end
 
-function positive_cosine_power_integral(φ₁, φ₂, power::Int)
-    φ₂ < φ₁ && return -positive_cosine_power_integral(φ₂, φ₁, power)
-    power == 0 && return φ₂ - φ₁
+function positive_cosine_power_integral(α₁, α₂, power::Int)
+    α₂ < α₁ && return -positive_cosine_power_integral(α₂, α₁, power)
+    power == 0 && return α₂ - α₁
 
     period = 2π
-    lower_period = floor(Int, (φ₁ - π / 2) / period) - 1
-    upper_period = ceil(Int, (φ₂ + π / 2) / period) + 1
-    integral = zero(float(φ₁ + φ₂))
-    F = φ -> cosine_power_antiderivative(φ, power)
+    lower_period = floor(Int, (α₁ - π / 2) / period) - 1
+    upper_period = ceil(Int, (α₂ + π / 2) / period) + 1
+    integral = zero(float(α₁ + α₂))
+    F = α -> cosine_power_antiderivative(α, power)
 
     for q in lower_period:upper_period
         shift = q * period
-        left = max(φ₁, shift - π / 2)
-        right = min(φ₂, shift + π / 2)
+        left = max(α₁, shift - π / 2)
+        right = min(α₂, shift + π / 2)
         right > left || continue
         integral += F(right - shift) - F(left - shift)
     end
@@ -1403,11 +1403,11 @@ function wind_directional_weight(cgrid::Union{PolarWaveVectorGrid, FrequencyDire
     power == 0 && return one(float(spreading_power))
 
     faces = coordinate_faces(cgrid, 2)
-    θ₁ = faces[n]
-    θ₂ = faces[n+1]
-    Δθ = θ₂ - θ₁
-    Δθ > 0 || throw(ArgumentError("directional cell faces must be increasing"))
-    return positive_cosine_power_integral(θ₁ - direction, θ₂ - direction, power) / Δθ
+    φ₁ = faces[n]
+    φ₂ = faces[n+1]
+    Δφ = φ₂ - φ₁
+    Δφ > 0 || throw(ArgumentError("directional cell faces must be increasing"))
+    return positive_cosine_power_integral(φ₁ - direction, φ₂ - direction, power) / Δφ
 end
 
 function wind_directional_weight(cgrid, m, n, direction, spreading_power)

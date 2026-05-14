@@ -1,4 +1,5 @@
-struct CartesianWaveVectorGrid{FT, KX, KY, KXF, KYF, W, Topo} <: AbstractSpectralGrid
+struct CartesianWaveVectorGrid{FT, A, KX, KY, KXF, KYF, W, Topo} <: AbstractSpectralGrid
+    architecture :: A
     kx :: KX
     ky :: KY
     kx_faces :: KXF
@@ -7,23 +8,35 @@ struct CartesianWaveVectorGrid{FT, KX, KY, KXF, KYF, W, Topo} <: AbstractSpectra
     topology :: Topo
 end
 
-function CartesianWaveVectorGrid(::Type{FT}=Float64; kx, ky,
-                                 kx_faces=centers_to_faces(collect(FT, kx)),
-                                 ky_faces=centers_to_faces(collect(FT, ky)),
-                                 topology=(Bounded(), Bounded())) where FT
+CartesianWaveVectorGrid(FT::DataType; kwargs...) = CartesianWaveVectorGrid(CPU(), FT; kwargs...)
+
+function CartesianWaveVectorGrid(arch::AbstractArchitecture = CPU(),
+                                 FT::DataType = Float64;
+                                 kx, ky,
+                                 kx_faces = nothing,
+                                 ky_faces = nothing,
+                                 topology = (Bounded(), Bounded()))
     topology = canonical_topology_tuple(topology, 2, "CartesianWaveVectorGrid")
-    kxc = collect(FT, kx)
-    kyc = collect(FT, ky)
-    kxf = collect(FT, kx_faces)
-    kyf = collect(FT, ky_faces)
-    validate_coordinate_topology("kx", kxc, kxf)
-    validate_coordinate_topology("ky", kyc, kyf)
-    wx = diff(kxf)
-    wy = diff(kyf)
-    weights = [wx[m] * wy[n] for m in eachindex(kxc), n in eachindex(kyc)]
-    return CartesianWaveVectorGrid{FT, typeof(kxc), typeof(kyc), typeof(kxf), typeof(kyf), typeof(weights), typeof(topology)}(
-        kxc, kyc, kxf, kyf, weights, topology)
+    kxc_host = collect(FT, kx)
+    kyc_host = collect(FT, ky)
+    kxf_host = kx_faces === nothing ? centers_to_faces(kxc_host) : collect(FT, kx_faces)
+    kyf_host = ky_faces === nothing ? centers_to_faces(kyc_host) : collect(FT, ky_faces)
+    validate_coordinate_topology("kx", kxc_host, kxf_host)
+    validate_coordinate_topology("ky", kyc_host, kyf_host)
+    wx = diff(kxf_host)
+    wy = diff(kyf_host)
+    weights_host = [wx[m] * wy[n] for m in eachindex(kxc_host), n in eachindex(kyc_host)]
+    kxc = on_architecture(arch, kxc_host)
+    kyc = on_architecture(arch, kyc_host)
+    kxf = on_architecture(arch, kxf_host)
+    kyf = on_architecture(arch, kyf_host)
+    weights = on_architecture(arch, weights_host)
+    return CartesianWaveVectorGrid{FT, typeof(arch), typeof(kxc), typeof(kyc),
+                                   typeof(kxf), typeof(kyf), typeof(weights), typeof(topology)}(
+        arch, kxc, kyc, kxf, kyf, weights, topology)
 end
+
+architecture(g::CartesianWaveVectorGrid) = g.architecture
 
 coordinate_centers(g::CartesianWaveVectorGrid, dim) = dim == 1 ? g.kx : g.ky
 coordinate_faces(g::CartesianWaveVectorGrid, dim) = dim == 1 ? g.kx_faces : g.ky_faces

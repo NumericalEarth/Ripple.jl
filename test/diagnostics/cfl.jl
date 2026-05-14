@@ -5,9 +5,9 @@
                            y=(0, 3),
                            z=(-1, 0),
                            topology=(Bounded, Bounded, Bounded))
-    cgrid = FrequencyDirectionGrid(Float64;
+    cgrid = FrequencyDirectionGrid(;
                                    frequency=[0.08, 0.16],
-                                   theta=[0.0, pi])
+                                   φ=[0.0, pi])
     model = SpectralWaveModel(; grid,
                                 spectral_grid=cgrid,
                                 advection=nothing,

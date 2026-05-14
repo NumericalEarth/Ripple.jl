@@ -21,20 +21,20 @@ function integrate_spectrum(values::AbstractMatrix, grid::AbstractSpectralGrid)
     return total
 end
 
-@inline function radial_power_annular_measure(k₁, k₂, θ₁, θ₂, power)
+@inline function radial_power_annular_measure(k₁, k₂, φ₁, φ₂, power)
     power > -2 || throw(ArgumentError("radial power must be greater than -2 for annular finite-volume integration"))
-    return (θ₂ - θ₁) * (k₂^(power + 2) - k₁^(power + 2)) / (power + 2)
+    return (φ₂ - φ₁) * (k₂^(power + 2) - k₁^(power + 2)) / (power + 2)
 end
 
 @inline function spectral_radial_power_measure(g::PolarWaveVectorGrid, m, n, power)
-    return radial_power_annular_measure(g.kappa_faces[m], g.kappa_faces[m+1],
-                                        g.theta_faces[n], g.theta_faces[n+1],
+    return radial_power_annular_measure(g.κ_faces[m], g.κ_faces[m+1],
+                                        g.φ_faces[n], g.φ_faces[n+1],
                                         power)
 end
 
 @inline function spectral_radial_power_measure(g::FrequencyDirectionGrid, m, n, power)
-    return radial_power_annular_measure(g.kappa_faces[m], g.kappa_faces[m+1],
-                                        g.theta_faces[n], g.theta_faces[n+1],
+    return radial_power_annular_measure(g.κ_faces[m], g.κ_faces[m+1],
+                                        g.φ_faces[n], g.φ_faces[n+1],
                                         power)
 end
 
@@ -79,9 +79,9 @@ end
 @inline function spectral_frequency_power_measure(g::FrequencyDirectionGrid, m, n, power)
     power >= 0 || throw(ArgumentError("frequency power must be nonnegative"))
     f₁, f₂ = g.frequency_faces[m], g.frequency_faces[m+1]
-    α = g.kappa_faces[m+1] / f₂^2
-    return (g.theta_faces[n+1] - g.theta_faces[n]) *
-           2 * α^2 * (f₂^(power + 4) - f₁^(power + 4)) / (power + 4)
+    coeff = g.κ_faces[m+1] / f₂^2
+    return (g.φ_faces[n+1] - g.φ_faces[n]) *
+           2 * coeff^2 * (f₂^(power + 4) - f₁^(power + 4)) / (power + 4)
 end
 
 function spectral_frequency_power_average(g::AbstractSpectralGrid, m, n, power)

@@ -26,8 +26,8 @@ function (s::JONSWAPSpectrum)(x, y, kx, ky)
     r = exp(-((omega / omega_p - 1)^2) / (2sigma^2))
     alpha = 0.076 * (s.Hs^2 * omega_p^4 / g^2)^0.22
     one_d = alpha * g^2 * omega^-5 * exp(-1.25 * (omega_p / omega)^4) * s.gamma^r
-    theta = atan(ky, kx)
-    dtheta = atan(sin(theta - s.direction), cos(theta - s.direction))
-    directional = exp(-0.5 * (dtheta / s.spread)^2) / (sqrt(2pi) * s.spread)
+    φ = atan(ky, kx)
+    Δφ = atan(sin(φ - s.direction), cos(φ - s.direction))
+    directional = exp(-0.5 * (Δφ / s.spread)^2) / (sqrt(2pi) * s.spread)
     return max(one_d * directional, zero(one_d))
 end

@@ -17,7 +17,7 @@ frequencies = range(0.08, 0.30; length=16)
 directions_radians = range(0, 2pi; length=25)[1:24]
 spectral_grid = FrequencyDirectionGrid(Float64;
                                        frequency=frequencies,
-                                       theta=directions_radians)
+                                       φ=directions_radians)
 
 sources = SourceTermSet(
     PowerLawWindInput(rate=0.2,
@@ -61,7 +61,7 @@ initial_peak_frequency = peak_frequency(model.action)[1, 1]
 initial_mean_frequency = mean_frequency(model.action)[1, 1]
 initial_east_peak = model.action[1, 1, peak_m, east_n]
 initial_west_peak = model.action[1, 1, peak_m, west_n]
-initial_directional_peak = [model.action[1, 1, peak_m, n] for n in 1:length(spectral_grid.theta)]
+initial_directional_peak = [model.action[1, 1, peak_m, n] for n in 1:length(spectral_grid.φ)]
 
 east_positive, east_damping = source_split(sources, model, 1, 1, peak_m, east_n)
 west_positive, west_damping = source_split(sources, model, 1, 1, peak_m, west_n)
@@ -93,7 +93,7 @@ for n in 1:step_count
     end
 end
 
-final_directional_peak = [model.action[1, 1, peak_m, n] for n in 1:length(spectral_grid.theta)]
+final_directional_peak = [model.action[1, 1, peak_m, n] for n in 1:length(spectral_grid.φ)]
 directions = collect(directions_radians) .* 180 ./ pi
 
 push!(plot_paths,
