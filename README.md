@@ -1,7 +1,7 @@
 # Ripple.jl
 
 [![CI](https://github.com/NumericalEarth/Ripple.jl/actions/workflows/ci.yml/badge.svg)](https://github.com/NumericalEarth/Ripple.jl/actions/workflows/ci.yml)
-[![Documentation](https://github.com/NumericalEarth/Ripple.jl/actions/workflows/documentation.yml/badge.svg)](https://github.com/NumericalEarth/Ripple.jl/actions/workflows/documentation.yml)
+[![Docs Build](https://github.com/NumericalEarth/Ripple.jl/actions/workflows/documentation.yml/badge.svg)](https://github.com/NumericalEarth/Ripple.jl/actions/workflows/documentation.yml)
 [![Docs](https://img.shields.io/badge/docs-stable-blue.svg)](https://NumericalEarth.github.io/Ripple.jl/stable/)
 
 Ripple.jl is an Oceananigans-style spectral wave-action model prototype. It
