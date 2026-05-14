@@ -1,0 +1,14 @@
+.DS_Store
+*.jl.cov
+*.jl.*.cov
+*.mem
+Manifest.toml
+!docs/Manifest.toml
+docs/build/
+docs/src/generated/
+optional_runtime_gates.tsv
+default_suite.tsv
+publication_bundle_default_suite.tsv
+publication_readiness.tsv
+goal_completion_checklist.tsv
+optional_gate_outputs/

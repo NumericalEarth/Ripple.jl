@@ -1,0 +1,11 @@
+# Project-owner publication decisions.
+#
+# The readiness scripts treat "undecided" values as manual blockers. Edit this
+# file only after the corresponding project policy choice has been made.
+
+license = "undecided"
+
+# Allowed values after a decision:
+#   "general"
+#   "organization-local"
+registry_policy = "undecided"

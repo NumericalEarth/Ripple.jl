@@ -1,0 +1,28 @@
+name: Feature Request
+description: Propose a focused Ripple.jl feature.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: What workflow or validation need does this support?
+    validations:
+      required: true
+  - type: textarea
+    id: design
+    attributes:
+      label: Proposed Design
+      description: Include API shape and validation expectations when possible.
+    validations:
+      required: true
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Design Constraints
+      options:
+        - label: Preserves exact finite-volume spectral integration.
+        - label: Preserves `nothing` semantics for absent components.
+        - label: Keeps optional runtimes outside the default dependency set.

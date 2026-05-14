@@ -1,0 +1,29 @@
+name = "Ripple"
+uuid = "c2bd03f4-9d5f-4a3d-9b69-5e7f9c5319b8"
+authors = ["Ripple.jl contributors"]
+version = "0.1.0"
+
+[deps]
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+Oceananigans = "9e8cae18-63c1-5223-a75c-80ca9d6e9a09"
+Serialization = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
+
+[weakdeps]
+Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
+
+[extensions]
+RippleMakieExt = "Makie"
+
+[compat]
+CairoMakie = "0.12, 0.13, 0.14, 0.15"
+Makie = "0.21, 0.22, 0.23, 0.24"
+Oceananigans = "0.107"
+Serialization = "1.10"
+Test = "1.10"
+julia = "1.10"

@@ -1,0 +1,132 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Julia ${{ matrix.version }} - ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        version:
+          - '1.10'
+        os:
+          - ubuntu-latest
+          - macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: ${{ matrix.version }}
+
+      - uses: julia-actions/cache@v2
+
+      - name: Instantiate package
+        run: |
+          julia --color=yes --startup-file=no --project=. -e 'using Pkg; Pkg.instantiate()'
+          julia --color=yes --startup-file=no --project=. scripts/validation/patch_oceananigans_manifest_triggers.jl .
+
+      - name: Run tests
+        env:
+          RIPPLE_TEST_SUMMARY: default_suite.tsv
+        run: julia --color=yes --startup-file=no --project=. test/runtests.jl
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: default-suite-${{ matrix.os }}-${{ matrix.version }}
+          path: default_suite.tsv
+
+  package-test:
+    name: Package project suite Julia 1.10
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.10'
+
+      - uses: julia-actions/cache@v2
+
+      - name: Instantiate package
+        run: |
+          julia --color=yes --startup-file=no --project=. -e 'using Pkg; Pkg.instantiate()'
+          julia --color=yes --startup-file=no --project=. scripts/validation/patch_oceananigans_manifest_triggers.jl .
+
+      - name: Run package project suite
+        run: julia --color=yes --startup-file=no --project=. test/runtests.jl
+
+  optional-gate-readiness:
+    name: Optional gate readiness
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.10'
+
+      - uses: julia-actions/cache@v2
+
+      - name: Instantiate package
+        run: |
+          julia --color=yes --startup-file=no --project=. -e 'using Pkg; Pkg.instantiate()'
+          julia --color=yes --startup-file=no --project=. scripts/validation/patch_oceananigans_manifest_triggers.jl .
+
+      - name: Run default suite for audit summary
+        env:
+          RIPPLE_TEST_SUMMARY: default_suite.tsv
+        run: julia --color=yes --startup-file=no --project=. test/runtests.jl
+
+      - name: Check optional runtime gates
+        run: julia --color=yes --startup-file=no --project=. scripts/validation/check_optional_runtime_gates.jl optional_runtime_gates.tsv
+
+      - name: Run available optional gates
+        run: julia --color=yes --startup-file=no --project=. scripts/validation/run_available_optional_gates.jl optional_gate_outputs
+
+      - name: Create publication bundle
+        run: julia --color=yes --startup-file=no --project=. scripts/validation/create_publication_bundle.jl ripple-publication.bundle ripple-publication.gitdir
+
+      - name: Test publication bundle
+        run: julia --color=yes --startup-file=no --project=. scripts/validation/test_publication_bundle.jl ripple-publication.bundle publication_bundle_default_suite.tsv ripple-publication-worktree
+
+      - name: Check publication readiness
+        env:
+          RIPPLE_PUBLICATION_BUNDLE: ripple-publication.bundle
+          RIPPLE_PUBLICATION_BUNDLE_TEST_SUMMARY: publication_bundle_default_suite.tsv
+        run: julia --color=yes --startup-file=no --project=. scripts/validation/check_publication_readiness.jl publication_readiness.tsv
+
+      - name: Write goal completion checklist
+        env:
+          RIPPLE_PUBLICATION_BUNDLE: ripple-publication.bundle
+          RIPPLE_PUBLICATION_BUNDLE_TEST_SUMMARY: publication_bundle_default_suite.tsv
+        run: julia --color=yes --startup-file=no --project=. scripts/validation/write_goal_completion_checklist.jl goal_completion_checklist.tsv --default-suite-summary default_suite.tsv
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: readiness-audits
+          path: |
+            default_suite.tsv
+            optional_runtime_gates.tsv
+            optional_gate_outputs/
+            ripple-publication.bundle
+            publication_bundle_default_suite.tsv
+            publication_readiness.tsv
+            goal_completion_checklist.tsv

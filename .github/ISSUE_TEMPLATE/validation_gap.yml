@@ -1,0 +1,31 @@
+name: Validation Gap
+description: Propose or report missing validation coverage.
+title: "[Validation]: "
+labels:
+  - validation
+body:
+  - type: textarea
+    id: case
+    attributes:
+      label: Validation Case
+      description: Describe the physical, numerical, or comparison case.
+    validations:
+      required: true
+  - type: textarea
+    id: reference
+    attributes:
+      label: Reference Behavior
+      description: Analytic solution, benchmark model, paper, or expected metric.
+    validations:
+      required: true
+  - type: dropdown
+    id: gate
+    attributes:
+      label: Gate Type
+      options:
+        - Default suite
+        - Oceananigans optional gate
+        - CUDA optional gate
+        - External model optional gate
+    validations:
+      required: true
