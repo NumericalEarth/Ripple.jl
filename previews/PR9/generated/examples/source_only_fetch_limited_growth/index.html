@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Source-Only Fetch-Limited Growth · Ripple.jl</title><meta name="title" content="Source-Only Fetch-Limited Growth · Ripple.jl"/><meta property="og:title" content="Source-Only Fetch-Limited Growth · Ripple.jl"/><meta property="twitter:title" content="Source-Only Fetch-Limited Growth · Ripple.jl"/><meta name="description" content="Documentation for Ripple.jl."/><meta property="og:description" content="Documentation for Ripple.jl."/><meta property="twitter:description" content="Documentation for Ripple.jl."/><meta property="og:url" content="https://NumericalEarth.github.io/Ripple.jl/stable/generated/examples/source_only_fetch_limited_growth/"/><meta property="twitter:url" content="https://NumericalEarth.github.io/Ripple.jl/stable/generated/examples/source_only_fetch_limited_growth/"/><link rel="canonical" href="https://NumericalEarth.github.io/Ripple.jl/stable/generated/examples/source_only_fetch_limited_growth/"/><script data-outdated-warner src="../../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../../assets/documenter.js"></script><script src="../../../search_index.js"></script><script src="../../../siteinfo.js"></script><script src="../../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../../">Ripple.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../../">Home</a></li><li><a class="tocitem" href="../../../model_api/">Model API</a></li><li><a class="tocitem" href="../../../finite_volume_integration/">Finite-Volume Integration</a></li><li><a class="tocitem" href="../../../api_reference/">API Reference</a></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../../../examples/">Overview</a></li><li><a class="tocitem" href="../product_field_basics/">Product Field Basics</a></li><li class="is-active"><a class="tocitem" href>Source-Only Fetch-Limited Growth</a><ul class="internal"><li><a class="tocitem" href="#Running-The-Example"><span>Running The Example</span></a></li></ul></li><li><a class="tocitem" href="../bounded_wave_packet_dispersion/">Bounded Wave Packet Dispersion</a></li><li><a class="tocitem" href="../hasselmann_inertial_oscillation/">Hasselmann Column Growth</a></li><li><a class="tocitem" href="../cwcm_q_transform_sheared_current/">CWCM Q-Transform Shear</a></li><li><a class="tocitem" href="../frequency_direction_source_package/">Frequency-Direction Sources</a></li><li><a class="tocitem" href="../exact_finite_volume_source_rates/">Exact Finite-Volume Source Rates</a></li><li><a class="tocitem" href="../vortex_refraction/">Wave Refraction Through A Barotropic Vortex</a></li></ul></li><li><a class="tocitem" href="../../../validation/">Validation</a></li><li><a class="tocitem" href="../../../publication/">Publication</a></li><li><a class="tocitem" href="../../implementation_status/">Implementation Status</a></li><li><a class="tocitem" href="../../goal_completion_audit/">Goal Completion Audit</a></li><li><a class="tocitem" href="../../external_comparison_harness/">External Comparison Harness</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Examples</a></li><li class="is-active"><a href>Source-Only Fetch-Limited Growth</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Source-Only Fetch-Limited Growth</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/NumericalEarth/Ripple.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/NumericalEarth/Ripple.jl/blob/main/docs/src/generated/examples/source_only_fetch_limited_growth.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Source-Only-Fetch-Limited-Growth"><a class="docs-heading-anchor" href="#Source-Only-Fetch-Limited-Growth">Source-Only Fetch-Limited Growth</a><a id="Source-Only-Fetch-Limited-Growth-1"></a><a class="docs-heading-anchor-permalink" href="#Source-Only-Fetch-Limited-Growth" title="Permalink"></a></h1><p>Source-only models use <code>advection=nothing</code>, matching the Oceananigans and Breeze convention that absent physics is represented by <code>nothing</code>. This column combines wind input and whitecapping dissipation and approaches an analytic equilibrium.</p><pre><code class="language-julia hljs">
+using Oceananigans, Ripple, CairoMakie
+
+Base.include(@__MODULE__, joinpath(@__DIR__, &quot;..&quot;, &quot;scripts&quot;, &quot;example_visuals.jl&quot;))
+
+output_dir = example_output_directory(&quot;source_only_fetch_limited_growth&quot;)
+plot_paths = String[]
+animation_paths = String[]
+output_paths = String[]
+
+case = only(filter(c -&gt; c.name == :fetch_limited_source_balance,
+                   default_validation_cases()))
+result = run_validation(case)
+
+grid = RectilinearGrid(CPU(); size=(1, 1, 1), x=(0, 1), y=(0, 1), z=(0, 1))
+spectral_grid = PolarWaveVectorGrid(Float64; κ=[1.0], φ=[0.0])
+
+target_growth_rate = 1.2
+directional_growth_weight = Ripple.wind_directional_weight(spectral_grid, 1, 1, 0.0, 2)
+growth_rate = target_growth_rate / directional_growth_weight
+whitecapping_rate = 4.8
+saturation_threshold = 0.5
+
+sources = SourceTermSet((
+    ExponentialWindInput(rate=growth_rate, direction=0.0, spreading_power=2),
+    WhitecappingDissipation(rate=whitecapping_rate,
+                             saturation_threshold=saturation_threshold,
+                             saturation_power=1.0,
+                             wavenumber_power=0.0),
+))
+
+model = SpectralWaveModel(; grid,
+                            spectral_grid,
+                            advection=nothing,
+                            sources,
+                            timestepper=:SemiImplicitEuler)
+
+weight = spectral_weight(spectral_grid, 1, 1)
+equilibrium_m0 = saturation_threshold * (1 + target_growth_rate / whitecapping_rate)
+set!(model, N=saturation_threshold / (20 * weight))
+
+step_count = example_mode() == :small ? 40 : 240
+dt = 0.02
+times = [model.clock.time]
+moments = [m0(model.action)[1, 1, 1]]
+
+for n in 1:step_count
+    time_step!(model, dt)
+    push!(times, model.clock.time)
+    push!(moments, m0(model.action)[1, 1, 1])
+end
+
+frame_indices = unique(round.(Int, range(1, length(moments); length=min(length(moments), 12))))
+line_frames = [vcat(moments[1:i], fill(moments[i], length(moments) - i))
+               for i in frame_indices]
+
+push!(plot_paths,
+      write_line(joinpath(output_dir, &quot;fetch_limited_growth.png&quot;),
+                 times, (moments, fill(equilibrium_m0, length(times)));
+                 title=&quot;Fetch-limited source balance&quot;,
+                 xlabel=&quot;time&quot;, ylabel=&quot;m0&quot;,
+                 names=(&quot;column m0&quot;, &quot;analytic equilibrium&quot;)))
+
+push!(animation_paths,
+      write_line_animation(joinpath(output_dir, &quot;fetch_limited_growth_animation.mp4&quot;),
+                           times, line_frames;
+                           title=&quot;Approach to source equilibrium&quot;,
+                           xlabel=&quot;time&quot;, ylabel=&quot;m0&quot;))
+
+writer_model = SpectralWaveModel(grid;
+                                  spectral_grid,
+                                  advection=nothing,
+                                  sources,
+                                  timestepper=:SemiImplicitEuler)
+set!(writer_model, N=saturation_threshold / (20 * weight))
+writer_simulation = Simulation(writer_model; Δt=dt, stop_iteration=1, verbose=false)
+writer_path = joinpath(output_dir, &quot;fetch_limited_growth.jld2&quot;)
+writer_simulation.output_writers[:action] =
+    JLD2Writer(writer_model, (; N=writer_model.action);
+               filename=writer_path,
+               schedule=IterationInterval(1),
+               overwrite_existing=true)
+run!(writer_simulation)
+push!(output_paths, writer_path)
+
+@assert validation_passed(result)
+@assert last(moments) &lt;= equilibrium_m0 + 1e-2
+@assert all(diff(moments) .&gt;= -1e-12)
+@assert all(isfile, plot_paths)
+@assert all(isfile, animation_paths)
+@assert all(isfile, output_paths)
+
+@show validation_passed(result)
+@show result.metrics[:equilibrium_tendency_error]
+@show result.metrics[:final_m0_error]
+@show result.metrics[:monotonicity_error]
+@show last(moments)
+@show plot_paths
+@show animation_paths</code></pre><h2 id="Running-The-Example"><a class="docs-heading-anchor" href="#Running-The-Example">Running The Example</a><a id="Running-The-Example-1"></a><a class="docs-heading-anchor-permalink" href="#Running-The-Example" title="Permalink"></a></h2><p>From the repository root:</p><pre><code class="language-bash hljs">julia --startup-file=no --project=. examples/source_only_fetch_limited_growth.jl</code></pre><p>Set <code>RIPPLE_EXAMPLE_MODE=small</code> for the fast smoke-test version.</p><p>This literate page is generated from <code>examples/source_only_fetch_limited_growth.jl</code>.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../product_field_basics/">« Product Field Basics</a><a class="docs-footer-nextpage" href="../bounded_wave_packet_dispersion/">Bounded Wave Packet Dispersion »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Friday 15 May 2026 21:14">Friday 15 May 2026</span>. Using Julia version 1.10.11.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
