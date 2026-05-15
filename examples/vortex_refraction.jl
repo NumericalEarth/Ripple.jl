@@ -6,8 +6,9 @@
 # Doppler-shifted physical transport at `cg + uᴸ`, and kinematic refraction
 # `∇_k·(c_k N)` driven by gradients of `uᴸ`. Both are applied in a single
 # fused KA kernel that uses 5th-order WENO in all four directions, and the
-# model is advanced with SSP-RK3. The resulting movie shows the spectrum
-# evolving spatially through `m₀`, `κᵣₘₛ`, and the mean direction.
+# model is advanced with RK3 via an `Oceananigans.Simulation`. The resulting
+# movie shows the spectrum evolving spatially through `m₀`, `κᵣₘₛ`, and the
+# mean direction.
 
 using Oceananigans, Ripple, CairoMakie
 using Printf
@@ -69,17 +70,14 @@ end
 # ## Wave model
 #
 # The new `velocities` kwarg builds the wave-current coupling internally;
-# here we pass the prescribed vortex as a NamedTuple. Physical advection is
-# disabled (`advection=nothing`) because the fused refraction kernel handles
-# physical and spectral transport together.
+# here we pass the prescribed vortex as a NamedTuple. The fused refraction
+# kernel handles physical and spectral transport together when both CWCM
+# coupling and `spectral_advection` are set (both defaults).
 
-model = SpectralWaveModel(; grid,
-                            spectral_grid,
-                            velocities = (; u = u_field, v = v_field),
-                            advection = nothing,
-                            sources = nothing,
-                            timestepper = :ForwardEuler)
-coupling = model.coupling
+model = SpectralWaveModel(grid, spectral_grid;
+                          velocities = (; u = u_field, v = v_field),
+                          sources = nothing,
+                          timestepper = :RK3)
 
 # Narrow-banded Gaussian initial condition, uniform in (x, y), peaking at
 # `κ ≈ 0.4` and direction `φ ≈ 0` (waves travelling in `+x`).
@@ -91,15 +89,11 @@ set!(model, N = (x, y, kx, ky) -> begin
     exp(-((κ - κ0) / σκ)^2 - (sin(φ / 2)^2) / σφ^2)
 end)
 
-G  = similar(model.action)
-N1 = similar(model.action)
-N2 = similar(model.action)
-
 # ## Time loop
 #
-# 400 SSP-RK3 steps of `dt = 0.05 s` for a total of 20 s. Snapshots are
-# stored every few steps for the animation. In smoke-test mode we run a
-# much shorter trajectory.
+# 400 RK3 steps of `dt = 0.05 s` for a total of 20 s, run via an
+# `Oceananigans.Simulation`. Snapshots are captured between segments for
+# the animation. In smoke-test mode we run a much shorter trajectory.
 
 dt = 0.05
 total_time = small ? 1.0 : 20.0
@@ -111,15 +105,25 @@ krms_frames = Matrix{Float64}[root_mean_square_wavenumber(model.action)]
 dir_frames = Matrix{Float64}[mean_direction(model.action)]
 times = Float64[0.0]
 
-for step in 1:steps
-    rk3_step!(model, coupling, G, N1, N2, dt)
-    if step % frame_stride == 0 || step == steps
+function _run_vortex_chunks!(model, steps, frame_stride, dt,
+                              m0_frames, krms_frames, dir_frames, times)
+    remaining = steps
+    while remaining > 0
+        chunk = min(frame_stride, remaining)
+        target_iteration = model.clock.iteration + chunk
+        simulation = Simulation(model; Δt = dt, stop_iteration = target_iteration, verbose = false)
+        run!(simulation)
         push!(m0_frames, m0(model.action))
         push!(krms_frames, root_mean_square_wavenumber(model.action))
         push!(dir_frames, mean_direction(model.action))
         push!(times, model.clock.time)
+        remaining -= chunk
     end
+    return nothing
 end
+
+_run_vortex_chunks!(model, steps, frame_stride, dt,
+                    m0_frames, krms_frames, dir_frames, times)
 
 # ## Visualization
 #

@@ -49,7 +49,7 @@ export PrescribedLagrangianMeanCurrent, NoCurrentCoupling, CWCMPrescribedCurrent
 export AbstractLagrangianVelocities, ZeroVelocities, PrescribedVelocities, PseudomomentumVelocities
 export q_value, q_cell_integral, q_cell_integral_kappa_derivative
 export compute_doppler_velocity!, compute_doppler_velocity_derivative!, compute_pseudomomentum
-export compute_wave_current_refraction_tendency!, rk3_step!
+export compute_wave_current_refraction_tendency!
 export pseudomomentum_field, pseudomomentum_fields
 export vertical_spacings, vertical_integral
 export compute_pseudomomentum_cell_integrals, compute_pseudomomentum_cell_integrals!

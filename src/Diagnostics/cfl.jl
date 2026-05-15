@@ -1,5 +1,5 @@
 function cfl(model)
-    model.advection === nothing && return zero(eltype(model.action))
+    model.horizontal_advection === nothing && return zero(eltype(model.action))
 
     dt = model.clock.last_Δt
     dx = xspacings(model.grid)

@@ -85,13 +85,13 @@ function oceananigans_smoke_result()
     model = Base.invokelatest(SpectralWaveModel;
                               grid=ocean_grid,
                               spectral_grid=cgrid,
-                              advection=nothing,
+                              horizontal_advection=nothing,
                               timestepper=:ForwardEuler)
     initial_action = (x, y, kx, ky) -> 0.4 + 0.03x - 0.01y + 0.02kx - 0.015ky
     set!(model, N=initial_action)
     reference_model = SpectralWaveModel(; grid=model.grid,
                                           spectral_grid=cgrid,
-                                          advection=nothing,
+                                          horizontal_advection=nothing,
                                           timestepper=:ForwardEuler)
     set!(reference_model, N=initial_action)
 
@@ -154,7 +154,7 @@ function oceananigans_smoke_result()
                                              grid=ocean_grid,
                                              spectral_grid=cgrid,
                                              coupling=native_coupling,
-                                             advection=nothing,
+                                             horizontal_advection=nothing,
                                              timestepper=:ForwardEuler)
     set!(native_current_model, N=(x, y, kx, ky) -> 0.3 + 0.02x + 0.01y + 0.01hypot(kx, ky))
     time_step!(native_current_model, 0.005)

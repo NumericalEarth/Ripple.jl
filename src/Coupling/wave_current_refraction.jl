@@ -152,27 +152,6 @@ end
     end
 end
 
-# SSP-RK3 stage kernels (Shu-Osher form). Each stage is one KA kernel.
-@kernel function _ssprk3_stage1!(N1_data, N_data, G_data, dt, Hx, Hy, iz)
-    i, j, m, n = @index(Global, NTuple)
-    ix = i + Hx; jy = j + Hy
-    @inbounds N1_data[ix, jy, iz, m, n] = max(N_data[ix, jy, iz, m, n] + dt * G_data[ix, jy, iz, m, n], 0)
-end
-
-@kernel function _ssprk3_stage2!(N2_data, N_data, N1_data, G_data, dt, Hx, Hy, iz)
-    i, j, m, n = @index(Global, NTuple)
-    ix = i + Hx; jy = j + Hy
-    @inbounds N2_data[ix, jy, iz, m, n] =
-        max(0.75 * N_data[ix, jy, iz, m, n] + 0.25 * N1_data[ix, jy, iz, m, n] + 0.25 * dt * G_data[ix, jy, iz, m, n], 0)
-end
-
-@kernel function _ssprk3_stage3!(N_data_out, N_data, N2_data, G_data, dt, Hx, Hy, iz)
-    i, j, m, n = @index(Global, NTuple)
-    ix = i + Hx; jy = j + Hy
-    @inbounds N_data_out[ix, jy, iz, m, n] =
-        max((1/3) * N_data[ix, jy, iz, m, n] + (2/3) * N2_data[ix, jy, iz, m, n] + (2/3) * dt * G_data[ix, jy, iz, m, n], 0)
-end
-
 # Fill in lazy caches on the coupling.
 function ensure_refraction_tables!(coupling::CWCMPrescribedCurrentCoupling, cgrid, Nκ, Nφ, FT)
     if coupling.cg_x_table === nothing || size(coupling.cg_x_table) != (Nκ, Nφ)
@@ -250,45 +229,3 @@ function data_z_index(N)
     return only(axes(parent(f11.data), 3))
 end
 
-"""
-    rk3_step!(model, coupling, G, N1, N2, dt)
-
-Advance the model action by `dt` using an SSP-RK3 scheme. Each of the three
-stages is a single KA kernel acting on the contiguous backings of `N`, `G`,
-`N1`, `N2`. `G`, `N1`, `N2` are pre-allocated `WaveActionField`s used as
-scratch.
-"""
-function rk3_step!(model, coupling::CWCMPrescribedCurrentCoupling, G, N1, N2, dt)
-    N = model.action
-    grid = model.grid
-    arch = architecture(grid)
-    Nx, Ny, Nκ, Nφ = size(N)
-    Hx, Hy, _ = halo_size_3d(grid)
-    iz = data_z_index(N)
-
-    Ndata = flat_data(N); Gdata = flat_data(G)
-    N1data = flat_data(N1); N2data = flat_data(N2)
-
-    # Stage 1: N1 = N + dt G(N)
-    compute_wave_current_refraction_tendency!(G, N, coupling, model)
-    s1 = _ssprk3_stage1!(device(arch), (8, 8, 1, 1), (Nx, Ny, Nκ, Nφ))
-    s1(N1data, Ndata, Gdata, FT_of(N, dt), Hx, Hy, iz)
-    KernelAbstractions.synchronize(device(arch))
-
-    # Stage 2: N2 = 0.75 N + 0.25 (N1 + dt G(N1))
-    compute_wave_current_refraction_tendency!(G, N1, coupling, model)
-    s2 = _ssprk3_stage2!(device(arch), (8, 8, 1, 1), (Nx, Ny, Nκ, Nφ))
-    s2(N2data, Ndata, N1data, Gdata, FT_of(N, dt), Hx, Hy, iz)
-    KernelAbstractions.synchronize(device(arch))
-
-    # Stage 3: N = (1/3) N + (2/3) (N2 + dt G(N2))
-    compute_wave_current_refraction_tendency!(G, N2, coupling, model)
-    s3 = _ssprk3_stage3!(device(arch), (8, 8, 1, 1), (Nx, Ny, Nκ, Nφ))
-    s3(Ndata, Ndata, N2data, Gdata, FT_of(N, dt), Hx, Hy, iz)
-    KernelAbstractions.synchronize(device(arch))
-
-    model.clock.time += dt
-    return model
-end
-
-@inline FT_of(N, dt) = convert(eltype(N), dt)

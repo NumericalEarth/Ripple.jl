@@ -29,7 +29,8 @@ julia --startup-file=no --project=. scripts/validation/write_goal_completion_che
 - Treat spectral values as finite-volume cell averages. Do not replace exact
   spectral cell integration with midpoint quadrature.
 - Use Oceananigans/Breeze-style absent-component semantics:
-  `advection=nothing`, `sources=nothing`, and `coupling=nothing`.
+  `horizontal_advection=nothing`, `spectral_advection=nothing`,
+  `sources=nothing`, and `coupling=nothing`.
 - Keep optional runtimes behind weak dependencies, extension files, or smoke
   scripts. The default suite must remain self-contained.
 - Add or update validation cases when behavior changes.

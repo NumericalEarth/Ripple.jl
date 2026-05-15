@@ -78,7 +78,7 @@ advection_y_component(advection) = advection
 advection_x_component(advection::FluxFormAdvection) = advection.x
 advection_y_component(advection::FluxFormAdvection) = advection.y
 
-function horizontal_advection(advection, u, v)
+function bin_horizontal_advection(advection, u, v)
     x_advection = iszero(u) ? nothing : advection_x_component(advection)
     y_advection = iszero(v) ? nothing : advection_y_component(advection)
     H = max(required_halo_size_x(x_advection), required_halo_size_y(y_advection))
@@ -127,7 +127,7 @@ transport_tendency(::Nothing, model, c, i, j, m, n) = zero(eltype(model.action))
 function transport_tendency(advection::AbstractAdvectionScheme, model, c, i, j, m, n)
     k = active_physical_k(model.action)
     u, v = transport_velocity(model, m, n)
-    horizontal = horizontal_advection(advection, u, v)
+    horizontal = bin_horizontal_advection(advection, u, v)
     U = transport_velocity_fields(model, m, n)
     return -div_Uc(i, j, k, model.grid, horizontal, U, c)
 end

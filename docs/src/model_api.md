@@ -6,18 +6,28 @@ coupling are represented by `nothing`.
 
 ## Semantics Contract
 
-- `advection=nothing` means no phase-space transport is applied.
-- `advection=Centered()`, `advection=UpwindBiased()`, `advection=WENO()`, or
-  `advection=FluxFormAdvection(...)` uses Oceananigans tracer advection for
-  horizontal transport of every spectral bin.
+- `SpectralWaveModel(grid, spectral_grid; ...)` takes both grids as positional
+  arguments, matching Oceananigans's convention.
+- `horizontal_advection=nothing` means no physical transport is applied.
+- `horizontal_advection=Centered()`, `horizontal_advection=UpwindBiased()`,
+  `horizontal_advection=WENO()` (default), or
+  `horizontal_advection=FluxFormAdvection(...)` uses Oceananigans tracer
+  advection for horizontal transport of every spectral bin.
+- `spectral_advection=nothing` disables kinematic refraction.
+- `spectral_advection=WENO()` (default) enables the fused refraction kernel
+  when the coupling is a `CWCMPrescribedCurrentCoupling`. When both CWCM
+  coupling and `spectral_advection` are set, the fused kernel handles physical
+  transport too, and `horizontal_advection` is ignored.
 - `sources=nothing` means no source tendency is applied.
 - `coupling=nothing` means no current-coupling update is applied.
 - `SourceTermSet()`, `NoSource()`, and `NoCurrentCoupling()` are compatibility
   inputs and normalize to `nothing`.
 - With all optional dynamics absent, `time_step!` advances the clock and leaves
   the action field unchanged.
-- The CFL diagnostic is zero when `advection=nothing` and uses the active
-  transport velocities otherwise.
+- The CFL diagnostic is zero when `horizontal_advection=nothing` and uses the
+  active transport velocities otherwise.
+- The deprecated `advection=` kwarg is forwarded to `horizontal_advection=`
+  with a one-shot `@warn`.
 
 Ripple no longer provides `HamiltonianFiniteVolume`, Hamiltonian velocity
 operators, a `Simulation` type, or diagnostic/output writer types. Transport

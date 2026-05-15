@@ -3,7 +3,7 @@
     cgrid = CartesianWaveVectorGrid(Float64; kx=range(0.4, 0.8; length=3), ky=range(-0.1, 0.1; length=3))
 
     relaxation = RelaxationToSpectrum((x, y, kx, ky) -> 2.0; timescale=1.0)
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=relaxation, timestepper=:ForwardEuler)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=relaxation, timestepper=:ForwardEuler)
     set!(model, N=0.0)
     time_step!(model, 0.5)
     @test all(interior(model.action) .≈ 1.0)
@@ -16,13 +16,13 @@
     @test collect(balanced) == collect(balanced.terms)
     @test isempty(SourceTermSet())
 
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=balanced, timestepper=:ForwardEuler)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=balanced, timestepper=:ForwardEuler)
     set!(model, N=1.5)
     compute_tendencies!(model)
     @test maximum(abs, interior(model.tendencies)) < 1e-14
 
     damping = BottomFriction(rate=100.0)
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=damping, timestepper=:ForwardEuler)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=damping, timestepper=:ForwardEuler)
     set!(model, N=1.0)
     time_step!(model, 1.0)
     @test all(interior(model.action) .== 0)
@@ -33,7 +33,7 @@ end
     cgrid = PolarWaveVectorGrid(; κ=[1.0], φ=[0.0, pi/2, pi, 3pi/2])
 
     wind = ExponentialWindInput(rate=0.5, direction=0.0, spreading_power=2)
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=wind, timestepper=:ForwardEuler)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=wind, timestepper=:ForwardEuler)
     set!(model, N=1.0)
     compute_tendencies!(model)
 
@@ -49,18 +49,18 @@ end
     @test wind_weights[2] ≈ 1 / 4 - 1 / (2pi)
 
     invalid_spreading = ExponentialWindInput(rate=0.5, direction=0.0, spreading_power=1.5)
-    bad_model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=invalid_spreading)
+    bad_model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=invalid_spreading)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
 
     damping = SaturationDissipation(rate=2.0, threshold=0.1, power=1.0)
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=damping, timestepper=:ForwardEuler)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=damping, timestepper=:ForwardEuler)
     set!(model, N=1.0)
     compute_tendencies!(model)
     @test all(interior(model.tendencies) .< 0)
 
     damping = SaturationDissipation(rate=2.0, threshold=100.0, power=1.0)
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=damping, timestepper=:ForwardEuler)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=damping, timestepper=:ForwardEuler)
     set!(model, N=1.0)
     compute_tendencies!(model)
     @test maximum(abs, interior(model.tendencies)) < 1e-14
@@ -78,7 +78,7 @@ end
                              reference_speed=2.0,
                              speed_power=2.0,
                              spreading_power=1.0)
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=wind, timestepper=:ForwardEuler)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=wind, timestepper=:ForwardEuler)
     set!(model, N=3.0)
     compute_tendencies!(model)
 
@@ -102,7 +102,7 @@ end
                                    reference_speed=2.0,
                                    speed_power=1.0,
                                    spreading_power=1.0)
-    storm_model = SpectralWaveModel(; advection=nothing, grid=storm_grid,
+    storm_model = SpectralWaveModel(; horizontal_advection=nothing, grid=storm_grid,
                                       spectral_grid=cgrid,
                                       sources=storm_wind,
                                       timestepper=:ForwardEuler)
@@ -119,7 +119,7 @@ end
                                  reference_speed=2.0,
                                  speed_power=1.0,
                                  spreading_power=1.0)
-    damping_model = SpectralWaveModel(; advection=nothing, grid,
+    damping_model = SpectralWaveModel(; horizontal_advection=nothing, grid,
                                         spectral_grid=cgrid,
                                         sources=negative,
                                         timestepper=:SemiImplicitEuler)
@@ -132,12 +132,12 @@ end
     @test all(interior(damping_model.action) .>= 0)
 
     invalid = PowerLawWindInput(rate=0.1, speed=-1.0)
-    bad_model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=invalid)
+    bad_model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=invalid)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
 
     invalid_reference = PowerLawWindInput(rate=0.1, reference_speed=0.0)
-    bad_model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=invalid_reference)
+    bad_model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=invalid_reference)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
 end
@@ -153,7 +153,7 @@ end
                             power=1.0,
                             spreading_power=0.0,
                             gravity=1.0)
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=wind, timestepper=:ForwardEuler)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=wind, timestepper=:ForwardEuler)
     set!(model, N=3.0)
     compute_tendencies!(model)
 
@@ -172,7 +172,7 @@ end
                                 inverse_wave_age_threshold=1.0,
                                 spreading_power=0.0,
                                 gravity=1.0)
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=opposing)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=opposing)
     set!(model, N=3.0)
     compute_tendencies!(model)
     @test model.tendencies[1, 1, 2, 1] == 0
@@ -184,7 +184,7 @@ end
                                 inverse_wave_age_threshold=1.0,
                                 spreading_power=0.0,
                                 gravity=1.0)
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=negative, timestepper=:SemiImplicitEuler)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=negative, timestepper=:SemiImplicitEuler)
     set!(model, N=3.0)
     positive, damping = source_split(negative, model, 1, 1, 2, 1)
     @test positive == 0
@@ -193,7 +193,7 @@ end
     @test model.action[1, 1, 2, 1] ≈ 2.0
 
     invalid = WaveAgeWindInput(rate=0.1, speed=2.0, inverse_wave_age_threshold=-1.0)
-    bad_model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=invalid)
+    bad_model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=invalid)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
 end
@@ -206,7 +206,7 @@ end
     rotating_direction(t) = t == 0 ? 0.0 : pi / 2
     wind = ExponentialWindInput(rate=moving_rate, direction=rotating_direction, spreading_power=1)
 
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=wind, timestepper=:ForwardEuler)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=wind, timestepper=:ForwardEuler)
     set!(model, N=1.0)
     compute_tendencies!(model)
     initial_weights = [Ripple.wind_directional_weight(cgrid, 1, n, 0.0, 1)
@@ -226,7 +226,7 @@ end
     @test model.tendencies[1, 1, 1, 2] > 0
 
     damping = SaturationDissipation(rate=(x, y, t) -> 1 + t, threshold=0.1, power=1)
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=damping, timestepper=:ForwardEuler)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=damping, timestepper=:ForwardEuler)
     set!(model, N=1.0)
     model.clock.time = 0.2
     compute_tendencies!(model)
@@ -242,7 +242,7 @@ end
                                            saturation_power=1.0,
                                            wavenumber_power=2.0,
                                            reference_wavenumber=1.0)
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=whitecapping, timestepper=:ForwardEuler)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=whitecapping, timestepper=:ForwardEuler)
     set!(model, N=1.0)
     compute_tendencies!(model)
 
@@ -254,7 +254,7 @@ end
     @test model.tendencies[1, 1, 3, 1] / model.tendencies[1, 1, 2, 1] ≈ spectral_factor[3] / spectral_factor[2]
 
     weak = WhitecappingDissipation(rate=0.2, saturation_threshold=100.0)
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=weak, timestepper=:ForwardEuler)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=weak, timestepper=:ForwardEuler)
     set!(model, N=1.0)
     compute_tendencies!(model)
     @test maximum(abs, interior(model.tendencies)) < 1e-14
@@ -271,7 +271,7 @@ end
     no_advection = nothing
     model = SpectralWaveModel(; grid,
                                 spectral_grid=cgrid,
-                                advection=no_advection,
+                                horizontal_advection=no_advection,
                                 sources=source,
                                 timestepper=:ForwardEuler)
     set!(model, N=2.0)
@@ -293,7 +293,7 @@ end
 
     damping_model = SpectralWaveModel(; grid=RectilinearGrid(CPU(); size=(1, 1, 1), x=(0, 1), y=(0, 1), z=(0, 1)),
                                         spectral_grid=cgrid,
-                                        advection=no_advection,
+                                        horizontal_advection=no_advection,
                                         sources=FrequencyDissipation(rate=0.5,
                                                                     reference_frequency=0.2,
                                                                     power=1),
@@ -308,7 +308,7 @@ end
     @test all(interior(damping_model.action) .>= 0)
 
     pgrid = PolarWaveVectorGrid(; κ=[1.0], φ=[0.0])
-    bad_model = SpectralWaveModel(; advection=nothing, grid=RectilinearGrid(CPU(); size=(1, 1, 1), x=(0, 1), y=(0, 1), z=(0, 1)),
+    bad_model = SpectralWaveModel(; horizontal_advection=nothing, grid=RectilinearGrid(CPU(); size=(1, 1, 1), x=(0, 1), y=(0, 1), z=(0, 1)),
                                     spectral_grid=pgrid,
                                     sources=source)
     set!(bad_model, N=1.0)
@@ -317,7 +317,7 @@ end
     invalid_reference = FrequencyDissipation(rate=0.1, reference_frequency=0.0)
     bad_model = SpectralWaveModel(; grid=RectilinearGrid(CPU(); size=(1, 1, 1), x=(0, 1), y=(0, 1), z=(0, 1)),
                                     spectral_grid=cgrid,
-                                    advection=no_advection,
+                                    horizontal_advection=no_advection,
                                     sources=invalid_reference)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
@@ -325,7 +325,7 @@ end
     invalid_power = FrequencyDissipation(rate=0.1, power=-1)
     bad_model = SpectralWaveModel(; grid=RectilinearGrid(CPU(); size=(1, 1, 1), x=(0, 1), y=(0, 1), z=(0, 1)),
                                     spectral_grid=cgrid,
-                                    advection=no_advection,
+                                    horizontal_advection=no_advection,
                                     sources=invalid_power)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
@@ -341,7 +341,7 @@ end
     no_advection = nothing
     model = SpectralWaveModel(; grid,
                                 spectral_grid=cgrid,
-                                advection=no_advection,
+                                horizontal_advection=no_advection,
                                 sources=source,
                                 timestepper=:ForwardEuler)
     set!(model, N=2.0)
@@ -363,7 +363,7 @@ end
 
     damping_model = SpectralWaveModel(; grid=RectilinearGrid(CPU(); size=(1, 1, 1), x=(0, 1), y=(0, 1), z=(0, 1)),
                                         spectral_grid=cgrid,
-                                        advection=no_advection,
+                                        horizontal_advection=no_advection,
                                         sources=WavenumberDissipation(rate=0.5,
                                                                       reference_wavenumber=1.0,
                                                                       power=1),
@@ -381,7 +381,7 @@ end
                                           kx_faces=[-1.0, 1.0], ky_faces=[-1.0, 1.0])
     cartesian_model = SpectralWaveModel(; grid=RectilinearGrid(CPU(); size=(1, 1, 1), x=(0, 1), y=(0, 1), z=(0, 1)),
                                           spectral_grid=square_grid,
-                                          advection=no_advection,
+                                          horizontal_advection=no_advection,
                                           sources=WavenumberDissipation(rate=0.3,
                                                                         reference_wavenumber=1.0,
                                                                         power=1),
@@ -391,21 +391,21 @@ end
     @test cartesian_model.tendencies[1, 1, 1, 1] ≈ -0.3 * spectral_radial_power_average(square_grid, 1, 1, 1) * 2.0
 
     unsupported = WavenumberDissipation(rate=0.1, power=3)
-    bad_model = SpectralWaveModel(; advection=nothing, grid=RectilinearGrid(CPU(); size=(1, 1, 1), x=(0, 1), y=(0, 1), z=(0, 1)),
+    bad_model = SpectralWaveModel(; horizontal_advection=nothing, grid=RectilinearGrid(CPU(); size=(1, 1, 1), x=(0, 1), y=(0, 1), z=(0, 1)),
                                     spectral_grid=square_grid,
                                     sources=unsupported)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
 
     invalid_reference = WavenumberDissipation(rate=0.1, reference_wavenumber=0.0)
-    bad_model = SpectralWaveModel(; advection=nothing, grid=RectilinearGrid(CPU(); size=(1, 1, 1), x=(0, 1), y=(0, 1), z=(0, 1)),
+    bad_model = SpectralWaveModel(; horizontal_advection=nothing, grid=RectilinearGrid(CPU(); size=(1, 1, 1), x=(0, 1), y=(0, 1), z=(0, 1)),
                                     spectral_grid=cgrid,
                                     sources=invalid_reference)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
 
     invalid_power = WavenumberDissipation(rate=0.1, power=-1)
-    bad_model = SpectralWaveModel(; advection=nothing, grid=RectilinearGrid(CPU(); size=(1, 1, 1), x=(0, 1), y=(0, 1), z=(0, 1)),
+    bad_model = SpectralWaveModel(; horizontal_advection=nothing, grid=RectilinearGrid(CPU(); size=(1, 1, 1), x=(0, 1), y=(0, 1), z=(0, 1)),
                                     spectral_grid=cgrid,
                                     sources=invalid_power)
     set!(bad_model, N=1.0)
@@ -419,7 +419,7 @@ end
     no_advection = nothing
     model = SpectralWaveModel(; grid,
                                 spectral_grid=cgrid,
-                                advection=no_advection,
+                                horizontal_advection=no_advection,
                                 sources=MeanFrequencyDissipation(rate=0.5, reference_frequency=0.2, power=2),
                                 timestepper=:ForwardEuler)
     set!(model, N=(x, y, kx, ky) -> abs(hypot(kx, ky) - cgrid.κ[3]) < 1e-12 ? 2.0 : 0.5)
@@ -437,7 +437,7 @@ end
 
     model = SpectralWaveModel(; grid,
                                 spectral_grid=cgrid,
-                                advection=no_advection,
+                                horizontal_advection=no_advection,
                                 sources=MeanFrequencyDissipation(rate=0.5, reference_frequency=0.2),
                                 timestepper=:SemiImplicitEuler)
     set!(model, N=initial)
@@ -449,7 +449,7 @@ end
     @test model.action[1, 1, 2, 1] ≈ expected
 
     pgrid = PolarWaveVectorGrid(; κ=[1.0], φ=[0.0])
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=pgrid, sources=MeanFrequencyDissipation(rate=0.1))
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=pgrid, sources=MeanFrequencyDissipation(rate=0.1))
     set!(model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(model)
 end
@@ -464,7 +464,7 @@ end
                                       power=2)
     model = SpectralWaveModel(; grid,
                                 spectral_grid=cgrid,
-                                advection=no_advection,
+                                horizontal_advection=no_advection,
                                 sources=source,
                                 timestepper=:ForwardEuler)
     set!(model, N=(x, y, kx, ky) -> abs(hypot(kx, ky) - cgrid.κ[3]) < 1e-12 ? 4.0 : 1.0)
@@ -478,7 +478,7 @@ end
 
     model = SpectralWaveModel(; grid,
                                 spectral_grid=cgrid,
-                                advection=no_advection,
+                                horizontal_advection=no_advection,
                                 sources=source,
                                 timestepper=:SemiImplicitEuler)
     set!(model, N=(x, y, kx, ky) -> abs(hypot(kx, ky) - cgrid.κ[3]) < 1e-12 ? 4.0 : 1.0)
@@ -488,17 +488,17 @@ end
     @test all(interior(model.action) .>= 0)
 
     pgrid = PolarWaveVectorGrid(; κ=[1.0], φ=[0.0])
-    bad_model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=pgrid, sources=source)
+    bad_model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=pgrid, sources=source)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
 
     invalid_reference = PeakFrequencyDissipation(rate=0.1, reference_frequency=0.0)
-    bad_model = SpectralWaveModel(; grid, spectral_grid=cgrid, advection=no_advection, sources=invalid_reference)
+    bad_model = SpectralWaveModel(; grid, spectral_grid=cgrid, horizontal_advection=no_advection, sources=invalid_reference)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
 
     invalid_power = PeakFrequencyDissipation(rate=0.1, power=-1)
-    bad_model = SpectralWaveModel(; grid, spectral_grid=cgrid, advection=no_advection, sources=invalid_power)
+    bad_model = SpectralWaveModel(; grid, spectral_grid=cgrid, horizontal_advection=no_advection, sources=invalid_power)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
 end
@@ -512,7 +512,7 @@ end
     source = MeanSquareWavenumberDissipation(rate=0.25,
                                              reference_wavenumber=1.0,
                                              power=2)
-    model = SpectralWaveModel(; advection=nothing, grid,
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid,
                                 spectral_grid=cgrid,
                                 sources=source,
                                 timestepper=:SemiImplicitEuler)
@@ -530,12 +530,12 @@ end
     @test all(interior(model.action) .>= 0)
 
     invalid_reference = MeanSquareWavenumberDissipation(rate=0.1, reference_wavenumber=0.0)
-    bad_model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=invalid_reference)
+    bad_model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=invalid_reference)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
 
     invalid_power = MeanSquareWavenumberDissipation(rate=0.1, power=-1)
-    bad_model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=invalid_power)
+    bad_model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=invalid_power)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
 end
@@ -546,7 +546,7 @@ end
     source = PeakWavenumberDissipation(rate=0.3,
                                        reference_wavenumber=1.0,
                                        power=2)
-    model = SpectralWaveModel(; advection=nothing, grid,
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid,
                                 spectral_grid=cgrid,
                                 sources=source,
                                 timestepper=:ForwardEuler)
@@ -557,7 +557,7 @@ end
     compute_tendencies!(model)
     @test all(interior(model.tendencies) .≈ -damping .* interior(model.action))
 
-    model = SpectralWaveModel(; advection=nothing, grid,
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid,
                                 spectral_grid=cgrid,
                                 sources=source,
                                 timestepper=:SemiImplicitEuler)
@@ -568,12 +568,12 @@ end
     @test all(interior(model.action) .>= 0)
 
     invalid_reference = PeakWavenumberDissipation(rate=0.1, reference_wavenumber=0.0)
-    bad_model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=invalid_reference)
+    bad_model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=invalid_reference)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
 
     invalid_power = PeakWavenumberDissipation(rate=0.1, power=-1)
-    bad_model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=invalid_power)
+    bad_model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=invalid_power)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
 end
@@ -584,7 +584,7 @@ end
 
     depth = reshape([2.0, 10.0], 2, 1)
     breaking = DepthLimitedBreaking(rate=0.4, depth=depth, gamma=0.8, power=2)
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=breaking, timestepper=:ForwardEuler)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=breaking, timestepper=:ForwardEuler)
     set!(model, N=1.0)
     compute_tendencies!(model)
 
@@ -596,14 +596,14 @@ end
     @test model.tendencies[2, 1, 1, 1] == 0
 
     stiff = DepthLimitedBreaking(rate=10.0, depth=1.0, gamma=1.0, power=1)
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=stiff, timestepper=:SemiImplicitEuler)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=stiff, timestepper=:SemiImplicitEuler)
     set!(model, N=1.0)
     _, damping = source_split(stiff, model, 1, 1, 1, 1)
     time_step!(model, 1.0)
     @test model.action[1, 1, 1, 1] ≈ 1 / (1 + damping)
 
     invalid = DepthLimitedBreaking(rate=0.1, depth=1.0, gamma=0.0)
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=invalid)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=invalid)
     set!(model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(model)
 end
@@ -618,7 +618,7 @@ end
                               reference_depth=1.0,
                               wavenumber_power=1.0,
                               reference_wavenumber=0.5)
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=friction, timestepper=:ForwardEuler)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=friction, timestepper=:ForwardEuler)
     set!(model, N=1.0)
     compute_tendencies!(model)
 
@@ -629,13 +629,13 @@ end
     @test model.tendencies[1, 1, 2, 1] / model.tendencies[1, 1, 1, 1] ≈ factor_2 / factor_1
 
     disabled = BottomFriction(rate=0.0, depth=(x, y, t) -> 0.1 + t)
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=disabled, timestepper=:ForwardEuler)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=disabled, timestepper=:ForwardEuler)
     set!(model, N=1.0)
     compute_tendencies!(model)
     @test maximum(abs, interior(model.tendencies)) < 1e-14
 
     stiff = BottomFriction(rate=10.0, depth=0.5, reference_depth=1.0)
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=stiff, timestepper=:SemiImplicitEuler)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=stiff, timestepper=:SemiImplicitEuler)
     set!(model, N=1.0)
     time_step!(model, 1.0)
     @test all(interior(model.action) .≈ 1 / 21)
@@ -650,7 +650,7 @@ end
                      concentration=concentration,
                      wavenumber_power=2.0,
                      reference_wavenumber=0.5)
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=ice, timestepper=:ForwardEuler)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=ice, timestepper=:ForwardEuler)
     set!(model, N=1.0)
     compute_tendencies!(model)
 
@@ -663,7 +663,7 @@ end
 
     cgrid = PolarWaveVectorGrid(; κ=[1.0], φ=[0.0, pi/2, pi])
     swell = SwellDissipation(rate=0.3, direction=0.0, spreading_power=2)
-    model = SpectralWaveModel(; advection=nothing, grid=RectilinearGrid(CPU(); size=(1, 1, 1), x=(0, 1), y=(0, 1), z=(0, 1)),
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid=RectilinearGrid(CPU(); size=(1, 1, 1), x=(0, 1), y=(0, 1), z=(0, 1)),
                                 spectral_grid=cgrid,
                                 sources=swell,
                                 timestepper=:ForwardEuler)
@@ -683,7 +683,7 @@ end
     grid = RectilinearGrid(CPU(); size=(1, 1, 1), x=(0, 1), y=(0, 1), z=(0, 1))
     cgrid = PolarWaveVectorGrid(; κ=[1.0], φ=[0.0, pi/2, pi, 3pi/2])
     source = MeanDirectionDissipation(rate=0.25, power=1)
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=source, timestepper=:ForwardEuler)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=source, timestepper=:ForwardEuler)
     set!(model, N=1.0)
     model.action[1, 1, 1, 1] = 10.0
     compute_tendencies!(model)
@@ -693,7 +693,7 @@ end
     @test model.tendencies[1, 1, 1, 3] ≈ -0.5
     @test model.tendencies[1, 1, 1, 4] ≈ -0.25
 
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=source, timestepper=:SemiImplicitEuler)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=source, timestepper=:SemiImplicitEuler)
     set!(model, N=1.0)
     model.action[1, 1, 1, 1] = 10.0
     time_step!(model, 1.0)
@@ -703,13 +703,13 @@ end
     @test model.action[1, 1, 1, 4] ≈ 1 / 1.25
     @test all(interior(model.action) .>= 0)
 
-    isotropic = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=source)
+    isotropic = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=source)
     set!(isotropic, N=1.0)
     compute_tendencies!(isotropic)
     @test maximum(abs, interior(isotropic.tendencies)) < 1e-14
 
     invalid = MeanDirectionDissipation(rate=0.1, power=-1)
-    bad_model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=invalid)
+    bad_model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=invalid)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
 end
@@ -719,7 +719,7 @@ end
     φ = range(0, 2pi; length=9)[1:8]
     cgrid = PolarWaveVectorGrid(; κ=[1.0], φ=φ)
     diffusion = DirectionalDiffusion(rate=0.1)
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=diffusion, timestepper=:ForwardEuler)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=diffusion, timestepper=:ForwardEuler)
     set!(model, N=(x, y, kx, ky) -> ky > 0 && abs(kx) < 1e-12 ? 10.0 : 1.0)
 
     initial_action = total_action(model.action)
@@ -735,19 +735,19 @@ end
     @test source_tendency(diffusion, model, 1, 1, 1, 3) ≈ positive - damping * model.action[1, 1, 1, 3]
     @test damping > 0
 
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=diffusion, timestepper=:SemiImplicitEuler)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=diffusion, timestepper=:SemiImplicitEuler)
     set!(model, N=(x, y, kx, ky) -> ky > 0 && abs(kx) < 1e-12 ? 10.0 : 1.0)
     time_step!(model, 0.1)
     @test all(interior(model.action) .>= 0)
     @test total_action(model.action) ≈ initial_action
 
     cartesian = CartesianWaveVectorGrid(Float64; kx=[0.0], ky=[0.0])
-    bad_model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cartesian, sources=diffusion)
+    bad_model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cartesian, sources=diffusion)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
 
     negative = DirectionalDiffusion(rate=-0.1)
-    bad_model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=negative)
+    bad_model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=negative)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
 end
@@ -757,7 +757,7 @@ end
     φ = range(0, 2pi; length=9)[1:8]
     cgrid = PolarWaveVectorGrid(; κ=[1.0], φ=φ)
     advection = DirectionalAdvection(velocity=0.04)
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=advection, timestepper=:ForwardEuler)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=advection, timestepper=:ForwardEuler)
     set!(model, N=(x, y, kx, ky) -> kx > 0 && abs(ky) < 1e-12 ? 10.0 : 1.0)
 
     initial_action = total_action(model.action)
@@ -777,7 +777,7 @@ end
     @test total_action(model.action) ≈ initial_action
 
     clockwise = DirectionalAdvection(angular_velocity=-0.04)
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=clockwise, timestepper=:ForwardEuler)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=clockwise, timestepper=:ForwardEuler)
     set!(model, N=(x, y, kx, ky) -> ky < 0 && abs(kx) < 1e-12 ? 10.0 : 1.0)
     compute_tendencies!(model)
     weighted_tendency = sum(model.tendencies[1, 1, 1, n] * spectral_weight(cgrid, 1, n)
@@ -787,7 +787,7 @@ end
     @test model.tendencies[1, 1, 1, 6] > 0
 
     fgrid = FrequencyDirectionGrid(; frequency=[0.1, 0.2], φ=φ)
-    model = SpectralWaveModel(; grid, spectral_grid=fgrid, advection=nothing, sources=DirectionalAdvection(velocity=0.02))
+    model = SpectralWaveModel(; grid, spectral_grid=fgrid, horizontal_advection=nothing, sources=DirectionalAdvection(velocity=0.02))
     set!(model, N=(x, y, kx, ky) -> 1 + max(kx, 0))
     compute_tendencies!(model)
     weighted_tendency = sum(model.tendencies[1, 1, m, n] * spectral_weight(fgrid, m, n)
@@ -795,19 +795,19 @@ end
     @test abs(weighted_tendency) < 1e-12
 
     one_direction = PolarWaveVectorGrid(; κ=[1.0], φ=[0.0])
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=one_direction, sources=advection)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=one_direction, sources=advection)
     set!(model, N=1.0)
     compute_tendencies!(model)
     @test maximum(abs, interior(model.tendencies)) == 0
 
     cartesian = CartesianWaveVectorGrid(Float64; kx=[0.0], ky=[0.0])
-    bad_model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cartesian, sources=advection)
+    bad_model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cartesian, sources=advection)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
 
     bounded_direction = PolarWaveVectorGrid(; κ=[1.0], φ=[0.0, pi],
                                             topology=(NoFlux(), Bounded()))
-    bad_model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=bounded_direction, sources=advection)
+    bad_model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=bounded_direction, sources=advection)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
 end
@@ -816,7 +816,7 @@ end
     grid = RectilinearGrid(CPU(); size=(1, 1, 1), x=(0, 1), y=(0, 1), z=(0, 1))
     cgrid = PolarWaveVectorGrid(; κ=[0.5, 1.0, 2.0], φ=[0.0])
     diffusion = RadialDiffusion(rate=0.05)
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=diffusion, timestepper=:ForwardEuler)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=diffusion, timestepper=:ForwardEuler)
     set!(model, N=(x, y, kx, ky) -> abs(hypot(kx, ky) - 1.0) < 1e-12 ? 10.0 : 1.0)
 
     initial_action = total_action(model.action)
@@ -836,24 +836,24 @@ end
     @test all(interior(model.action) .>= 0)
     @test total_action(model.action) ≈ initial_action
 
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=RadialDiffusion(rate=0.05), timestepper=:SemiImplicitEuler)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=RadialDiffusion(rate=0.05), timestepper=:SemiImplicitEuler)
     set!(model, N=(x, y, kx, ky) -> abs(hypot(kx, ky) - 1.0) < 1e-12 ? 10.0 : 1.0)
     time_step!(model, 0.1)
     @test all(interior(model.action) .>= 0)
 
     cartesian = CartesianWaveVectorGrid(Float64; kx=[0.0], ky=[0.0])
-    bad_model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cartesian, sources=diffusion)
+    bad_model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cartesian, sources=diffusion)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
 
     periodic_radial = PolarWaveVectorGrid(; κ=[0.5, 1.0], φ=[0.0],
                                           topology=(Periodic(), Periodic()))
-    bad_model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=periodic_radial, sources=diffusion)
+    bad_model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=periodic_radial, sources=diffusion)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
 
     negative = RadialDiffusion(rate=-0.1)
-    bad_model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=negative)
+    bad_model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=negative)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
 end
@@ -862,7 +862,7 @@ end
     grid = RectilinearGrid(CPU(); size=(1, 1, 1), x=(0, 1), y=(0, 1), z=(0, 1))
     cgrid = PolarWaveVectorGrid(; κ=[0.5, 1.0, 2.0], φ=[0.0])
     advection = RadialAdvection(velocity=0.03)
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=advection, timestepper=:ForwardEuler)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=advection, timestepper=:ForwardEuler)
     set!(model, N=(x, y, kx, ky) -> abs(hypot(kx, ky) - 0.5) < 1e-12 ? 10.0 : 1.0)
 
     initial_action = total_action(model.action)
@@ -882,7 +882,7 @@ end
     @test total_action(model.action) ≈ initial_action
 
     downshift = RadialAdvection(velocity=-0.03)
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=downshift, timestepper=:ForwardEuler)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=downshift, timestepper=:ForwardEuler)
     set!(model, N=(x, y, kx, ky) -> abs(hypot(kx, ky) - 2.0) < 1e-12 ? 10.0 : 1.0)
     compute_tendencies!(model)
     weighted_tendency = sum(model.tendencies[1, 1, m, 1] * spectral_weight(cgrid, m, 1)
@@ -892,7 +892,7 @@ end
     @test model.tendencies[1, 1, 2, 1] > 0
 
     fgrid = FrequencyDirectionGrid(; frequency=[0.1, 0.2, 0.4], φ=[0.0])
-    model = SpectralWaveModel(; grid, spectral_grid=fgrid, advection=nothing, sources=RadialAdvection(velocity=0.01))
+    model = SpectralWaveModel(; grid, spectral_grid=fgrid, horizontal_advection=nothing, sources=RadialAdvection(velocity=0.01))
     set!(model, N=(x, y, kx, ky) -> 1 + hypot(kx, ky))
     compute_tendencies!(model)
     weighted_tendency = sum(model.tendencies[1, 1, m, 1] * spectral_weight(fgrid, m, 1)
@@ -900,13 +900,13 @@ end
     @test abs(weighted_tendency) < 1e-12
 
     cartesian = CartesianWaveVectorGrid(Float64; kx=[0.0], ky=[0.0])
-    bad_model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cartesian, sources=advection)
+    bad_model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cartesian, sources=advection)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
 
     periodic_radial = PolarWaveVectorGrid(; κ=[0.5, 1.0], φ=[0.0],
                                           topology=(Periodic(), Periodic()))
-    bad_model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=periodic_radial, sources=advection)
+    bad_model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=periodic_radial, sources=advection)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
 end
@@ -920,7 +920,7 @@ end
     no_advection = nothing
     model = SpectralWaveModel(; grid,
                                 spectral_grid=cgrid,
-                                advection=no_advection,
+                                horizontal_advection=no_advection,
                                 sources=transfer,
                                 timestepper=:ForwardEuler)
     set!(model, N=0.0)
@@ -958,14 +958,14 @@ end
     invalid = NonlinearSpectralTransfer((
         SpectralTransferInteraction((1, 1), (4, 1); rate=0.1),
     ))
-    bad_model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=invalid)
+    bad_model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=invalid)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
 
     negative_rate = NonlinearSpectralTransfer((
         SpectralTransferInteraction((1, 1), (2, 1); rate=-0.1),
     ))
-    bad_model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=negative_rate)
+    bad_model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=negative_rate)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
 end
@@ -980,7 +980,7 @@ end
     no_advection = nothing
     model = SpectralWaveModel(; grid,
                                 spectral_grid=cgrid,
-                                advection=no_advection,
+                                horizontal_advection=no_advection,
                                 sources=transfer,
                                 timestepper=:ForwardEuler)
     set!(model, N=(x, y, kx, ky) -> abs(ky) < 1e-12 ? 4.0 : 1.0)
@@ -1013,7 +1013,7 @@ end
     @test_throws ArgumentError SpectralTransferStencil(((1, 1), (1, 2)), (-1, 0.5); rate=0.1)
 
     invalid = NonlinearInvariantTransfer((SpectralTransferStencil(((1, 1), (1, 5)), (-1, 1); rate=0.1),))
-    bad_model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=invalid)
+    bad_model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=invalid)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
 end
@@ -1027,7 +1027,7 @@ end
     no_advection = nothing
     model = SpectralWaveModel(; grid,
                                 spectral_grid=cgrid,
-                                advection=no_advection,
+                                horizontal_advection=no_advection,
                                 sources=triad,
                                 timestepper=:ForwardEuler)
     set!(model, N=0.5)
@@ -1074,7 +1074,7 @@ end
     ))
     model = SpectralWaveModel(; grid,
                                 spectral_grid=cgrid,
-                                advection=no_advection,
+                                horizontal_advection=no_advection,
                                 sources=subharmonic,
                                 timestepper=:ForwardEuler)
     set!(model, N=2.0)
@@ -1086,26 +1086,26 @@ end
     nonresonant = TriadSpectralTransfer((
         TriadTransferInteraction((1, 1), (1, 1), (3, 1); rate=0.02),
     ))
-    bad_model = SpectralWaveModel(; grid, spectral_grid=cgrid, advection=no_advection, sources=nonresonant)
+    bad_model = SpectralWaveModel(; grid, spectral_grid=cgrid, horizontal_advection=no_advection, sources=nonresonant)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
 
     invalid = TriadSpectralTransfer((
         TriadTransferInteraction((1, 1), (2, 1), (4, 1); rate=0.02),
     ))
-    bad_model = SpectralWaveModel(; grid, spectral_grid=cgrid, advection=no_advection, sources=invalid)
+    bad_model = SpectralWaveModel(; grid, spectral_grid=cgrid, horizontal_advection=no_advection, sources=invalid)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
 
     negative_rate = TriadSpectralTransfer((
         TriadTransferInteraction((1, 1), (2, 1), (3, 1); rate=-0.02),
     ))
-    bad_model = SpectralWaveModel(; grid, spectral_grid=cgrid, advection=no_advection, sources=negative_rate)
+    bad_model = SpectralWaveModel(; grid, spectral_grid=cgrid, horizontal_advection=no_advection, sources=negative_rate)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
 
     polar = PolarWaveVectorGrid(; κ=[1.0, 2.0], φ=[0.0])
-    bad_model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=polar, sources=triad)
+    bad_model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=polar, sources=triad)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
 end
@@ -1121,7 +1121,7 @@ end
     no_advection = nothing
     model = SpectralWaveModel(; grid,
                                 spectral_grid=cgrid,
-                                advection=no_advection,
+                                horizontal_advection=no_advection,
                                 sources=dia,
                                 timestepper=:ForwardEuler)
     set!(model, N=0.5)
@@ -1179,26 +1179,26 @@ end
     nonresonant = DiscreteInteractionApproximation((
         QuadrupletTransferInteraction((1, 1), (1, 2), (1, 3), (1, 4); rate=0.05),
     ))
-    bad_model = SpectralWaveModel(; grid, spectral_grid=cgrid, advection=no_advection, sources=nonresonant)
+    bad_model = SpectralWaveModel(; grid, spectral_grid=cgrid, horizontal_advection=no_advection, sources=nonresonant)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
 
     invalid = DiscreteInteractionApproximation((
         QuadrupletTransferInteraction((1, 1), (1, 3), (1, 2), (1, 5); rate=0.05),
     ))
-    bad_model = SpectralWaveModel(; grid, spectral_grid=cgrid, advection=no_advection, sources=invalid)
+    bad_model = SpectralWaveModel(; grid, spectral_grid=cgrid, horizontal_advection=no_advection, sources=invalid)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
 
     negative_rate = DiscreteInteractionApproximation((
         QuadrupletTransferInteraction((1, 1), (1, 3), (1, 2), (1, 4); rate=-0.05),
     ))
-    bad_model = SpectralWaveModel(; grid, spectral_grid=cgrid, advection=no_advection, sources=negative_rate)
+    bad_model = SpectralWaveModel(; grid, spectral_grid=cgrid, horizontal_advection=no_advection, sources=negative_rate)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
 
     polar = PolarWaveVectorGrid(; κ=[1.0], φ=[0.0, pi/2, pi, 3pi/2])
-    bad_model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=polar, sources=dia)
+    bad_model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=polar, sources=dia)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
 end
@@ -1246,7 +1246,7 @@ end
             FrequencyDirectionGrid(; frequency=[0.1, 0.2], φ=[0.0]) : spectral_grid
         spectral_grid = source isa DiscreteInteractionApproximation ?
             FrequencyDirectionGrid(; frequency=[0.1], φ=[0.0, pi/2, pi, 3pi/2]) : spectral_grid
-        model = SpectralWaveModel(; grid, spectral_grid, advection=nothing, sources=source, timestepper=:ForwardEuler)
+        model = SpectralWaveModel(; grid, spectral_grid, horizontal_advection=nothing, sources=source, timestepper=:ForwardEuler)
         set!(model, N=1.25)
         positive, damping = source_split(source, model, 1, 1, 1, 1)
         @test source_tendency(source, model, 1, 1, 1, 1) ≈ positive - damping * model.action[1, 1, 1, 1]
@@ -1260,13 +1260,13 @@ end
     cgrid = CartesianWaveVectorGrid(Float64; kx=[0.5], ky=[0.0])
 
     damping = BottomFriction(rate=100.0)
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=damping, timestepper=:SemiImplicitEuler)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=damping, timestepper=:SemiImplicitEuler)
     set!(model, N=1.0)
     time_step!(model, 1.0)
     @test model.action[1, 1, 1, 1] ≈ 1 / 101
 
     relaxation = RelaxationToSpectrum((x, y, kx, ky) -> 2.0; timescale=1.0)
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=relaxation, timestepper=:SemiImplicitEuler)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=relaxation, timestepper=:SemiImplicitEuler)
     set!(model, N=0.0)
     time_step!(model, 0.5)
     @test model.action[1, 1, 1, 1] ≈ 2 / 3
@@ -1276,7 +1276,7 @@ end
                                            saturation_threshold=1.0,
                                            saturation_power=1.0,
                                            wavenumber_power=0.0)
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=pgrid, sources=whitecapping, timestepper=:SemiImplicitEuler)
+    model = SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=pgrid, sources=whitecapping, timestepper=:SemiImplicitEuler)
     set!(model, N=1.0)
     λ = Ripple.implicit_source_rate(whitecapping, model, 1, 1, 1, 1)
     time_step!(model, 0.25)

@@ -37,13 +37,10 @@ for k in 1:Nz, j in 1:Ny, i in 1:Nx
     end
 end
 
-model = SpectralWaveModel(; grid,
-                            spectral_grid,
-                            velocities = (; u=u_field, v=v_field),
-                            advection = nothing,
-                            sources = nothing,
-                            timestepper = :ForwardEuler)
-coupling = model.coupling
+model = SpectralWaveModel(grid, spectral_grid;
+                          velocities = (; u=u_field, v=v_field),
+                          sources = nothing,
+                          timestepper = :RK3)
 
 κ0 = 0.4; σκ = 0.05; σφ = 0.30
 set!(model, N = (x, y, kx, ky) -> begin
@@ -51,10 +48,6 @@ set!(model, N = (x, y, kx, ky) -> begin
     φ = atan(ky, kx)
     exp(-((κ - κ0) / σκ)^2 - (sin(φ / 2)^2) / σφ^2)
 end)
-
-G  = similar(model.action)
-N1 = similar(model.action)
-N2 = similar(model.action)
 
 dt = 0.05
 total_time = 20.0
@@ -76,15 +69,18 @@ end
 snapshot!()
 
 t0 = time()
-for step in 1:steps
-    rk3_step!(model, coupling, G, N1, N2, dt)
-    if step % frame_stride == 0 || step == steps
-        snapshot!()
-        @info @sprintf("step %4d/%d  t=%.2fs  m0∈[%.4f, %.4f]  κᵣₘₛ∈[%.4f, %.4f]",
-                       step, steps, model.clock.time,
-                       minimum(m0_frames[end]), maximum(m0_frames[end]),
-                       minimum(krms_frames[end]), maximum(krms_frames[end]))
-    end
+remaining_steps = steps
+while remaining_steps > 0
+    chunk = min(frame_stride, remaining_steps)
+    target_iteration = model.clock.iteration + chunk
+    simulation = Simulation(model; Δt = dt, stop_iteration = target_iteration, verbose = false)
+    run!(simulation)
+    snapshot!()
+    @info @sprintf("step %4d/%d  t=%.2fs  m0∈[%.4f, %.4f]  κᵣₘₛ∈[%.4f, %.4f]",
+                   model.clock.iteration, steps, model.clock.time,
+                   minimum(m0_frames[end]), maximum(m0_frames[end]),
+                   minimum(krms_frames[end]), maximum(krms_frames[end]))
+    remaining_steps -= chunk
 end
 @info "simulation done" wall_clock_s = round(time() - t0; digits=1) frames = length(m0_frames)
 

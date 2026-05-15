@@ -5,10 +5,11 @@ stores wave action on a product space of three-dimensional physical
 `RectilinearGrid` cells and two-dimensional spectral coordinates using exact
 finite-volume spectral cell measures.
 
-Physical transport uses Oceananigans tracer advection schemes for each spectral
-bin, while `advection=nothing` means no phase-space transport is applied.
-Oceananigans is a hard dependency, and Ripple does not define private
-advection schemes, simulation drivers, or output writers.
+Physical transport uses Oceananigans tracer advection schemes for each
+spectral bin (`horizontal_advection`), while kinematic refraction is enabled
+via `spectral_advection` for `CWCMPrescribedCurrentCoupling`. Either can be
+disabled with `nothing`. Oceananigans is a hard dependency, and Ripple does
+not define private advection schemes, simulation drivers, or output writers.
 
 ```@contents
 Pages = ["model_api.md", "finite_volume_integration.md", "api_reference.md", "examples.md", "validation.md", "publication.md"]
@@ -54,13 +55,11 @@ v = CenterField(grid)
 set!(u, (x, y, z) -> -vortex_uθ(x, y) * (y - yc) / max(hypot(x - xc, y - yc), eps()))
 set!(v, (x, y, z) -> +vortex_uθ(x, y) * (x - xc) / max(hypot(x - xc, y - yc), eps()))
 
-model = SpectralWaveModel(grid;
-                            spectral_grid,
-                            velocities = (; u, v),
-                            advection = nothing,
-                            sources = nothing,
-                            timestepper = :ForwardEuler)
-coupling = model.coupling
+model = SpectralWaveModel(grid, spectral_grid;
+                          velocities = (; u, v),
+                          horizontal_advection = nothing,  # fused kernel drives transport
+                          sources = nothing,
+                          timestepper = :RK3)
 
 # Narrow-banded Gaussian initial condition: uniform in (x, y), centred on
 # κ₀ = 0.4 and direction φ = 0. set!(::ProductField, fun) tracks the
@@ -71,13 +70,8 @@ function initial_action(x, y, κ, φ)
 end
 set!(model, N = initial_action)
 
-# SSP-RK3 with the fused Doppler + refraction tendency.
-G  = similar(model.action)
-N1 = similar(model.action)
-N2 = similar(model.action)
-for _ in 1:400
-    rk3_step!(model, coupling, G, N1, N2, 0.05)
-end
+simulation = Simulation(model; Δt = 0.05, stop_iteration = 400)
+run!(simulation)
 
 m0_field   = m0(model.action)
 κrms_field = root_mean_square_wavenumber(model.action)

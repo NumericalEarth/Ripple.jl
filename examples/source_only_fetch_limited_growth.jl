@@ -1,9 +1,9 @@
 # # Source-Only Fetch-Limited Growth
 #
-# Source-only models use `advection=nothing`, matching the Oceananigans and
-# Breeze convention that absent physics is represented by `nothing`. This column
-# combines wind input and whitecapping dissipation and approaches an analytic
-# equilibrium.
+# Source-only models use `horizontal_advection=nothing`, matching the
+# Oceananigans and Breeze convention that absent physics is represented by
+# `nothing`. This column combines wind input and whitecapping dissipation and
+# approaches an analytic equilibrium.
 
 using Oceananigans, Ripple, CairoMakie
 
@@ -35,11 +35,10 @@ sources = SourceTermSet((
                              wavenumber_power=0.0),
 ))
 
-model = SpectralWaveModel(; grid,
-                            spectral_grid,
-                            advection=nothing,
-                            sources,
-                            timestepper=:SemiImplicitEuler)
+model = SpectralWaveModel(grid, spectral_grid;
+                          horizontal_advection=nothing,
+                          sources,
+                          timestepper=:SemiImplicitEuler)
 
 weight = spectral_weight(spectral_grid, 1, 1)
 equilibrium_m0 = saturation_threshold * (1 + target_growth_rate / whitecapping_rate)
@@ -73,11 +72,10 @@ push!(animation_paths,
                            title="Approach to source equilibrium",
                            xlabel="time", ylabel="m0"))
 
-writer_model = SpectralWaveModel(grid;
-                                  spectral_grid,
-                                  advection=nothing,
-                                  sources,
-                                  timestepper=:SemiImplicitEuler)
+writer_model = SpectralWaveModel(grid, spectral_grid;
+                                 horizontal_advection=nothing,
+                                 sources,
+                                 timestepper=:SemiImplicitEuler)
 set!(writer_model, N=saturation_threshold / (20 * weight))
 writer_simulation = Simulation(writer_model; Δt=dt, stop_iteration=1, verbose=false)
 writer_path = joinpath(output_dir, "fetch_limited_growth.jld2")

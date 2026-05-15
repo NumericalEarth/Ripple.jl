@@ -34,10 +34,9 @@ spectral_grid = PolarWaveVectorGrid(Float64;
                                     φ=[0.0],
                                     φ_faces=[-theta_width / 2, theta_width / 2])
 
-model = SpectralWaveModel(; grid,
-                            spectral_grid,
-                            advection=WENO(order=5),
-                            timestepper=:RK3)
+model = SpectralWaveModel(grid, spectral_grid;
+                          horizontal_advection=WENO(order=5),
+                          timestepper=:RK3)
 
 packet_left = 24.0
 packet_right = 64.0

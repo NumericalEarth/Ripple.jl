@@ -73,9 +73,9 @@ end
 function goal_completion_items(root=repo_root(); default_suite_summary=nothing)
     items = GoalChecklistItem[
         status_item(:source_only_model,
-                    file_contains(root, "src/Models/spectral_wave_model.jl", ("advection=nothing",)) &&
+                    file_contains(root, "src/Models/spectral_wave_model.jl", ("horizontal_advection=WENO()",)) &&
                     file_contains(root, "src/Models/tendencies.jl", ("source_tendency",)),
-                    "SpectralWaveModel defaults to advection=nothing and tendencies are source-only.",
+                    "SpectralWaveModel exposes horizontal_advection/spectral_advection kwargs and tendencies wire source_tendency.",
                     "restore source-only model semantics"),
         status_item(:removed_private_advection,
                     !file_exists(root, "src/Operators/Operators.jl") &&

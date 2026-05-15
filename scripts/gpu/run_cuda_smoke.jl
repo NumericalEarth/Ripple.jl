@@ -42,7 +42,7 @@ function cuda_smoke_model(arch)
     model = SpectralWaveModel(; grid,
                                 spectral_grid=cgrid,
                                 sources,
-                                advection=nothing,
+                                horizontal_advection=nothing,
                                 timestepper=:SemiImplicitEuler)
     set!(model, N=(x, y, kx, ky) -> 0.5 + 0.01x - 0.02y + 0.03hypot(kx, ky) + 0.02cos(atan(ky, kx)))
     return model
@@ -53,7 +53,7 @@ function cuda_frequency_diagnostic_model(arch)
     cgrid = FrequencyDirectionGrid(Float64;
                                    frequency=[0.08, 0.12, 0.18, 0.27],
                                    φ=range(0, 2pi; length=9)[1:8])
-    model = SpectralWaveModel(; grid, spectral_grid=cgrid, advection=nothing)
+    model = SpectralWaveModel(; grid, spectral_grid=cgrid, horizontal_advection=nothing)
     set!(model, N=(x, y, kx, ky) -> 0.4 + 0.02x - 0.01y +
                                       0.04hypot(kx, ky) + 0.03cos(atan(ky, kx)))
     return model

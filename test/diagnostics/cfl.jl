@@ -10,7 +10,7 @@
                                    φ=[0.0, pi])
     model = SpectralWaveModel(; grid,
                                 spectral_grid=cgrid,
-                                advection=nothing,
+                                horizontal_advection=nothing,
                                 clock=Clock(time=0.0, last_Δt=10.0))
     @test cfl(model) == 0
     @test horizontal_size(grid) == (4, 3)
