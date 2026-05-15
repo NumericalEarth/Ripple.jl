@@ -46,3 +46,20 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
         run: julia --color=yes --startup-file=no --project=docs docs/make.jl
+
+      # Documenter's built-in `documenter/deploy` commit status is posted to
+      # the deploy_repo (RippleDocumentation), where the source SHA doesn't
+      # exist — the API call 404s and no clickable preview link appears on
+      # the PR. Post the status manually against the source repo instead.
+      - name: Post documentation preview status
+        if: github.event_name == 'pull_request' && success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/statuses/${PR_SHA}" \
+            -f state=success \
+            -f context="documenter/deploy" \
+            -f description="Documentation preview" \
+            -f target_url="https://numericalearth.github.io/RippleDocumentation/previews/PR${PR_NUMBER}/"
