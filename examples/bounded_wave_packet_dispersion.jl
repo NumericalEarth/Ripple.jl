@@ -43,7 +43,7 @@ packet_right = 64.0
 set!(model, N=(x, y, kx, ky) -> packet_left <= x < packet_right ? 1.0 : 0.0)
 
 x = collect(xnodes(grid))
-m0_profile() = vec(m0(model.action)[:, 1])
+m0_profile() = vec(interior(m0(model.action))[:, 1, 1])
 x_kappa_profile() = x_kappa_phase_space_matrix(model.action; j=1, n=1)
 
 function packet_center(profile)

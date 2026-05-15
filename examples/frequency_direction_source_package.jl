@@ -56,8 +56,8 @@ set!(model, N=(x, y, kx, ky) -> begin
 end)
 
 initial_total_action = total_action(model.action)
-initial_peak_frequency = peak_frequency(model.action)[1, 1]
-initial_mean_frequency = mean_frequency(model.action)[1, 1]
+initial_peak_frequency = peak_frequency(model.action)[1, 1, 1]
+initial_mean_frequency = mean_frequency(model.action)[1, 1, 1]
 initial_east_peak = model.action[1, 1, peak_m, east_n]
 initial_west_peak = model.action[1, 1, peak_m, west_n]
 initial_directional_peak = [model.action[1, 1, peak_m, n] for n in 1:length(spectral_grid.φ)]
@@ -76,8 +76,8 @@ frames = [column_spectrum_matrix(model.action)]
 time_step!(model, dt)
 
 final_total_action = total_action(model.action)
-final_peak_frequency = peak_frequency(model.action)[1, 1]
-final_mean_frequency = mean_frequency(model.action)[1, 1]
+final_peak_frequency = peak_frequency(model.action)[1, 1, 1]
+final_mean_frequency = mean_frequency(model.action)[1, 1, 1]
 final_east_peak = model.action[1, 1, peak_m, east_n]
 final_west_peak = model.action[1, 1, peak_m, west_n]
 

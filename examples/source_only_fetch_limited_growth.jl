@@ -47,12 +47,12 @@ set!(model, N=saturation_threshold / (20 * weight))
 step_count = example_mode() == :small ? 40 : 240
 dt = 0.02
 times = [model.clock.time]
-moments = [m0(model.action)[1, 1]]
+moments = [m0(model.action)[1, 1, 1]]
 
 for n in 1:step_count
     time_step!(model, dt)
     push!(times, model.clock.time)
-    push!(moments, m0(model.action)[1, 1])
+    push!(moments, m0(model.action)[1, 1, 1])
 end
 
 frame_indices = unique(round.(Int, range(1, length(moments); length=min(length(moments), 12))))

@@ -100,9 +100,11 @@ total_time = small ? 1.0 : 20.0
 steps = Int(round(total_time / dt))
 frame_stride = max(1, steps ÷ (small ? 4 : 60))
 
-m0_frames = Matrix{Float64}[m0(model.action)]
-krms_frames = Matrix{Float64}[root_mean_square_wavenumber(model.action)]
-dir_frames = Matrix{Float64}[mean_direction(model.action)]
+_diag_matrix(f) = Array(interior(f))[:, :, 1]
+
+m0_frames = Matrix{Float64}[_diag_matrix(m0(model.action))]
+krms_frames = Matrix{Float64}[_diag_matrix(root_mean_square_wavenumber(model.action))]
+dir_frames = Matrix{Float64}[_diag_matrix(mean_direction(model.action))]
 times = Float64[0.0]
 
 function _run_vortex_chunks!(model, steps, frame_stride, dt,
@@ -113,9 +115,9 @@ function _run_vortex_chunks!(model, steps, frame_stride, dt,
         target_iteration = model.clock.iteration + chunk
         simulation = Simulation(model; Δt = dt, stop_iteration = target_iteration, verbose = false)
         run!(simulation)
-        push!(m0_frames, m0(model.action))
-        push!(krms_frames, root_mean_square_wavenumber(model.action))
-        push!(dir_frames, mean_direction(model.action))
+        push!(m0_frames, _diag_matrix(m0(model.action)))
+        push!(krms_frames, _diag_matrix(root_mean_square_wavenumber(model.action)))
+        push!(dir_frames, _diag_matrix(mean_direction(model.action)))
         push!(times, model.clock.time)
         remaining -= chunk
     end
