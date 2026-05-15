@@ -62,6 +62,8 @@ coordinate_float_type(::PolarWaveVectorGrid{FT}) where FT = FT
     return (κ * cos(φ), κ * sin(φ))
 end
 
+@inline spectral_coordinates(g::PolarWaveVectorGrid, m, n) = (g.κ[m], g.φ[n])
+
 @inline radial_wavenumber(g::PolarWaveVectorGrid, m, n) = g.κ[m]
 @inline metric_jacobian(g::PolarWaveVectorGrid, m, n) = g.κ[m]
 

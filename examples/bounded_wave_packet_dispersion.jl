@@ -41,7 +41,7 @@ model = SpectralWaveModel(; grid,
 
 packet_left = 24.0
 packet_right = 64.0
-set!(model, N=(x, y, kx, ky) -> packet_left <= x < packet_right ? 1.0 : 0.0)
+set!(model, N=(x, y, κ, φ) -> packet_left <= x < packet_right ? 1.0 : 0.0)
 
 x = collect(xnodes(grid))
 m0_profile() = vec(m0(model.action)[:, 1])

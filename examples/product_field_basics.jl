@@ -19,9 +19,9 @@ spectral_grid = PolarWaveVectorGrid(Float64;
 
 N = WaveActionField(grid, spectral_grid)
 
-set!(N, (x, y, kx, ky) -> exp(-((x - 0.5)^2 + (y - 0.5)^2) / 0.035) *
-                              exp(-((hypot(kx, ky) - 0.5)^2) / 0.08) *
-                              (1 + 0.25cos(atan(ky, kx))))
+set!(N, (x, y, κ, φ) -> exp(-((x - 0.5)^2 + (y - 0.5)^2) / 0.035) *
+                              exp(-((κ - 0.5)^2) / 0.08) *
+                              (1 + 0.25cos(φ)))
 
 height = significant_wave_height(N)
 moment = field_m0_matrix(N)

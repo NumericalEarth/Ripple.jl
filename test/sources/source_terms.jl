@@ -422,7 +422,7 @@ end
                                 advection=no_advection,
                                 sources=MeanFrequencyDissipation(rate=0.5, reference_frequency=0.2, power=2),
                                 timestepper=:ForwardEuler)
-    set!(model, N=(x, y, kx, ky) -> abs(hypot(kx, ky) - cgrid.κ[3]) < 1e-12 ? 2.0 : 0.5)
+    set!(model, N=(x, y, f, φ) -> abs(f - cgrid.frequency[3]) < 1e-12 ? 2.0 : 0.5)
 
     fmean = mean_frequency(model.action)[1, 1]
     _, damping = source_split(model.sources, model, 1, 1, 2, 1)
@@ -467,7 +467,7 @@ end
                                 advection=no_advection,
                                 sources=source,
                                 timestepper=:ForwardEuler)
-    set!(model, N=(x, y, kx, ky) -> abs(hypot(kx, ky) - cgrid.κ[3]) < 1e-12 ? 4.0 : 1.0)
+    set!(model, N=(x, y, f, φ) -> abs(f - cgrid.frequency[3]) < 1e-12 ? 4.0 : 1.0)
 
     fpeak = peak_frequency(model.action)[1, 1]
     _, damping = source_split(source, model, 1, 1, 2, 1)
@@ -481,7 +481,7 @@ end
                                 advection=no_advection,
                                 sources=source,
                                 timestepper=:SemiImplicitEuler)
-    set!(model, N=(x, y, kx, ky) -> abs(hypot(kx, ky) - cgrid.κ[3]) < 1e-12 ? 4.0 : 1.0)
+    set!(model, N=(x, y, f, φ) -> abs(f - cgrid.frequency[3]) < 1e-12 ? 4.0 : 1.0)
     initial = copy(interior(model.action))
     time_step!(model, 0.25)
     @test all(interior(model.action) .≈ initial ./ (1 + 0.25damping))
@@ -516,7 +516,7 @@ end
                                 spectral_grid=cgrid,
                                 sources=source,
                                 timestepper=:SemiImplicitEuler)
-    set!(model, N=(x, y, kx, ky) -> hypot(kx, ky) > 1.0 ? 2.0 : 0.5)
+    set!(model, N=(x, y, κ, φ) -> κ > 1.0 ? 2.0 : 0.5)
 
     rms_k = root_mean_square_wavenumber(model.action)[1, 1]
     _, damping = source_split(source, model, 1, 1, 2, 1)
@@ -550,7 +550,7 @@ end
                                 spectral_grid=cgrid,
                                 sources=source,
                                 timestepper=:ForwardEuler)
-    set!(model, N=(x, y, kx, ky) -> hypot(kx, ky) == 2.0 ? 4.0 : 1.0)
+    set!(model, N=(x, y, κ, φ) -> κ == 2.0 ? 4.0 : 1.0)
 
     _, damping = source_split(source, model, 1, 1, 2, 1)
     @test damping ≈ 0.3 * 2.0^2
@@ -561,7 +561,7 @@ end
                                 spectral_grid=cgrid,
                                 sources=source,
                                 timestepper=:SemiImplicitEuler)
-    set!(model, N=(x, y, kx, ky) -> hypot(kx, ky) == 2.0 ? 4.0 : 1.0)
+    set!(model, N=(x, y, κ, φ) -> κ == 2.0 ? 4.0 : 1.0)
     initial = copy(interior(model.action))
     time_step!(model, 0.25)
     @test all(interior(model.action) .≈ initial ./ (1 + 0.25damping))
@@ -720,7 +720,7 @@ end
     cgrid = PolarWaveVectorGrid(; κ=[1.0], φ=φ)
     diffusion = DirectionalDiffusion(rate=0.1)
     model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=diffusion, timestepper=:ForwardEuler)
-    set!(model, N=(x, y, kx, ky) -> ky > 0 && abs(kx) < 1e-12 ? 10.0 : 1.0)
+    set!(model, N=(x, y, κ, φ) -> abs(φ - pi / 2) < 1e-12 ? 10.0 : 1.0)
 
     initial_action = total_action(model.action)
     compute_tendencies!(model)
@@ -736,7 +736,7 @@ end
     @test damping > 0
 
     model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=diffusion, timestepper=:SemiImplicitEuler)
-    set!(model, N=(x, y, kx, ky) -> ky > 0 && abs(kx) < 1e-12 ? 10.0 : 1.0)
+    set!(model, N=(x, y, κ, φ) -> abs(φ - pi / 2) < 1e-12 ? 10.0 : 1.0)
     time_step!(model, 0.1)
     @test all(interior(model.action) .>= 0)
     @test total_action(model.action) ≈ initial_action
@@ -758,7 +758,7 @@ end
     cgrid = PolarWaveVectorGrid(; κ=[1.0], φ=φ)
     advection = DirectionalAdvection(velocity=0.04)
     model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=advection, timestepper=:ForwardEuler)
-    set!(model, N=(x, y, kx, ky) -> kx > 0 && abs(ky) < 1e-12 ? 10.0 : 1.0)
+    set!(model, N=(x, y, κ, φ) -> abs(φ) < 1e-12 ? 10.0 : 1.0)
 
     initial_action = total_action(model.action)
     compute_tendencies!(model)
@@ -778,7 +778,7 @@ end
 
     clockwise = DirectionalAdvection(angular_velocity=-0.04)
     model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=clockwise, timestepper=:ForwardEuler)
-    set!(model, N=(x, y, kx, ky) -> ky < 0 && abs(kx) < 1e-12 ? 10.0 : 1.0)
+    set!(model, N=(x, y, κ, φ) -> abs(φ - 3pi / 2) < 1e-12 ? 10.0 : 1.0)
     compute_tendencies!(model)
     weighted_tendency = sum(model.tendencies[1, 1, 1, n] * spectral_weight(cgrid, 1, n)
                             for n in eachindex(cgrid.φ))
@@ -788,7 +788,7 @@ end
 
     fgrid = FrequencyDirectionGrid(; frequency=[0.1, 0.2], φ=φ)
     model = SpectralWaveModel(; grid, spectral_grid=fgrid, advection=nothing, sources=DirectionalAdvection(velocity=0.02))
-    set!(model, N=(x, y, kx, ky) -> 1 + max(kx, 0))
+    set!(model, N=(x, y, f, φ) -> 1 + max((2pi * f)^2 / 9.81 * cos(φ), 0))
     compute_tendencies!(model)
     weighted_tendency = sum(model.tendencies[1, 1, m, n] * spectral_weight(fgrid, m, n)
                             for n in eachindex(fgrid.φ), m in eachindex(fgrid.frequency))
@@ -817,7 +817,7 @@ end
     cgrid = PolarWaveVectorGrid(; κ=[0.5, 1.0, 2.0], φ=[0.0])
     diffusion = RadialDiffusion(rate=0.05)
     model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=diffusion, timestepper=:ForwardEuler)
-    set!(model, N=(x, y, kx, ky) -> abs(hypot(kx, ky) - 1.0) < 1e-12 ? 10.0 : 1.0)
+    set!(model, N=(x, y, κ, φ) -> abs(κ - 1.0) < 1e-12 ? 10.0 : 1.0)
 
     initial_action = total_action(model.action)
     compute_tendencies!(model)
@@ -837,7 +837,7 @@ end
     @test total_action(model.action) ≈ initial_action
 
     model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=RadialDiffusion(rate=0.05), timestepper=:SemiImplicitEuler)
-    set!(model, N=(x, y, kx, ky) -> abs(hypot(kx, ky) - 1.0) < 1e-12 ? 10.0 : 1.0)
+    set!(model, N=(x, y, κ, φ) -> abs(κ - 1.0) < 1e-12 ? 10.0 : 1.0)
     time_step!(model, 0.1)
     @test all(interior(model.action) .>= 0)
 
@@ -863,7 +863,7 @@ end
     cgrid = PolarWaveVectorGrid(; κ=[0.5, 1.0, 2.0], φ=[0.0])
     advection = RadialAdvection(velocity=0.03)
     model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=advection, timestepper=:ForwardEuler)
-    set!(model, N=(x, y, kx, ky) -> abs(hypot(kx, ky) - 0.5) < 1e-12 ? 10.0 : 1.0)
+    set!(model, N=(x, y, κ, φ) -> abs(κ - 0.5) < 1e-12 ? 10.0 : 1.0)
 
     initial_action = total_action(model.action)
     compute_tendencies!(model)
@@ -883,7 +883,7 @@ end
 
     downshift = RadialAdvection(velocity=-0.03)
     model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=downshift, timestepper=:ForwardEuler)
-    set!(model, N=(x, y, kx, ky) -> abs(hypot(kx, ky) - 2.0) < 1e-12 ? 10.0 : 1.0)
+    set!(model, N=(x, y, κ, φ) -> abs(κ - 2.0) < 1e-12 ? 10.0 : 1.0)
     compute_tendencies!(model)
     weighted_tendency = sum(model.tendencies[1, 1, m, 1] * spectral_weight(cgrid, m, 1)
                             for m in eachindex(cgrid.κ))
@@ -893,7 +893,7 @@ end
 
     fgrid = FrequencyDirectionGrid(; frequency=[0.1, 0.2, 0.4], φ=[0.0])
     model = SpectralWaveModel(; grid, spectral_grid=fgrid, advection=nothing, sources=RadialAdvection(velocity=0.01))
-    set!(model, N=(x, y, kx, ky) -> 1 + hypot(kx, ky))
+    set!(model, N=(x, y, f, φ) -> 1 + (2pi * f)^2 / 9.81)
     compute_tendencies!(model)
     weighted_tendency = sum(model.tendencies[1, 1, m, 1] * spectral_weight(fgrid, m, 1)
                             for m in eachindex(fgrid.frequency))
@@ -983,7 +983,7 @@ end
                                 advection=no_advection,
                                 sources=transfer,
                                 timestepper=:ForwardEuler)
-    set!(model, N=(x, y, kx, ky) -> abs(ky) < 1e-12 ? 4.0 : 1.0)
+    set!(model, N=(x, y, κ, φ) -> abs(κ * sin(φ)) < 1e-12 ? 4.0 : 1.0)
 
     initial_action = total_action(model.action)
     initial_mx, initial_my = first_moment(model.action)
@@ -1209,7 +1209,7 @@ end
 
     sources = (
         nothing,
-        RelaxationToSpectrum((x, y, kx, ky) -> 2.0; timescale=4.0),
+        RelaxationToSpectrum((x, y, ξ, η) -> 2.0; timescale=4.0),
         LinearWindInput(rate=0.3),
         LinearWindInput(rate=-0.2),
         ExponentialWindInput(rate=0.5, direction=0.0, spreading_power=2),

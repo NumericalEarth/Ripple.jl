@@ -20,10 +20,9 @@ spectral_grid = PolarWaveVectorGrid(Float64;
                                     κ=range(0.35, 1.15; length=16),
                                     φ=range(0, 2pi; length=33)[1:32])
 
-target(x, y, kx, ky) = begin
-    k = hypot(kx, ky)
-    direction = k == 0 ? 0.0 : max(kx / k, 0.0)^4
-    exp(-((k - 0.75) / 0.22)^2) * direction
+target(x, y, κ, φ) = begin
+    direction = max(cos(φ), 0.0)^4
+    exp(-((κ - 0.75) / 0.22)^2) * direction
 end
 
 alpha = 1.3

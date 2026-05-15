@@ -32,7 +32,7 @@ export spectral_cell_measure, spectral_cell_measures, spectral_weight, spectral_
 export spectral_first_moment_measures, spectral_second_moment_measures
 export spectral_radial_power_measure, spectral_radial_power_average
 export spectral_frequency_power_measure, spectral_frequency_power_average
-export k_components, radial_wavenumber, metric_jacobian, integrate_spectrum
+export k_components, spectral_coordinates, radial_wavenumber, metric_jacobian, integrate_spectrum
 export m0, first_moment, second_moment, mean_square_wavenumber, root_mean_square_wavenumber
 export mean_direction_vector, mean_direction, peak_direction
 export peak_wavenumber, deep_water_peak_phase_speed, wave_age

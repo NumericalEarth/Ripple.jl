@@ -43,6 +43,7 @@ coordinate_faces(g::CartesianWaveVectorGrid, dim) = dim == 1 ? g.kx_faces : g.ky
 coordinate_float_type(::CartesianWaveVectorGrid{FT}) where FT = FT
 
 @inline k_components(g::CartesianWaveVectorGrid, m, n) = (g.kx[m], g.ky[n])
+@inline spectral_coordinates(g::CartesianWaveVectorGrid, m, n) = (g.kx[m], g.ky[n])
 @inline radial_wavenumber(g::CartesianWaveVectorGrid, m, n) = hypot(g.kx[m], g.ky[n])
 @inline metric_jacobian(::CartesianWaveVectorGrid, m, n) = 1
 

@@ -124,7 +124,7 @@ end
                                 spectral_grid=cgrid,
                                 sources=source,
                                 timestepper=:SemiImplicitEuler)
-    set!(model, N=(x, y, kx, ky) -> 1 + 0.1x + 0.02hypot(kx, ky))
+    set!(model, N=(x, y, f, φ) -> 1 + 0.1x + 0.02 * (2pi * f)^2 / 9.81)
     compute_tendencies!(model)
 
     for n in eachindex(cgrid.φ), m in eachindex(cgrid.frequency), i in 1:2

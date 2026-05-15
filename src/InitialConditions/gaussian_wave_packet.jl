@@ -1,4 +1,4 @@
-struct GaussianWavePacket{FT}
+struct GaussianWavePacket{FT} <: AbstractCartesianSpectrumProfile
     x0 :: FT
     y0 :: FT
     kx0 :: FT

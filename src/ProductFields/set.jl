@@ -24,8 +24,8 @@ end
 function set!(f::ProductField, fun)
     _, _, Nxi, Neta = size(f)
     for n in 1:Neta, m in 1:Nxi
-        kx, ky = k_components(coordinate_grid(f), m, n)
-        set!(physical_field(f, m, n), (x, y, z) -> fun(x, y, kx, ky))
+        ξ, η = spectral_coordinates(coordinate_grid(f), m, n)
+        set!(physical_field(f, m, n), (x, y, z) -> fun(x, y, ξ, η))
     end
     return f
 end
