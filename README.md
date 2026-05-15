@@ -1,3 +1,7 @@
+
+
+https://github.com/user-attachments/assets/fb3599db-a553-4ad4-aeeb-9e8730b942be
+
 # Ripple.jl
 
 [![CI](https://github.com/NumericalEarth/Ripple.jl/actions/workflows/ci.yml/badge.svg)](https://github.com/NumericalEarth/Ripple.jl/actions/workflows/ci.yml)
@@ -84,9 +88,9 @@ m0_field   = m0(model.action)
 mean_dir   = mean_direction(model.action)
 ```
 
-See `examples/vortex_refraction.jl` (a literate tutorial that produces a
-multi-panel movie of `m₀`, `κᵣₘₛ`, and the mean direction) for the full
-visualization.
+https://github.com/user-attachments/assets/7c99215e-7de6-4955-b23a-19fd673f1fb8
+
+See also `examples/vortex_refraction.jl`.
 
 ## Design Shape
 
