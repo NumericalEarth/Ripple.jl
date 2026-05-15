@@ -191,9 +191,6 @@ function SpectralWaveModel(grid, spectral_grid;
     return model
 end
 
-SpectralWaveModel(grid; spectral_grid, kwargs...) = SpectralWaveModel(grid, spectral_grid; kwargs...)
-SpectralWaveModel(; grid, spectral_grid, kwargs...) = SpectralWaveModel(grid, spectral_grid; kwargs...)
-
 # Validate the spectral_advection kwarg. nothing disables kinematic refraction;
 # WENO() (or another AbstractAdvectionScheme) enables the fused kernel when the
 # coupling is CWCM. Other types are rejected.

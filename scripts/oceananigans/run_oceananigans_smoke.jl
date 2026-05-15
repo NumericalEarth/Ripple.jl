@@ -89,10 +89,9 @@ function oceananigans_smoke_result()
                               timestepper=:ForwardEuler)
     initial_action = (x, y, kx, ky) -> 0.4 + 0.03x - 0.01y + 0.02kx - 0.015ky
     set!(model, N=initial_action)
-    reference_model = SpectralWaveModel(; grid=model.grid,
-                                          spectral_grid=cgrid,
-                                          horizontal_advection=nothing,
-                                          timestepper=:ForwardEuler)
+    reference_model = SpectralWaveModel(model.grid, cgrid;
+                      horizontal_advection=nothing,
+                      timestepper=:ForwardEuler)
     set!(reference_model, N=initial_action)
 
     qtransform = QTransform(QKernel(Float64), model.grid)
