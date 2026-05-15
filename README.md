@@ -54,7 +54,7 @@ v = CenterField(grid)
 set!(u, (x, y, z) -> -vortex_uθ(x, y) * (y - yc) / max(hypot(x - xc, y - yc), eps()))
 set!(v, (x, y, z) -> +vortex_uθ(x, y) * (x - xc) / max(hypot(x - xc, y - yc), eps()))
 
-model = SpectralWaveModel(; grid,
+model = SpectralWaveModel(grid;
                             spectral_grid,
                             velocities = (; u, v),          # uᴸ paradigm
                             advection = nothing,            # fused kernel handles transport
@@ -63,11 +63,10 @@ model = SpectralWaveModel(; grid,
 coupling = model.coupling
 
 ## Narrow-banded Gaussian initial condition: uniform in (x, y), centred on
-## κ₀ = 0.4 and direction φ = 0.
+## κ₀ = 0.4 and direction φ = 0. The set!(::ProductField, fun) signature
+## tracks the spectral grid — for PolarWaveVectorGrid `fun` takes (x, y, κ, φ).
 κ0, σκ, σφ = 0.4, 0.05, 0.30
-function initial_action(x, y, kx, ky)
-    κ = hypot(kx, ky)
-    φ = atan(ky, kx)
+function initial_action(x, y, κ, φ)
     return exp(-((κ - κ0)/σκ)^2 - (sin(φ/2)^2)/σφ^2)
 end
 set!(model, N = initial_action)
