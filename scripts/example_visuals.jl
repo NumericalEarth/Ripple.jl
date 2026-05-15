@@ -79,8 +79,12 @@ function write_line_animation(path, xs, yframes; title="Animated line plot", xla
 end
 
 function field_m0_matrix(field)
-    return permutedims(Matrix(m0(field)))
+    return permutedims(dropdims(Array(interior(m0(field))); dims=3))
 end
+
+# Materialize a 2D-slab `Field` (size Nx × Ny × 1) into a plain Matrix on the
+# host. Useful for routing diagnostic Fields through CairoMakie utilities.
+diagnostic_field_matrix(f) = Array(interior(f))[:, :, 1]
 
 function column_spectrum_matrix(field; i=1, j=1)
     _, _, Nxi, Neta = size(field)
