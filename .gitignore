@@ -12,3 +12,6 @@ publication_bundle_default_suite.tsv
 publication_readiness.tsv
 goal_completion_checklist.tsv
 optional_gate_outputs/
+vortex_refraction_output/
+garden_sprinkler_output/
+.claude/
