@@ -1,8 +1,8 @@
 @testset "JONSWAP initial condition" begin
     grid = RectilinearGrid(CPU(); size=(1, 1, 1), x=(0, 1), y=(0, 1), z=(0, 1))
-    cgrid = FrequencyDirectionGrid(Float64;
+    cgrid = FrequencyDirectionGrid(;
                                    frequency=range(0.08, 0.20; length=49),
-                                   theta=range(0, 2pi; length=73)[1:72])
+                                   φ=range(0, 2pi; length=73)[1:72])
     N = WaveActionField(grid, cgrid)
     spectrum = JONSWAPSpectrum(; Hs=2.0, Tp=8.0, direction=pi / 2, spread=0.25)
 

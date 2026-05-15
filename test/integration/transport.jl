@@ -12,10 +12,10 @@ import Oceananigans.Advection: EnergyConserving, EnstrophyConserving, VectorInva
                            z=(-1, 0),
                            topology=(Periodic, Periodic, Bounded))
 
-    spectral_grid = PolarWaveVectorGrid(Float64;
-                                        kappa=[1.0],
-                                        theta=[0.0],
-                                        theta_faces=[-pi / 32, pi / 32])
+    spectral_grid = PolarWaveVectorGrid(;
+                                        κ=[1.0],
+                                        φ=[0.0],
+                                        φ_faces=[-pi / 32, pi / 32])
 
     schemes = (
         Centered(),
@@ -65,10 +65,10 @@ import Oceananigans.Advection: EnergyConserving, EnstrophyConserving, VectorInva
     @test iszero(v)
     @test tendency_error < 1e-7
 
-    y_spectral_grid = PolarWaveVectorGrid(Float64;
-                                          kappa=[1.0],
-                                          theta=[pi / 2],
-                                          theta_faces=[pi / 2 - pi / 32, pi / 2 + pi / 32])
+    y_spectral_grid = PolarWaveVectorGrid(;
+                                          κ=[1.0],
+                                          φ=[pi / 2],
+                                          φ_faces=[pi / 2 - pi / 32, pi / 2 + pi / 32])
 
     y_model = SpectralWaveModel(; grid,
                                   spectral_grid=y_spectral_grid,

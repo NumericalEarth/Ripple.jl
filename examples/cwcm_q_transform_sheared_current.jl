@@ -20,8 +20,8 @@ grid = RectilinearGrid(CPU();
                        z=(-1, 0),
                        topology=(Periodic, Periodic, Bounded))
 spectral_grid = PolarWaveVectorGrid(Float64;
-                                    kappa=range(0.3, 1.2; length=8),
-                                    theta=range(0, 2pi; length=17)[1:16])
+                                    κ=range(0.3, 1.2; length=8),
+                                    φ=range(0, 2pi; length=17)[1:16])
 qtransform = QTransform(QKernel(Float64), grid)
 
 Nx, Ny = horizontal_size(grid)
@@ -37,7 +37,7 @@ for k in 1:Nz, j in 1:Ny, i in 1:Nx
 end
 
 current = PrescribedLagrangianMeanCurrent(u=u, v=v, depth=1.0)
-coupling = CWCMPrescribedCurrentCoupling(current, qtransform, spectral_grid.kappa)
+coupling = CWCMPrescribedCurrentCoupling(current, qtransform, spectral_grid.κ)
 
 model = SpectralWaveModel(; grid,
                             spectral_grid,

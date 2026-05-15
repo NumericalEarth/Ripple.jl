@@ -19,7 +19,7 @@ case = only(filter(c -> c.name == :fetch_limited_source_balance,
 result = run_validation(case)
 
 grid = RectilinearGrid(CPU(); size=(1, 1, 1), x=(0, 1), y=(0, 1), z=(0, 1))
-spectral_grid = PolarWaveVectorGrid(Float64; kappa=[1.0], theta=[0.0])
+spectral_grid = PolarWaveVectorGrid(Float64; κ=[1.0], φ=[0.0])
 
 target_growth_rate = 1.2
 directional_growth_weight = Ripple.wind_directional_weight(spectral_grid, 1, 1, 0.0, 2)

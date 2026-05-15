@@ -31,8 +31,8 @@ function cuda_smoke_model(arch)
                            y=(-1, 1),
                            z=(-1, 0))
     cgrid = PolarWaveVectorGrid(Float64;
-                                kappa=[0.45, 0.8, 1.2],
-                                theta=range(0, 2pi; length=7)[1:6])
+                                κ=[0.45, 0.8, 1.2],
+                                φ=range(0, 2pi; length=7)[1:6])
     sources = SourceTermSet((WaveAgeWindInput(rate=0.01,
                                               speed=3.0,
                                               inverse_wave_age_threshold=0.0,
@@ -51,7 +51,7 @@ function cuda_frequency_diagnostic_model(arch)
     grid = RectilinearGrid(arch; size=(2, 2, 1), x=(0, 2), y=(-1, 1), z=(0, 1))
     cgrid = FrequencyDirectionGrid(Float64;
                                    frequency=[0.08, 0.12, 0.18, 0.27],
-                                   theta=range(0, 2pi; length=9)[1:8])
+                                   φ=range(0, 2pi; length=9)[1:8])
     model = SpectralWaveModel(; grid, spectral_grid=cgrid, advection=nothing)
     set!(model, N=(x, y, kx, ky) -> 0.4 + 0.02x - 0.01y +
                                       0.04hypot(kx, ky) + 0.03cos(atan(ky, kx)))

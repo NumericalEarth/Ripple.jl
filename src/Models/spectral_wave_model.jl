@@ -1,6 +1,7 @@
 import Oceananigans
 import Oceananigans: AbstractModel, fields, prognostic_fields
 import Oceananigans.Architectures: architecture
+import Oceananigans.Advection: WENO
 import Oceananigans.TimeSteppers: Clock
 
 validate_model_clock(clock::Clock) = clock
@@ -83,7 +84,7 @@ function validate_model_coupling(coupling::CWCMPrescribedCurrentCoupling, grid, 
     spectral_grid isa PolarWaveVectorGrid ||
         throw(ArgumentError("CWCMPrescribedCurrentCoupling requires a PolarWaveVectorGrid"))
 
-    spectral_kappa = collect(float.(spectral_grid.kappa))
+    spectral_kappa = collect(float.(spectral_grid.κ))
     coupling.kappa == spectral_kappa ||
         throw(ArgumentError("CWCMPrescribedCurrentCoupling kappa does not match the model spectral grid"))
 
@@ -135,7 +136,7 @@ end
 function SpectralWaveModel(grid;
                            spectral_grid,
                            action=nothing,
-                           advection=nothing,
+                           advection=WENO(),
                            sources=nothing,
                            coupling=nothing,
                            timestepper=:ForwardEuler,

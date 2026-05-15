@@ -68,8 +68,8 @@
     @test wind_speed(tracked_holland, 3.0, 1.0, 1.0) ≈ 0.3
 
     grid = RectilinearGrid(CPU(); size=(1, 1, 1), x=(0, 2), y=(-0.5, 0.5), z=(0, 1))
-    spectral_grid = PolarWaveVectorGrid(Float64; kappa=[1.0], theta=[0.0, pi / 2])
-    model = SpectralWaveModel(; grid,
+    spectral_grid = PolarWaveVectorGrid(; κ=[1.0], φ=[0.0, pi / 2])
+    model = SpectralWaveModel(; advection=nothing, grid,
                                 spectral_grid,
                                 sources=ExponentialWindInput(rate=ccw,
                                                               direction=ccw,
@@ -90,7 +90,7 @@
                                            vmax=0.3,
                                            rmax=1.0,
                                            radius=4.0)
-    model = SpectralWaveModel(; grid,
+    model = SpectralWaveModel(; advection=nothing, grid,
                                 spectral_grid,
                                 sources=ExponentialWindInput(rate=holland_source,
                                                               direction=holland_source,

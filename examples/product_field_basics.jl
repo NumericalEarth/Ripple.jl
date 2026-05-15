@@ -14,8 +14,8 @@ animation_paths = String[]
 
 grid = RectilinearGrid(CPU(); size=(40, 24, 1), x=(0, 1), y=(0, 1), z=(0, 1))
 spectral_grid = PolarWaveVectorGrid(Float64;
-                                    kappa=range(0.1, 1.0; length=14),
-                                    theta=range(0, 2pi; length=33)[1:32])
+                                    κ=range(0.1, 1.0; length=14),
+                                    φ=range(0, 2pi; length=33)[1:32])
 
 N = WaveActionField(grid, spectral_grid)
 

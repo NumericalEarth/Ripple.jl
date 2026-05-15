@@ -208,7 +208,7 @@ function relaxation_source_solution_validation()
     cgrid = CartesianWaveVectorGrid(Float64; kx=[0.4, 0.8], ky=[-0.2, 0.2])
     target(x, y, kx, ky) = 0.5 + 0.2kx - 0.1ky
     alpha = 0.7
-    model = SpectralWaveModel(; grid,
+    model = SpectralWaveModel(; advection=nothing, grid,
                                 spectral_grid=cgrid,
                                 sources=RelaxationToSpectrum(target; timescale=inv(alpha)),
                                 timestepper=:ForwardEuler)
@@ -233,7 +233,7 @@ function pure_damping_decay_validation()
     cgrid = CartesianWaveVectorGrid(Float64; kx=[0.5], ky=[0.0])
     rate = 2.0
     dt = 0.1
-    model = SpectralWaveModel(; grid,
+    model = SpectralWaveModel(; advection=nothing, grid,
                                 spectral_grid=cgrid,
                                 sources=BottomFriction(rate=rate),
                                 timestepper=:SemiImplicitEuler)
@@ -247,7 +247,7 @@ end
 
 function fetch_limited_source_balance_validation()
     grid = RectilinearGrid(CPU(); size=(1, 1, 1), x=(0, 1), y=(0, 1), z=(0, 1))
-    cgrid = PolarWaveVectorGrid(Float64; kappa=[1.0], theta=[0.0])
+    cgrid = PolarWaveVectorGrid(; κ=[1.0], φ=[0.0])
     target_growth_rate = 1.2
     weight = spectral_weight(cgrid, 1, 1)
     directional_weight = wind_directional_weight(cgrid, 1, 1, 0.0, 2)
@@ -260,7 +260,7 @@ function fetch_limited_source_balance_validation()
                                  saturation_power=1.0,
                                  wavenumber_power=0.0),
     )
-    model = SpectralWaveModel(; grid,
+    model = SpectralWaveModel(; advection=nothing, grid,
                                 spectral_grid=cgrid,
                                 sources=source,
                                 timestepper=:SemiImplicitEuler)
@@ -273,7 +273,7 @@ function fetch_limited_source_balance_validation()
     end
 
     equilibrium_action = equilibrium_m0 / weight
-    equilibrium_model = SpectralWaveModel(; grid, spectral_grid=cgrid, sources=source)
+    equilibrium_model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, sources=source)
     set!(equilibrium_model, N=equilibrium_action)
     positive, damping = source_split(source, equilibrium_model, 1, 1, 1, 1)
 
@@ -292,9 +292,8 @@ function hasselmann_column_validation()
                            x=(0, 1),
                            y=(0, 1),
                            z=(-1, 0))
-    cgrid = PolarWaveVectorGrid(Float64;
-                                kappa=range(0.35, 1.15; length=8),
-                                theta=range(0, 2pi; length=17)[1:16])
+    cgrid = PolarWaveVectorGrid(; κ=range(0.35, 1.15; length=8),
+                                  φ=range(0, 2pi; length=17)[1:16])
     target(x, y, kx, ky) = begin
         k = hypot(kx, ky)
         direction = k == 0 ? 0.0 : max(kx / k, 0.0)^4
@@ -304,7 +303,7 @@ function hasselmann_column_validation()
     alpha = 1.3
     dt = 5e-4
     steps = 200
-    model = SpectralWaveModel(; grid,
+    model = SpectralWaveModel(; advection=nothing, grid,
                                 spectral_grid=cgrid,
                                 sources=RelaxationToSpectrum(target; timescale=inv(alpha)),
                                 timestepper=:ForwardEuler)
@@ -335,11 +334,10 @@ end
 
 function finite_volume_source_rates_validation()
     grid = RectilinearGrid(CPU(); size=(1, 1, 1), x=(0, 1), y=(0, 1), z=(0, 1))
-    cgrid = FrequencyDirectionGrid(Float64;
-                                   frequency=range(0.08, 0.32; length=12),
-                                   theta=range(0, 2pi; length=25)[1:24])
+    cgrid = FrequencyDirectionGrid(; frequency=range(0.08, 0.32; length=12),
+                                     φ=range(0, 2pi; length=25)[1:24])
     source = FrequencyDissipation(rate=0.4, reference_frequency=0.16, power=2)
-    model = SpectralWaveModel(; grid,
+    model = SpectralWaveModel(; advection=nothing, grid,
                                 spectral_grid=cgrid,
                                 sources=source,
                                 timestepper=:SemiImplicitEuler)
@@ -595,16 +593,15 @@ end
 
 function run_performance_smoke(; Nx=6, Ny=5, Nk=5, Nθ=8)
     grid = RectilinearGrid(CPU(); size=(Nx, Ny, 1), x=(0, Nx), y=(0, Ny), z=(0, 1))
-    cgrid = PolarWaveVectorGrid(Float64;
-                                kappa=range(0.4, 1.4; length=Nk),
-                                theta=range(0, 2pi; length=Nθ + 1)[1:Nθ])
+    cgrid = PolarWaveVectorGrid(; κ=range(0.4, 1.4; length=Nk),
+                                  φ=range(0, 2pi; length=Nθ + 1)[1:Nθ])
     field = WaveActionField(grid, cgrid)
     product_field_metric = performance_metric(:product_field, :set_and_m0,
                                                "Set a ProductField and compute zeroth moment.") do
         set!(field, (x, y, kx, ky) -> 1 + 0.01x + 0.02y + 0.03hypot(kx, ky))
         m0(field)
     end
-    model = SpectralWaveModel(; grid,
+    model = SpectralWaveModel(; advection=nothing, grid,
                                 spectral_grid=cgrid,
                                 sources=SourceTermSet(ExponentialWindInput(rate=0.03, direction=0.0),
                                                        BottomFriction(rate=0.01)),

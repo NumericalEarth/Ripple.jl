@@ -22,13 +22,14 @@ using Ripple
 
 grid = RectilinearGrid(CPU();
                        size=(16, 8, 4),
+                       halo=(3, 3, 3),
                        x=(0, 16),
                        y=(0, 8),
                        z=(-1, 0))
 
-spectral_grid = PolarWaveVectorGrid(Float64;
-                                    kappa=range(0.3, 1.2; length=6),
-                                    theta=range(0, 2pi; length=9)[1:8])
+spectral_grid = PolarWaveVectorGrid(CPU(), Float64;
+                                    κ=range(0.3, 1.2; length=6),
+                                    φ=range(0, 2pi; length=9)[1:8])
 
 sources = SourceTermSet(
     ExponentialWindInput(rate=0.04, direction=0.0, spreading_power=2),
@@ -37,7 +38,6 @@ sources = SourceTermSet(
 
 model = SpectralWaveModel(; grid,
                             spectral_grid,
-                            advection=nothing,
                             sources,
                             timestepper=:SemiImplicitEuler)
 

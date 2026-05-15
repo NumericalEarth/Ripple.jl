@@ -16,13 +16,13 @@ animation_paths = String[]
 grid = RectilinearGrid(CPU(); size=(1, 1, 1), x=(0, 1), y=(0, 1), z=(0, 1))
 spectral_grid = FrequencyDirectionGrid(Float64;
                                        frequency=range(0.08, 0.32; length=12),
-                                       theta=range(0, 2pi; length=25)[1:24])
+                                       φ=range(0, 2pi; length=25)[1:24])
 
 frequency_source = FrequencyDissipation(rate=0.4,
                                         reference_frequency=0.16,
                                         power=2)
 wavenumber_source = WavenumberDissipation(rate=0.1,
-                                          reference_wavenumber=spectral_grid.kappa[2],
+                                          reference_wavenumber=spectral_grid.κ[2],
                                           power=2)
 sources = SourceTermSet(frequency_source, wavenumber_source)
 
@@ -44,7 +44,7 @@ wavenumber_factor = spectral_radial_power_average(spectral_grid, m, n, wavenumbe
                     wavenumber_source.reference_wavenumber^wavenumber_source.power
 
 center_frequency_factor = (spectral_grid.frequency[m] / frequency_source.reference_frequency)^frequency_source.power
-center_wavenumber_factor = (spectral_grid.kappa[m] / wavenumber_source.reference_wavenumber)^wavenumber_source.power
+center_wavenumber_factor = (spectral_grid.κ[m] / wavenumber_source.reference_wavenumber)^wavenumber_source.power
 
 expected_damping = frequency_source.rate * frequency_factor +
                    wavenumber_source.rate * wavenumber_factor

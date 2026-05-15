@@ -80,8 +80,8 @@ function oceananigans_smoke_result()
     Ocean = load_oceananigans!()
     ocean_grid = oceananigans_grid(Ocean)
     cgrid = PolarWaveVectorGrid(Float64;
-                                kappa=[0.45, 0.9],
-                                theta=range(0, 2pi; length=9)[1:8])
+                                κ=[0.45, 0.9],
+                                φ=range(0, 2pi; length=9)[1:8])
     model = Base.invokelatest(SpectralWaveModel;
                               grid=ocean_grid,
                               spectral_grid=cgrid,
@@ -140,14 +140,14 @@ function oceananigans_smoke_result()
     current_v = ocean_field(Ocean, ocean_grid)
     fill_ocean_current_fields!(current_u, current_v)
     native_current = PrescribedLagrangianMeanCurrent(u=current_u, v=current_v, depth=1.0)
-    native_coupling = CWCMPrescribedCurrentCoupling(native_current, qtransform, cgrid.kappa)
+    native_coupling = CWCMPrescribedCurrentCoupling(native_current, qtransform, cgrid.κ)
     Nx, Ny = horizontal_size(model.grid)
-    expected_Ux = zeros(Float64, Nx, Ny, length(cgrid.kappa))
-    expected_Uy = zeros(Float64, Nx, Ny, length(cgrid.kappa))
+    expected_Ux = zeros(Float64, Nx, Ny, length(cgrid.κ))
+    expected_Uy = zeros(Float64, Nx, Ny, length(cgrid.κ))
     compute_doppler_velocity!(expected_Ux, expected_Uy,
                               field_storage_latest(current_u),
                               field_storage_latest(current_v),
-                              1.0, cgrid.kappa, qtransform)
+                              1.0, cgrid.κ, qtransform)
     native_current_model = Base.invokelatest(SpectralWaveModel;
                                              grid=ocean_grid,
                                              spectral_grid=cgrid,

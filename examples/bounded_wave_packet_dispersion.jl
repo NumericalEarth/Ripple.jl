@@ -30,9 +30,9 @@ grid = RectilinearGrid(CPU();
 kappas = range(0.35, 1.25; length=Nk)
 theta_width = pi / 18
 spectral_grid = PolarWaveVectorGrid(Float64;
-                                    kappa=kappas,
-                                    theta=[0.0],
-                                    theta_faces=[-theta_width / 2, theta_width / 2])
+                                    κ=kappas,
+                                    φ=[0.0],
+                                    φ_faces=[-theta_width / 2, theta_width / 2])
 
 model = SpectralWaveModel(; grid,
                             spectral_grid,

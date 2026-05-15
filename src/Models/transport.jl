@@ -56,11 +56,11 @@ end
 
 function deep_water_group_velocity(cgrid::Union{PolarWaveVectorGrid, FrequencyDirectionGrid},
                                    m, n; gravity=9.81)
-    k1, k2 = cgrid.kappa_faces[m], cgrid.kappa_faces[m+1]
-    theta1, theta2 = cgrid.theta_faces[n], cgrid.theta_faces[n+1]
+    k1, k2 = cgrid.κ_faces[m], cgrid.κ_faces[m+1]
+    φ1, φ2 = cgrid.φ_faces[n], cgrid.φ_faces[n+1]
     radial = (k2^(3 / 2) - k1^(3 / 2)) / (3 / 2)
-    angular_x = sin(theta2) - sin(theta1)
-    angular_y = cos(theta1) - cos(theta2)
+    angular_x = sin(φ2) - sin(φ1)
+    angular_y = cos(φ1) - cos(φ2)
     scale = sqrt(gravity) / (2 * spectral_cell_measure(cgrid, m, n))
     return scale * radial * angular_x, scale * radial * angular_y
 end

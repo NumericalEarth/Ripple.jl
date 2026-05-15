@@ -37,7 +37,7 @@ The core state is wave action density,
 N = N(x, y, \xi, \eta),
 ```
 
-where `(ξ, η)` may be `(κ, θ)` for a polar wavenumber-direction grid or `(kx, ky)` for a Cartesian wavevector grid. In code, the state should be logically indexed as
+where `(ξ, η)` may be `(κ, φ)` for a polar wavenumber-direction grid or `(kx, ky)` for a Cartesian wavevector grid. In code, the state should be logically indexed as
 
 ```julia
 N[i, j, m, n]
@@ -795,7 +795,7 @@ and the metric must be included. A conservative polar update should be written f
 + \partial_x(J \dot{x} N)
 + \partial_y(J \dot{y} N)
 + \partial_\kappa(J \dot{\kappa} N)
-+ \partial_\theta(J \dot{\theta} N)
++ \partial_\varphi(J \dot{\varphi} N)
 = J S_N,
 ```
 
@@ -1254,7 +1254,7 @@ Avoid full-size product-space caches unless profiling proves they pay.
 For local tile size `Nx × Ny × Nκ × Nθ`, a single `Float32` action field costs:
 
 ```math
-4 N_x N_y N_\kappa N_\theta \text{ bytes}
+4 N_x N_y N_\kappa N_\varphi \text{ bytes}
 ```
 
 For `Nκ = 48`, `Nθ = 36`, `Nspec = 1728`. Memory growth is brutal; do not casually allocate multiple product-space temporaries.
@@ -2477,7 +2477,7 @@ verify total action conservation
 Purpose:
 
 ```text
-demonstrate practical (κ,θ) grid
+demonstrate practical (κ, φ) grid
 show metric-aware polar finite-volume update
 compare to Cartesian result in a simple case
 ```
@@ -2678,7 +2678,7 @@ Avoid treating benchmark numbers as hard pass/fail in ordinary CI. Instead, stor
 
 1. Should `ProductField` support `2D physical × 2D coordinate` only at first, or try to support arbitrary physical × coordinate rank?
 2. Should coordinate-inner storage be the default immediately, or should physical-first be the first debug implementation?
-3. Should the first transport solver be Cartesian `(kx,ky)` for Hamiltonian clarity, or polar `(κ,θ)` for practical relevance?
+3. Should the first transport solver be Cartesian `(kx,ky)` for Hamiltonian clarity, or polar `(κ, φ)` for practical relevance?
 4. How much of Oceananigans' `AbstractField` interface should `ProductField` subtype and reuse?
 5. What is the right default timestepper once source terms are included?
 6. Should `∂κU` be cached, computed by finite differences from `U`, or avoided by constructing velocities from discrete `Ω` differences?

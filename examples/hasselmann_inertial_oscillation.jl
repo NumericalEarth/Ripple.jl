@@ -17,8 +17,8 @@ result = run_validation(case)
 
 grid = RectilinearGrid(CPU(); size=(1, 1, 1), x=(0, 1), y=(0, 1), z=(0, 1))
 spectral_grid = PolarWaveVectorGrid(Float64;
-                                    kappa=range(0.35, 1.15; length=16),
-                                    theta=range(0, 2pi; length=33)[1:32])
+                                    κ=range(0.35, 1.15; length=16),
+                                    φ=range(0, 2pi; length=33)[1:32])
 
 target(x, y, kx, ky) = begin
     k = hypot(kx, ky)

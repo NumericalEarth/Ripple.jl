@@ -79,11 +79,11 @@ Base.similar(::MockBackendArray, ::Type{T}, dims::Dims) where T = MockBackendArr
     @test cached_Ux ≈ Ux atol=1e-14
     @test cached_Uy ≈ Uy atol=1e-14
 
-    cgrid = PolarWaveVectorGrid(Float64; kappa=[0.5, 1.0], theta=range(0, 2pi; length=9)[1:8])
+    cgrid = PolarWaveVectorGrid(; κ=[0.5, 1.0], φ=range(0, 2pi; length=9)[1:8])
     N = WaveActionField(grid, cgrid)
     set!(N, (x, y, kx, ky) -> 1 + kx)
     px, py = compute_pseudomomentum_cell_integrals(N, 1.0, qt)
-    spectral_cached_qt = QTransform(q, grid, PrecomputeQWeights(qt, cgrid.kappa, 1.0))
+    spectral_cached_qt = QTransform(q, grid, PrecomputeQWeights(qt, cgrid.κ, 1.0))
     cached_px, cached_py = compute_pseudomomentum_cell_integrals(N, 1.0, spectral_cached_qt)
     @test cached_px ≈ px atol=1e-14
     @test cached_py ≈ py atol=1e-14
@@ -119,13 +119,13 @@ end
                            y=(0, 2),
                            z=(-1, 0))
     qt = QTransform(QKernel(Float64), grid)
-    cgrid = PolarWaveVectorGrid(Float64;
-                                kappa=[0.5, 1.0],
-                                theta=[0.0, pi/2, pi, 3pi/2])
+    cgrid = PolarWaveVectorGrid(;
+                                κ=[0.5, 1.0],
+                                φ=[0.0, pi/2, pi, 3pi/2])
     u = ones(2, 2, vertical_size(grid))
     v = 2 .* ones(2, 2, vertical_size(grid))
     current = PrescribedLagrangianMeanCurrent(u=u, v=v, depth=1.0)
-    coupling = CWCMPrescribedCurrentCoupling(current, qt, cgrid.kappa)
+    coupling = CWCMPrescribedCurrentCoupling(current, qt, cgrid.κ)
 
     @test coupling.Ux[1, 1, 1] ≈ 1 atol=1e-12
     @test coupling.Uy[2, 2, 2] ≈ 2 atol=1e-12
@@ -139,7 +139,7 @@ end
     backend_u = MockBackendArray(ones(2, 2, vertical_size(grid)))
     backend_v = MockBackendArray(2 .* ones(2, 2, vertical_size(grid)))
     backend_current = PrescribedLagrangianMeanCurrent(u=backend_u, v=backend_v, depth=1.0)
-    backend_coupling = CWCMPrescribedCurrentCoupling(backend_current, qt, cgrid.kappa)
+    backend_coupling = CWCMPrescribedCurrentCoupling(backend_current, qt, cgrid.κ)
     @test backend_coupling.Ux isa MockBackendArray
     @test backend_coupling.Uy isa MockBackendArray
     @test backend_coupling.Ux[1, 1, 1] ≈ 1 atol=1e-12
