@@ -72,7 +72,7 @@ export QuadrupletTransferInteraction, DiscreteInteractionApproximation
 export source_tendency, source_split, implicit_source_rate
 export SpectralWaveModel, Clock, fields, prognostic_fields, compute_tendencies!, time_step!, cfl
 export Centered, UpwindBiased, WENO, FluxFormAdvection
-export AbstractGSEAlleviation, SpatialAveraging, apply_gse_alleviation!
+export AbstractPropagationSmoothing, SpatialAveraging, apply_propagation_smoothing!
 export ValidationCase, ValidationResult, default_validation_cases, run_validation
 export validation_passed, write_validation_summary, read_validation_summary
 export ExternalComparisonResult, compare_validation_summaries

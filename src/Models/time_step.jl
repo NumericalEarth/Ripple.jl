@@ -106,7 +106,7 @@ function time_step!(model::SpectralWaveModel, dt; callbacks=[])
     else
         throw(ArgumentError("unsupported timestepper $(model.timestepper)"))
     end
-    apply_gse_alleviation!(model, model.gse_alleviation, dt)
+    apply_propagation_smoothing!(model, model.propagation_smoothing, dt)
     tick!(model.clock, dt)
     return model
 end

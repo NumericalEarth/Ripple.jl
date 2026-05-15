@@ -65,12 +65,12 @@ end
 # Toggle Tolman 2002 spatial-averaging GSE alleviation by setting
 # USE_AVERAGING=1 in the environment.
 use_averaging = get(ENV, "USE_AVERAGING", "") == "1"
-gse_alleviation = use_averaging ? SpatialAveraging(αs = 0.75, αn = 0.75) : nothing
+propagation_smoothing = use_averaging ? SpatialAveraging(αs = 0.75, αn = 0.75) : nothing
 
 model = SpectralWaveModel(grid, spectral_grid;
                           velocities = ZeroVelocities(),
                           sources = nothing,
-                          gse_alleviation = gse_alleviation,
+                          propagation_smoothing = propagation_smoothing,
                           timestepper = :ForwardEuler)
 set!(model, N = initial_action)
 

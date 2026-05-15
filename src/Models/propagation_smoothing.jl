@@ -3,11 +3,11 @@ import KernelAbstractions: @kernel, @index
 import Oceananigans.Architectures: architecture, device
 
 """
-    AbstractGSEAlleviation
+    AbstractPropagationSmoothing
 
 Marker for the Garden-Sprinkler-Effect (GSE) alleviation strategies of
 Tolman (2002, *Ocean Modelling* 4, 269–289). Concrete subtypes plug into
-`SpectralWaveModel(...; gse_alleviation=...)` and are applied as a
+`SpectralWaveModel(...; propagation_smoothing=...)` and are applied as a
 fractional step at the end of `time_step!`. Currently:
 
   * [`SpatialAveraging`](@ref) — Tolman 2002 §2 (the recommended
@@ -16,7 +16,7 @@ fractional step at the end of `time_step!`. Currently:
 The §3 divergent-advection method has its own slot reserved for a future
 `DivergentAdvection` subtype.
 """
-abstract type AbstractGSEAlleviation end
+abstract type AbstractPropagationSmoothing end
 
 """
     SpatialAveraging(; αs=0.5, αn=0.5)
@@ -38,7 +38,7 @@ diffusion at high resolution.
 Eq. 15 of the paper); `αs = αn ≈ 0.75–1.5` gives stronger GSE removal at
 the cost of additional smearing.
 """
-mutable struct SpatialAveraging{FT} <: AbstractGSEAlleviation
+mutable struct SpatialAveraging{FT} <: AbstractPropagationSmoothing
     αs :: FT
     αn :: FT
     cg_table :: Any
@@ -154,9 +154,9 @@ end
 
 # Apply the chosen GSE-alleviation method as a post-step fractional step. The
 # default no-op covers `nothing`; concrete strategies override.
-apply_gse_alleviation!(model, ::Nothing, dt) = model
+apply_propagation_smoothing!(model, ::Nothing, dt) = model
 
-function apply_gse_alleviation!(model, averaging::SpatialAveraging, dt)
+function apply_propagation_smoothing!(model, averaging::SpatialAveraging, dt)
     ensure_spatial_averaging_tables!(averaging, model)
 
     grid = model.grid
