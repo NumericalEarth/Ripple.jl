@@ -26,8 +26,8 @@ coupling are represented by `nothing`.
   the action field unchanged.
 - The CFL diagnostic is zero when `horizontal_advection=nothing` and uses the
   active transport velocities otherwise.
-- The deprecated `advection=` kwarg is forwarded to `horizontal_advection=`
-  with a one-shot `@warn`.
+- `advection=` is a convenience shortcut that sets both `horizontal_advection`
+  and `spectral_advection` to the same scheme.
 
 Ripple no longer provides `HamiltonianFiniteVolume`, Hamiltonian velocity
 operators, a `Simulation` type, or diagnostic/output writer types. Transport

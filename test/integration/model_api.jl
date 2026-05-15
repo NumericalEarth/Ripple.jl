@@ -110,9 +110,13 @@ end
     @test_throws ArgumentError SpectralWaveModel(; horizontal_advection=nothing, grid, spectral_grid=cgrid, sources=SourceTermSet((:wind,)))
 
     frequency_grid = FrequencyDirectionGrid(; frequency=[0.1], φ=[0.0])
-    # Deprecated `advection=` kwarg maps to horizontal_advection=.
+    # `advection=` is a shortcut that sets both horizontal and spectral advection.
     source_only = SpectralWaveModel(; grid, spectral_grid=frequency_grid, advection=nothing)
     @test source_only.horizontal_advection === nothing
+    @test source_only.spectral_advection === nothing
+    bundled = SpectralWaveModel(; grid, spectral_grid=frequency_grid, advection=WENO(order=5))
+    @test bundled.horizontal_advection isa WENO
+    @test bundled.spectral_advection isa WENO
 end
 
 @testset "Source-only timestepper semantics" begin

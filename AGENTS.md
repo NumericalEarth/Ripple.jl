@@ -81,8 +81,8 @@ Oceananigans and Breeze ecosystems.
   `compute_tendencies!` uses the fused refraction kernel that includes
   Doppler-shifted physical transport, so `horizontal_advection` is ignored
   in that path.
-- The deprecated `advection=` kwarg is forwarded to `horizontal_advection=`
-  with a one-shot warning.
+- `advection=` is a convenience shortcut that sets both `horizontal_advection`
+  and `spectral_advection` to the same scheme.
 
 ## Naming Conventions
 

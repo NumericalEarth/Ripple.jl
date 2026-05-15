@@ -141,16 +141,6 @@ mutable struct SpectralWaveModel{Arch, G, SG, A, HAdv, SAdv, Sources, Coupling, 
     clock :: C
 end
 
-const _SPECTRAL_WAVE_MODEL_ADVECTION_DEPRECATION = Ref(false)
-
-function _maybe_warn_advection_deprecated()
-    if !_SPECTRAL_WAVE_MODEL_ADVECTION_DEPRECATION[]
-        _SPECTRAL_WAVE_MODEL_ADVECTION_DEPRECATION[] = true
-        @warn "SpectralWaveModel kwarg `advection` is deprecated; use `horizontal_advection` instead."
-    end
-    return nothing
-end
-
 # Marker sentinel so we can detect when the user did not pass `advection=...`.
 const _ADVECTION_UNSET = Base.RefValue{Any}(nothing)
 
@@ -168,8 +158,8 @@ function SpectralWaveModel(grid, spectral_grid;
     spectral_grid = validate_model_spectral_grid(spectral_grid)
 
     if advection !== _ADVECTION_UNSET
-        _maybe_warn_advection_deprecated()
         horizontal_advection = advection
+        spectral_advection = advection
     end
 
     action = action === nothing ? WaveActionField(grid, spectral_grid) :
