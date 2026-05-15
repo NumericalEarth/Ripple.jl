@@ -126,7 +126,7 @@ end
 canonical_model_timestepper(timestepper) =
     throw(ArgumentError("timestepper must be a Symbol; got $(typeof(timestepper))"))
 
-mutable struct SpectralWaveModel{Arch, G, SG, A, HAdv, SAdv, Sources, Coupling, Tend, PrevTend, C} <: AbstractModel{Nothing, Arch}
+mutable struct SpectralWaveModel{Arch, G, SG, A, HAdv, SAdv, Sources, Coupling, GA, Tend, PrevTend, C} <: AbstractModel{Nothing, Arch}
     grid :: G
     spectral_grid :: SG
     action :: A
@@ -134,6 +134,7 @@ mutable struct SpectralWaveModel{Arch, G, SG, A, HAdv, SAdv, Sources, Coupling, 
     spectral_advection :: SAdv
     sources :: Sources
     coupling :: Coupling
+    gse_alleviation :: GA
     timestepper :: Symbol
     tendencies :: Tend
     previous_tendencies :: PrevTend
@@ -162,6 +163,7 @@ function SpectralWaveModel(grid, spectral_grid;
                            sources=nothing,
                            velocities=nothing,
                            coupling=nothing,
+                           gse_alleviation=nothing,
                            timestepper=:ForwardEuler,
                            clock=Clock(time=0.0))
     grid = validate_model_physical_grid(adapt_physical_grid(grid))
@@ -194,8 +196,10 @@ function SpectralWaveModel(grid, spectral_grid;
     model = SpectralWaveModel{Arch, typeof(grid), typeof(spectral_grid), typeof(action),
                               typeof(horizontal_advection), typeof(spectral_advection),
                               typeof(sources), typeof(coupling),
+                              typeof(gse_alleviation),
                               typeof(tendencies), typeof(previous_tendencies), typeof(clock)}(
         grid, spectral_grid, action, horizontal_advection, spectral_advection, sources, coupling,
+        gse_alleviation,
         timestepper, tendencies, previous_tendencies, false, clock)
     update_coupling!(model)
     return model
