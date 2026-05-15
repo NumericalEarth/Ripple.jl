@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Wave Refraction Through A Barotropic Vortex · Ripple.jl</title><meta name="title" content="Wave Refraction Through A Barotropic Vortex · Ripple.jl"/><meta property="og:title" content="Wave Refraction Through A Barotropic Vortex · Ripple.jl"/><meta property="twitter:title" content="Wave Refraction Through A Barotropic Vortex · Ripple.jl"/><meta name="description" content="Documentation for Ripple.jl."/><meta property="og:description" content="Documentation for Ripple.jl."/><meta property="twitter:description" content="Documentation for Ripple.jl."/><meta property="og:url" content="https://NumericalEarth.github.io/Ripple.jl/stable/generated/examples/vortex_refraction/"/><meta property="twitter:url" content="https://NumericalEarth.github.io/Ripple.jl/stable/generated/examples/vortex_refraction/"/><link rel="canonical" href="https://NumericalEarth.github.io/Ripple.jl/stable/generated/examples/vortex_refraction/"/><script data-outdated-warner src="../../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../../assets/documenter.js"></script><script src="../../../search_index.js"></script><script src="../../../siteinfo.js"></script><script src="../../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../../">Ripple.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../../">Home</a></li><li><a class="tocitem" href="../../../model_api/">Model API</a></li><li><a class="tocitem" href="../../../finite_volume_integration/">Finite-Volume Integration</a></li><li><a class="tocitem" href="../../../api_reference/">API Reference</a></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../../../examples/">Overview</a></li><li><a class="tocitem" href="../product_field_basics/">Product Field Basics</a></li><li><a class="tocitem" href="../source_only_fetch_limited_growth/">Source-Only Fetch-Limited Growth</a></li><li><a class="tocitem" href="../bounded_wave_packet_dispersion/">Bounded Wave Packet Dispersion</a></li><li><a class="tocitem" href="../hasselmann_inertial_oscillation/">Hasselmann Column Growth</a></li><li><a class="tocitem" href="../cwcm_q_transform_sheared_current/">CWCM Q-Transform Shear</a></li><li><a class="tocitem" href="../frequency_direction_source_package/">Frequency-Direction Sources</a></li><li><a class="tocitem" href="../exact_finite_volume_source_rates/">Exact Finite-Volume Source Rates</a></li><li class="is-active"><a class="tocitem" href>Wave Refraction Through A Barotropic Vortex</a><ul class="internal"><li><a class="tocitem" href="#Grid-setup"><span>Grid setup</span></a></li><li><a class="tocitem" href="#Vortex-velocity-field"><span>Vortex velocity field</span></a></li><li><a class="tocitem" href="#Wave-model"><span>Wave model</span></a></li><li><a class="tocitem" href="#Time-loop"><span>Time loop</span></a></li><li><a class="tocitem" href="#Visualization"><span>Visualization</span></a></li><li><a class="tocitem" href="#Running-The-Example"><span>Running The Example</span></a></li></ul></li></ul></li><li><a class="tocitem" href="../../../validation/">Validation</a></li><li><a class="tocitem" href="../../../publication/">Publication</a></li><li><a class="tocitem" href="../../implementation_status/">Implementation Status</a></li><li><a class="tocitem" href="../../goal_completion_audit/">Goal Completion Audit</a></li><li><a class="tocitem" href="../../external_comparison_harness/">External Comparison Harness</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Examples</a></li><li class="is-active"><a href>Wave Refraction Through A Barotropic Vortex</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Wave Refraction Through A Barotropic Vortex</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/NumericalEarth/Ripple.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/NumericalEarth/Ripple.jl/blob/main/docs/src/generated/examples/vortex_refraction.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Wave-Refraction-Through-A-Barotropic-Vortex"><a class="docs-heading-anchor" href="#Wave-Refraction-Through-A-Barotropic-Vortex">Wave Refraction Through A Barotropic Vortex</a><a id="Wave-Refraction-Through-A-Barotropic-Vortex-1"></a><a class="docs-heading-anchor-permalink" href="#Wave-Refraction-Through-A-Barotropic-Vortex" title="Permalink"></a></h1><p>This example refracts an initially uniform, narrow-banded wave-action field through a barotropic Gaussian vortex. The vortex velocity is the Lagrangian-mean current <code>uᴸ</code>. Two physical effects act on the action: Doppler-shifted physical transport at <code>cg + uᴸ</code>, and kinematic refraction <code>∇_k·(c_k N)</code> driven by gradients of <code>uᴸ</code>. Both are applied in a single fused KA kernel that uses 5th-order WENO in all four directions, and the model is advanced with SSP-RK3. The resulting movie shows the spectrum evolving spatially through <code>m₀</code>, <code>κᵣₘₛ</code>, and the mean direction.</p><pre><code class="language-julia hljs">
+using Oceananigans, Ripple, CairoMakie
+using Printf
+
+Base.include(@__MODULE__, joinpath(@__DIR__, &quot;..&quot;, &quot;scripts&quot;, &quot;example_visuals.jl&quot;))
+
+output_dir = example_output_directory(&quot;vortex_refraction&quot;)
+plot_paths = String[]
+animation_paths = String[]
+</code></pre><h2 id="Grid-setup"><a class="docs-heading-anchor" href="#Grid-setup">Grid setup</a><a id="Grid-setup-1"></a><a class="docs-heading-anchor-permalink" href="#Grid-setup" title="Permalink"></a></h2><p>A 64²×16 (or smaller, when <code>RIPPLE_EXAMPLE_MODE=small</code>) horizontal periodic grid with halo wide enough for WENO5. Spectral grid: four κ rings and sixteen direction bins.</p><pre><code class="language-julia hljs">
+small = example_mode() == :small
+Nx = small ? 24 : 64
+Ny = small ? 24 : 64
+Nz = small ? 4 : 16
+Lx = Ly = 80.0
+Lz = 1.0
+
+grid = RectilinearGrid(CPU();
+                       size = (Nx, Ny, Nz),
+                       halo = (3, 3, 3),
+                       x = (0, Lx),
+                       y = (0, Ly),
+                       z = (-Lz, 0),
+                       topology = (Periodic, Periodic, Bounded))
+
+spectral_grid = PolarWaveVectorGrid(; κ = range(0.30, 0.50; length = 4),
+                                      φ = range(0, 2pi; length = 17)[1:16])
+</code></pre><h2 id="Vortex-velocity-field"><a class="docs-heading-anchor" href="#Vortex-velocity-field">Vortex velocity field</a><a id="Vortex-velocity-field-1"></a><a class="docs-heading-anchor-permalink" href="#Vortex-velocity-field" title="Permalink"></a></h2><p>A barotropic (depth-uniform) Gaussian-cored vortex. The azimuthal velocity peaks at <code>r = a</code> with magnitude <code>U₀</code>.</p><pre><code class="language-julia hljs">
+xc, yc = Lx / 2, Ly / 2
+a = Lx / 8
+U0 = 0.4
+
+xs = xnodes(grid)
+ys = ynodes(grid)
+u_field = zeros(Nx, Ny, Nz)
+v_field = zeros(Nx, Ny, Nz)
+for k in 1:Nz, j in 1:Ny, i in 1:Nx
+    dx = xs[i] - xc
+    dy = ys[j] - yc
+    r = hypot(dx, dy)
+    if r &gt; 0
+        uθ = U0 * (r / a) * exp(0.5 - 0.5 * (r / a)^2)
+        u_field[i, j, k] = -uθ * dy / r
+        v_field[i, j, k] = +uθ * dx / r
+    end
+end
+</code></pre><h2 id="Wave-model"><a class="docs-heading-anchor" href="#Wave-model">Wave model</a><a id="Wave-model-1"></a><a class="docs-heading-anchor-permalink" href="#Wave-model" title="Permalink"></a></h2><p>The new <code>velocities</code> kwarg builds the wave-current coupling internally; here we pass the prescribed vortex as a NamedTuple. Physical advection is disabled (<code>advection=nothing</code>) because the fused refraction kernel handles physical and spectral transport together.</p><pre><code class="language-julia hljs">
+model = SpectralWaveModel(; grid,
+                            spectral_grid,
+                            velocities = (; u = u_field, v = v_field),
+                            advection = nothing,
+                            sources = nothing,
+                            timestepper = :ForwardEuler)
+coupling = model.coupling
+</code></pre><p>Narrow-banded Gaussian initial condition, uniform in (x, y), peaking at <code>κ ≈ 0.4</code> and direction <code>φ ≈ 0</code> (waves travelling in <code>+x</code>).</p><pre><code class="language-julia hljs">
+κ0 = 0.4; σκ = 0.05; σφ = 0.30
+set!(model, N = (x, y, κ, φ) -&gt;
+     exp(-((κ - κ0) / σκ)^2 - (sin(φ / 2)^2) / σφ^2))
+
+G  = similar(model.action)
+N1 = similar(model.action)
+N2 = similar(model.action)
+</code></pre><h2 id="Time-loop"><a class="docs-heading-anchor" href="#Time-loop">Time loop</a><a id="Time-loop-1"></a><a class="docs-heading-anchor-permalink" href="#Time-loop" title="Permalink"></a></h2><p>400 SSP-RK3 steps of <code>dt = 0.05 s</code> for a total of 20 s. Snapshots are stored every few steps for the animation. In smoke-test mode we run a much shorter trajectory.</p><pre><code class="language-julia hljs">
+dt = 0.05
+total_time = small ? 1.0 : 20.0
+steps = Int(round(total_time / dt))
+frame_stride = max(1, steps ÷ (small ? 4 : 60))
+
+m0_frames = Matrix{Float64}[m0(model.action)]
+krms_frames = Matrix{Float64}[root_mean_square_wavenumber(model.action)]
+dir_frames = Matrix{Float64}[mean_direction(model.action)]
+times = Float64[0.0]
+
+for step in 1:steps
+    rk3_step!(model, coupling, G, N1, N2, dt)
+    if step % frame_stride == 0 || step == steps
+        push!(m0_frames, m0(model.action))
+        push!(krms_frames, root_mean_square_wavenumber(model.action))
+        push!(dir_frames, mean_direction(model.action))
+        push!(times, model.clock.time)
+    end
+end
+</code></pre><h2 id="Visualization"><a class="docs-heading-anchor" href="#Visualization">Visualization</a><a id="Visualization-1"></a><a class="docs-heading-anchor-permalink" href="#Visualization" title="Permalink"></a></h2><p>A static plot of the vortex velocity magnitude and a three-panel movie of <code>m₀</code>, <code>κᵣₘₛ</code>, and the mean direction.</p><pre><code class="language-julia hljs">
+let speed = hypot.(view(u_field, :, :, 1), view(v_field, :, :, 1))
+    path = joinpath(output_dir, &quot;vortex_speed.png&quot;)
+    fig = Figure(size = (640, 540))
+    ax = Axis(fig[1, 1]; title = &quot;Barotropic vortex |U| (m/s)&quot;,
+              xlabel = &quot;x (m)&quot;, ylabel = &quot;y (m)&quot;, aspect = 1)
+    hm = heatmap!(ax, xs, ys, speed; colormap = :viridis)
+    Colorbar(fig[1, 2], hm)
+    save(path, fig)
+    push!(plot_paths, path)
+end
+
+m0_limits = (minimum(minimum.(m0_frames)), maximum(maximum.(m0_frames)))
+krms_limits = (minimum(minimum.(krms_frames)), maximum(maximum.(krms_frames)))
+dir_lim = max(maximum(maximum.(abs, dir_frames)), 0.05)
+
+m0_obs = Observable(m0_frames[1])
+krms_obs = Observable(krms_frames[1])
+dir_obs = Observable(dir_frames[1])
+title_obs = Observable(&quot;t = 0.00 s&quot;)
+
+fig = Figure(size = (1320, 480))
+ax1 = Axis(fig[1, 1]; title = &quot;m₀ (total action)&quot;, xlabel = &quot;x&quot;, ylabel = &quot;y&quot;, aspect = 1)
+ax2 = Axis(fig[1, 3]; title = &quot;κᵣₘₛ (rad/m)&quot;, xlabel = &quot;x&quot;, ylabel = &quot;y&quot;, aspect = 1)
+ax3 = Axis(fig[1, 5]; title = &quot;mean direction (rad)&quot;, xlabel = &quot;x&quot;, ylabel = &quot;y&quot;, aspect = 1)
+hm1 = heatmap!(ax1, xs, ys, m0_obs; colormap = :viridis, colorrange = m0_limits)
+hm2 = heatmap!(ax2, xs, ys, krms_obs; colormap = :magma, colorrange = krms_limits)
+hm3 = heatmap!(ax3, xs, ys, dir_obs; colormap = :balance, colorrange = (-dir_lim, dir_lim))
+Colorbar(fig[1, 2], hm1); Colorbar(fig[1, 4], hm2); Colorbar(fig[1, 6], hm3)
+Label(fig[0, :], title_obs; fontsize = 18, halign = :center)
+
+movie_path = joinpath(output_dir, &quot;vortex_refraction.mp4&quot;)
+record(fig, movie_path, eachindex(m0_frames); framerate = small ? 4 : 12) do idx
+    m0_obs[] = m0_frames[idx]
+    krms_obs[] = krms_frames[idx]
+    dir_obs[] = dir_frames[idx]
+    title_obs[] = @sprintf(&quot;Wave action through barotropic vortex — t = %5.2f s&quot;, times[idx])
+end
+push!(animation_paths, movie_path)
+
+@assert all(isfinite, interior(model.action))
+@assert all(isfile, plot_paths)
+@assert all(isfile, animation_paths)
+
+@show length(m0_frames)
+@show plot_paths
+@show animation_paths</code></pre><h2 id="Running-The-Example"><a class="docs-heading-anchor" href="#Running-The-Example">Running The Example</a><a id="Running-The-Example-1"></a><a class="docs-heading-anchor-permalink" href="#Running-The-Example" title="Permalink"></a></h2><p>From the repository root:</p><pre><code class="language-bash hljs">julia --startup-file=no --project=. examples/vortex_refraction.jl</code></pre><p>Set <code>RIPPLE_EXAMPLE_MODE=small</code> for the fast smoke-test version.</p><p>This literate page is generated from <code>examples/vortex_refraction.jl</code>.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../exact_finite_volume_source_rates/">« Exact Finite-Volume Source Rates</a><a class="docs-footer-nextpage" href="../../../validation/">Validation »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Friday 15 May 2026 20:22">Friday 15 May 2026</span>. Using Julia version 1.10.11.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

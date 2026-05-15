@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Frequency-Direction Sources · Ripple.jl</title><meta name="title" content="Frequency-Direction Sources · Ripple.jl"/><meta property="og:title" content="Frequency-Direction Sources · Ripple.jl"/><meta property="twitter:title" content="Frequency-Direction Sources · Ripple.jl"/><meta name="description" content="Documentation for Ripple.jl."/><meta property="og:description" content="Documentation for Ripple.jl."/><meta property="twitter:description" content="Documentation for Ripple.jl."/><meta property="og:url" content="https://NumericalEarth.github.io/Ripple.jl/stable/generated/examples/frequency_direction_source_package/"/><meta property="twitter:url" content="https://NumericalEarth.github.io/Ripple.jl/stable/generated/examples/frequency_direction_source_package/"/><link rel="canonical" href="https://NumericalEarth.github.io/Ripple.jl/stable/generated/examples/frequency_direction_source_package/"/><script data-outdated-warner src="../../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../../assets/documenter.js"></script><script src="../../../search_index.js"></script><script src="../../../siteinfo.js"></script><script src="../../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../../">Ripple.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../../">Home</a></li><li><a class="tocitem" href="../../../model_api/">Model API</a></li><li><a class="tocitem" href="../../../finite_volume_integration/">Finite-Volume Integration</a></li><li><a class="tocitem" href="../../../api_reference/">API Reference</a></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../../../examples/">Overview</a></li><li><a class="tocitem" href="../product_field_basics/">Product Field Basics</a></li><li><a class="tocitem" href="../source_only_fetch_limited_growth/">Source-Only Fetch-Limited Growth</a></li><li><a class="tocitem" href="../bounded_wave_packet_dispersion/">Bounded Wave Packet Dispersion</a></li><li><a class="tocitem" href="../hasselmann_inertial_oscillation/">Hasselmann Column Growth</a></li><li><a class="tocitem" href="../cwcm_q_transform_sheared_current/">CWCM Q-Transform Shear</a></li><li class="is-active"><a class="tocitem" href>Frequency-Direction Sources</a><ul class="internal"><li><a class="tocitem" href="#Running-The-Example"><span>Running The Example</span></a></li></ul></li><li><a class="tocitem" href="../exact_finite_volume_source_rates/">Exact Finite-Volume Source Rates</a></li><li><a class="tocitem" href="../vortex_refraction/">Wave Refraction Through A Barotropic Vortex</a></li></ul></li><li><a class="tocitem" href="../../../validation/">Validation</a></li><li><a class="tocitem" href="../../../publication/">Publication</a></li><li><a class="tocitem" href="../../implementation_status/">Implementation Status</a></li><li><a class="tocitem" href="../../goal_completion_audit/">Goal Completion Audit</a></li><li><a class="tocitem" href="../../external_comparison_harness/">External Comparison Harness</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Examples</a></li><li class="is-active"><a href>Frequency-Direction Sources</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Frequency-Direction Sources</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/NumericalEarth/Ripple.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/NumericalEarth/Ripple.jl/blob/main/docs/src/generated/examples/frequency_direction_source_package.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Frequency-Direction-Source-Package"><a class="docs-heading-anchor" href="#Frequency-Direction-Source-Package">Frequency-Direction Source Package</a><a id="Frequency-Direction-Source-Package-1"></a><a class="docs-heading-anchor-permalink" href="#Frequency-Direction-Source-Package" title="Permalink"></a></h1><p>Operational source packages are easiest to inspect in a source-only column. <code>advection=nothing</code> leaves the spectrum local while semi-implicit source splitting grows wind-aligned waves and damps opposing waves.</p><pre><code class="language-julia hljs">
+using Oceananigans, Ripple, CairoMakie
+
+Base.include(@__MODULE__, joinpath(@__DIR__, &quot;..&quot;, &quot;scripts&quot;, &quot;example_visuals.jl&quot;))
+
+output_dir = example_output_directory(&quot;frequency_direction_source_package&quot;)
+plot_paths = String[]
+animation_paths = String[]
+
+grid = RectilinearGrid(CPU(); size=(1, 1, 1), x=(0, 1), y=(0, 1), z=(0, 1))
+frequencies = range(0.08, 0.30; length=16)
+directions_radians = range(0, 2pi; length=25)[1:24]
+spectral_grid = FrequencyDirectionGrid(Float64;
+                                       frequency=frequencies,
+                                       φ=directions_radians)
+
+sources = SourceTermSet(
+    PowerLawWindInput(rate=0.2,
+                      speed=12.0,
+                      direction=0.0,
+                      reference_speed=10.0,
+                      speed_power=1.0,
+                      spreading_power=2.0),
+    PeakFrequencyDissipation(rate=0.03,
+                             reference_frequency=0.18,
+                             power=1.0),
+)
+
+model = SpectralWaveModel(; grid,
+                            spectral_grid,
+                            advection=nothing,
+                            sources,
+                            timestepper=:SemiImplicitEuler)
+
+peak_m = argmin(abs.(collect(frequencies) .- 0.18))
+east_n = argmin(abs.(collect(directions_radians) .- 0.0))
+north_n = argmin(abs.(collect(directions_radians) .- pi / 2))
+west_n = argmin(abs.(collect(directions_radians) .- pi))
+south_n = argmin(abs.(collect(directions_radians) .- 3pi / 2))
+
+angular_distance(a, b) = abs(atan(sin(a - b), cos(a - b)))
+
+set!(model, N=(x, y, f, φ) -&gt; begin
+    direction = mod(φ, 2pi)
+    at_peak_frequency = abs(f - frequencies[peak_m]) &lt; 1e-12
+    at_peak_frequency &amp;&amp; angular_distance(direction, directions_radians[east_n]) &lt; 1e-12 &amp;&amp; return 2.0
+    at_peak_frequency &amp;&amp; angular_distance(direction, directions_radians[north_n]) &lt; 1e-12 &amp;&amp; return 0.4
+    at_peak_frequency &amp;&amp; angular_distance(direction, directions_radians[south_n]) &lt; 1e-12 &amp;&amp; return 0.4
+    return 0.05
+end)
+
+initial_total_action = total_action(model.action)
+initial_peak_frequency = peak_frequency(model.action)[1, 1]
+initial_mean_frequency = mean_frequency(model.action)[1, 1]
+initial_east_peak = model.action[1, 1, peak_m, east_n]
+initial_west_peak = model.action[1, 1, peak_m, west_n]
+initial_directional_peak = [model.action[1, 1, peak_m, n] for n in 1:length(spectral_grid.φ)]
+
+east_positive, east_damping = source_split(sources, model, 1, 1, peak_m, east_n)
+west_positive, west_damping = source_split(sources, model, 1, 1, peak_m, west_n)
+
+@assert initial_peak_frequency &gt; 0
+@assert east_positive &gt; 0
+@assert east_damping &gt; 0
+@assert west_positive == 0
+@assert west_damping == east_damping
+
+dt = 0.5
+frames = [column_spectrum_matrix(model.action)]
+time_step!(model, dt)
+
+final_total_action = total_action(model.action)
+final_peak_frequency = peak_frequency(model.action)[1, 1]
+final_mean_frequency = mean_frequency(model.action)[1, 1]
+final_east_peak = model.action[1, 1, peak_m, east_n]
+final_west_peak = model.action[1, 1, peak_m, west_n]
+
+expected_east_peak = (initial_east_peak + dt * east_positive) / (1 + dt * east_damping)
+expected_west_peak = initial_west_peak / (1 + dt * west_damping)
+
+step_count = example_mode() == :small ? 4 : 24
+for n in 1:step_count
+    time_step!(model, dt)
+    if n == step_count || n % max(1, step_count ÷ 6) == 0
+        push!(frames, column_spectrum_matrix(model.action))
+    end
+end
+
+final_directional_peak = [model.action[1, 1, peak_m, n] for n in 1:length(spectral_grid.φ)]
+directions = collect(directions_radians) .* 180 ./ pi
+
+push!(plot_paths,
+      write_line(joinpath(output_dir, &quot;directional_peak_bin.png&quot;),
+                 directions, (initial_directional_peak, final_directional_peak);
+                 title=&quot;Wind-aligned growth at peak frequency&quot;,
+                 xlabel=&quot;direction degrees&quot;, ylabel=&quot;action&quot;,
+                 names=(&quot;initial&quot;, &quot;final&quot;)))
+
+push!(animation_paths,
+      write_heatmap_animation(joinpath(output_dir, &quot;source_package_spectrum.mp4&quot;),
+                              frames;
+                              title=&quot;Frequency-direction source evolution&quot;,
+                              xlabel=&quot;frequency bin&quot;, ylabel=&quot;direction bin&quot;))
+
+@assert final_peak_frequency &gt; 0
+@assert final_east_peak ≈ expected_east_peak
+@assert final_west_peak ≈ expected_west_peak
+@assert final_east_peak &gt; initial_east_peak
+@assert final_west_peak &lt; initial_west_peak
+@assert final_total_action &gt; initial_total_action
+@assert isfinite(final_mean_frequency)
+@assert final_mean_frequency &gt; 0
+@assert all(interior(model.action) .&gt;= 0)
+@assert all(isfile, plot_paths)
+@assert all(isfile, animation_paths)
+
+@show initial_total_action
+@show final_total_action
+@show initial_peak_frequency
+@show initial_mean_frequency
+@show final_mean_frequency
+@show plot_paths
+@show animation_paths</code></pre><h2 id="Running-The-Example"><a class="docs-heading-anchor" href="#Running-The-Example">Running The Example</a><a id="Running-The-Example-1"></a><a class="docs-heading-anchor-permalink" href="#Running-The-Example" title="Permalink"></a></h2><p>From the repository root:</p><pre><code class="language-bash hljs">julia --startup-file=no --project=. examples/frequency_direction_source_package.jl</code></pre><p>Set <code>RIPPLE_EXAMPLE_MODE=small</code> for the fast smoke-test version.</p><p>This literate page is generated from <code>examples/frequency_direction_source_package.jl</code>.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../cwcm_q_transform_sheared_current/">« CWCM Q-Transform Shear</a><a class="docs-footer-nextpage" href="../exact_finite_volume_source_rates/">Exact Finite-Volume Source Rates »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Friday 15 May 2026 20:22">Friday 15 May 2026</span>. Using Julia version 1.10.11.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
