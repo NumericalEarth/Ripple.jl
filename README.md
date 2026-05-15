@@ -55,11 +55,11 @@ set!(u, (x, y, z) -> -vortex_uθ(x, y) * (y - yc) / max(hypot(x - xc, y - yc), e
 set!(v, (x, y, z) -> +vortex_uθ(x, y) * (x - xc) / max(hypot(x - xc, y - yc), eps()))
 
 model = SpectralWaveModel(grid;
-                            spectral_grid,
-                            velocities = (; u, v),          # uᴸ paradigm
-                            advection = nothing,            # fused kernel handles transport
-                            sources = nothing,
-                            timestepper = :ForwardEuler)
+                          spectral_grid,
+                          velocities = (; u, v),          # uᴸ paradigm
+                          advection = nothing,            # fused kernel handles transport
+                          sources = nothing,
+                          timestepper = :ForwardEuler)
 coupling = model.coupling
 
 ## Narrow-banded Gaussian initial condition: uniform in (x, y), centred on
