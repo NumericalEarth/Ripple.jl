@@ -1,7 +1,3 @@
-
-
-https://github.com/user-attachments/assets/fb3599db-a553-4ad4-aeeb-9e8730b942be
-
 # Ripple.jl
 
 [![CI](https://github.com/NumericalEarth/Ripple.jl/actions/workflows/ci.yml/badge.svg)](https://github.com/NumericalEarth/Ripple.jl/actions/workflows/ci.yml)
