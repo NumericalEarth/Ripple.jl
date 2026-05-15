@@ -1,16 +1,23 @@
 import Oceananigans
 import Oceananigans.Fields: Field, interior, set!
 import Oceananigans.BoundaryConditions: fill_halo_regions!
+import OffsetArrays: OffsetArray
 
 struct ProductGrid{PG, CG}
     physical :: PG
     coordinate :: CG
 end
 
-struct ProductField{LX, LY, LZ, LXi, LEta, PG, CG, F, T} <: AbstractArray{T, 4}
+# `fields` is a Matrix of Oceananigans Fields (one per spectral bin); each
+# field's underlying data is a view into the same `flat_data` 5D backing
+# array. Going through the per-bin Field path uses Oceananigans halos/BCs as
+# usual; the fused refraction kernel reads/writes `flat_data` directly with
+# no copy.
+struct ProductField{LX, LY, LZ, LXi, LEta, PG, CG, F, D, T} <: AbstractArray{T, 4}
     grid :: PG
     coordinate_grid :: CG
     fields :: Matrix{F}
+    flat_data :: D
 end
 
 coordinate_float_type(coordinate_grid) = Float64
@@ -46,16 +53,33 @@ function product_field_storage(::Type{LX}, ::Type{LY}, ::Type{LZ},
     Nxi, Neta = coordinate_size(coordinate_grid)
     loc = ocean_field_location(LX, LY, LZ)
     indices = surface_indices(grid, LZ)
-    first_field = Field(loc, grid, FT; indices)
+
+    # Read the data layout (size, offsets) from a probe Field, then allocate a
+    # single 5D backing array and build every per-bin Field as a view into it
+    # so all Fields share the same concrete type.
+    probe = Field(loc, grid, FT; indices)
+    probe_data = probe.data
+    parent_size = size(parent(probe_data))
+    ax = axes(probe_data)
+    offsets = ntuple(d -> first(ax[d]) - 1, ndims(probe_data))
+
+    flat_data = Array{FT}(undef, parent_size..., Nxi, Neta)
+    fill!(flat_data, zero(FT))
+
+    ncolon = length(parent_size)
+    first_slab = view(flat_data, ntuple(_ -> Colon(), ncolon)..., 1, 1)
+    first_backed = OffsetArray(first_slab, offsets...)
+    first_field = Field(loc, grid, FT; indices, data=first_backed)
     fields = Matrix{typeof(first_field)}(undef, Nxi, Neta)
     fields[1, 1] = first_field
-
     for n in 1:Neta, m in 1:Nxi
         m == 1 && n == 1 && continue
-        fields[m, n] = Field(loc, grid, FT; indices)
+        slab = view(flat_data, ntuple(_ -> Colon(), ncolon)..., m, n)
+        backed = OffsetArray(slab, offsets...)
+        fields[m, n] = Field(loc, grid, FT; indices, data=backed)
     end
 
-    return fields
+    return fields, flat_data
 end
 
 function ProductField{LX, LY, LZ, LXi, LEta}(grid, coordinate_grid;
@@ -74,12 +98,12 @@ function ProductField{LX, LY, LZ, LXi, LEta}(grid, coordinate_grid;
     lxi = canonical_location_marker(LXi)
     leta = canonical_location_marker(LEta)
     FT = eltype
-    fields = product_field_storage(lx, ly, lz, grid, coordinate_grid, FT)
+    fields, flat_data = product_field_storage(lx, ly, lz, grid, coordinate_grid, FT)
     field_type = Base.eltype(fields)
 
     return ProductField{lx, ly, lz, lxi, leta,
-                        typeof(grid), typeof(coordinate_grid), field_type, FT}(
-        grid, coordinate_grid, fields)
+                        typeof(grid), typeof(coordinate_grid), field_type, typeof(flat_data), FT}(
+        grid, coordinate_grid, fields, flat_data)
 end
 
 function ProductField(grid, coordinate_grid;
@@ -102,7 +126,8 @@ WaveActionField(grid, coordinate_grid; kwargs...) =
                  coordinate_location=(Center, Center), kwargs...)
 
 Base.parent(f::ProductField) = f.fields
-Base.eltype(::ProductField{LX, LY, LZ, LXi, LEta, PG, CG, F, T}) where {LX, LY, LZ, LXi, LEta, PG, CG, F, T} = T
+flat_data(f::ProductField) = f.flat_data
+Base.eltype(::ProductField{LX, LY, LZ, LXi, LEta, PG, CG, F, D, T}) where {LX, LY, LZ, LXi, LEta, PG, CG, F, D, T} = T
 architecture(f::ProductField) = architecture(f.grid)
 grid(f::ProductField) = f.grid
 physical_grid(f::ProductField) = f.grid

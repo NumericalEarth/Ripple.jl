@@ -3,7 +3,10 @@ import Oceananigans.Advection: AbstractCenteredAdvectionScheme
 import Oceananigans.Advection: AbstractUpwindBiasedAdvectionScheme
 import Oceananigans.Advection: div_Uc, materialize_advection
 import Oceananigans.Advection: Centered, UpwindBiased, WENO, FluxFormAdvection
-import Oceananigans.Fields: ConstantField, ZeroField
+import KernelAbstractions: @kernel, @index
+import Oceananigans.Architectures: architecture
+import Oceananigans.Fields: CenterField, ConstantField, ZeroField, fill_halo_regions!, interior
+import Oceananigans.Utils: launch!
 import Oceananigans.Grids: halo_size, required_halo_size_x, required_halo_size_y
 
 is_tracer_direction_advection(::Nothing) = true
@@ -83,12 +86,40 @@ function horizontal_advection(advection, u, v)
     return FluxFormAdvection{H, FT}(x_advection, y_advection, nothing)
 end
 
-transport_velocity_fields(model, m, n) = begin
+transport_velocity_fields(model, m, n) =
+    transport_velocity_fields(model.coupling, model, m, n)
+
+function transport_velocity_fields(::Any, model, m, n)
     u, v = transport_velocity(model, m, n)
     FT = eltype(model.action)
     return (u=ConstantField(convert(FT, u)),
             v=ConstantField(convert(FT, v)),
             w=ZeroField(FT))
+end
+
+@kernel function _doppler_shift_velocity_fields!(u, v, cg_x, cg_y, Ux, Uy, m)
+    i, j, k = @index(Global, NTuple)
+    @inbounds u[i, j, k] = cg_x + Ux[i, j, m]
+    @inbounds v[i, j, k] = cg_y + Uy[i, j, m]
+end
+
+function transport_velocity_fields(coupling::CWCMPrescribedCurrentCoupling, model, m, n)
+    cg_x, cg_y = transport_velocity(model, m, n)
+    FT = eltype(model.action)
+    grid = model.grid
+    if coupling.u_transport_scratch === nothing
+        coupling.u_transport_scratch = CenterField(grid)
+        coupling.v_transport_scratch = CenterField(grid)
+    end
+    u_field = coupling.u_transport_scratch
+    v_field = coupling.v_transport_scratch
+    arch = architecture(grid)
+    launch!(arch, grid, :xyz, _doppler_shift_velocity_fields!,
+            u_field, v_field, convert(FT, cg_x), convert(FT, cg_y),
+            coupling.Ux, coupling.Uy, m)
+    fill_halo_regions!(u_field)
+    fill_halo_regions!(v_field)
+    return (u=u_field, v=v_field, w=ZeroField(FT))
 end
 
 transport_tendency(::Nothing, model, c, i, j, m, n) = zero(eltype(model.action))

@@ -23,6 +23,18 @@ mutable struct CWCMPrescribedCurrentCoupling{Current, QT, K, UxCache, UyCache, D
     Uy :: UyCache
     dUxdkappa :: DUx
     dUydkappa :: DUy
+    u_transport_scratch :: Any  # lazily allocated CenterField, reused across transport_velocity_fields calls
+    v_transport_scratch :: Any
+    Ux_x :: Any                 # spatial gradients of Doppler velocity caches, lazily allocated
+    Ux_y :: Any
+    Uy_x :: Any
+    Uy_y :: Any
+    cg_x_table :: Any           # intrinsic group velocity table per (κ, φ), lazily filled
+    cg_y_table :: Any
+    cos_table :: Any            # cos(φ), sin(φ) per direction index
+    sin_table :: Any
+    N_flat :: Any               # flat 4D scratch for the fused KA kernel
+    G_flat :: Any
 end
 
 function current_cache_like(a, ::Type{FT}, dims::Tuple) where FT
@@ -42,7 +54,11 @@ function CWCMPrescribedCurrentCoupling(current::PrescribedLagrangianMeanCurrent,
     Uy = current_cache_like(v, eltype(v), (Nx, Ny, length(kc)))
     dUxdkappa = similar(Ux)
     dUydkappa = similar(Uy)
-    coupling = CWCMPrescribedCurrentCoupling(current, qtransform, kc, Ux, Uy, dUxdkappa, dUydkappa)
+    coupling = CWCMPrescribedCurrentCoupling(current, qtransform, kc, Ux, Uy, dUxdkappa, dUydkappa,
+                                              nothing, nothing,
+                                              nothing, nothing, nothing, nothing,
+                                              nothing, nothing, nothing, nothing,
+                                              nothing, nothing)
     update_coupling!(coupling)
     return coupling
 end
