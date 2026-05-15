@@ -13,7 +13,7 @@ makedocs(;
     authors = "Ripple.jl contributors",
     remotes = Dict(REPO_ROOT => (RIPPLE_REMOTE, "main")),
     format = Documenter.HTML(;
-        canonical = "https://NumericalEarth.github.io/Ripple.jl/stable/",
+        canonical = "https://NumericalEarth.github.io/RippleDocumentation/stable/",
         edit_link = "main",
         prettyurls = get(ENV, "CI", "false") == "true",
     ),
@@ -33,7 +33,7 @@ makedocs(;
 )
 
 deploydocs(;
-    repo = "github.com/NumericalEarth/Ripple.jl.git",
+    repo = "github.com/NumericalEarth/RippleDocumentation.git",
     devbranch = "main",
     push_preview = true,
 )
