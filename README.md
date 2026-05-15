@@ -17,36 +17,75 @@ belong to Oceananigans.
 
 ## Quick Start
 
+Set up an initially uniform, narrow-banded wave-action field and refract it
+through a barotropic Gaussian vortex. The vortex velocity is the
+Lagrangian-mean current `uᴸ`; Ripple's fused refraction kernel applies
+Doppler-shifted physical transport at `c_g + uᴸ` together with kinematic
+spectral refraction `∇_k·(c_k N)` in a single pass, advanced with SSP-RK3.
+
 ```julia
-using Ripple
+using Oceananigans, Ripple
+
+Nx = Ny = 64
+Nz = 16
+Lx = Ly = 80.0
 
 grid = RectilinearGrid(CPU();
-                       size=(16, 8, 4),
-                       halo=(3, 3, 3),
-                       x=(0, 16),
-                       y=(0, 8),
-                       z=(-1, 0))
+                       size = (Nx, Ny, Nz),
+                       halo = (3, 3, 3),
+                       x = (0, Lx),
+                       y = (0, Ly),
+                       z = (-1, 0),
+                       topology = (Periodic, Periodic, Bounded))
 
-spectral_grid = PolarWaveVectorGrid(CPU(), Float64;
-                                    κ=range(0.3, 1.2; length=6),
-                                    φ=range(0, 2pi; length=9)[1:8])
+spectral_grid = PolarWaveVectorGrid(; κ = range(0.30, 0.50; length = 4),
+                                      φ = range(0, 2pi; length = 17)[1:16])
 
-sources = SourceTermSet(
-    ExponentialWindInput(rate=0.04, direction=0.0, spreading_power=2),
-    WhitecappingDissipation(rate=0.02, saturation_threshold=1.0),
-)
+## Barotropic Gaussian-cored vortex: peak azimuthal speed U₀ at radius a.
+xs, ys = xnodes(grid), ynodes(grid)
+xc, yc, a, U0 = Lx/2, Ly/2, Lx/8, 0.4
+u = zeros(Nx, Ny, Nz); v = zeros(Nx, Ny, Nz)
+for k in 1:Nz, j in 1:Ny, i in 1:Nx
+    dx, dy = xs[i] - xc, ys[j] - yc
+    r = hypot(dx, dy)
+    if r > 0
+        uθ = U0 * (r/a) * exp(0.5 - 0.5*(r/a)^2)
+        u[i, j, k] = -uθ * dy / r
+        v[i, j, k] = +uθ * dx / r
+    end
+end
 
 model = SpectralWaveModel(; grid,
                             spectral_grid,
-                            sources,
-                            timestepper=:SemiImplicitEuler)
+                            velocities = (; u, v),          # uᴸ paradigm
+                            advection = nothing,            # fused kernel handles transport
+                            sources = nothing,
+                            timestepper = :ForwardEuler)
+coupling = model.coupling
 
-set!(model, N=1.0)
-time_step!(model, 0.1)
+## Narrow-banded Gaussian initial condition: uniform in (x, y), centred on
+## κ₀ = 0.4 and direction φ = 0.
+set!(model, N = (x, y, kx, ky) -> begin
+    κ = hypot(kx, ky); φ = atan(ky, kx)
+    exp(-((κ - 0.4)/0.05)^2 - (sin(φ/2)^2)/0.30^2)
+end)
 
-Hs = significant_wave_height(model.action)
-total = total_action(model.action)
+## SSP-RK3 with the fused Doppler + refraction tendency.
+G  = similar(model.action)
+N1 = similar(model.action)
+N2 = similar(model.action)
+for _ in 1:400
+    rk3_step!(model, coupling, G, N1, N2, 0.05)
+end
+
+m0_field   = m0(model.action)
+κrms_field = root_mean_square_wavenumber(model.action)
+mean_dir   = mean_direction(model.action)
 ```
+
+See `examples/vortex_refraction.jl` (a literate tutorial that produces a
+multi-panel movie of `m₀`, `κᵣₘₛ`, and the mean direction) for the full
+visualization.
 
 ## Design Shape
 
