@@ -10,7 +10,8 @@ end
 
 function Makie.convert_arguments(::Type{<:Makie.Heatmap}, field::Ripple.ProductField)
     x, y = physical_nodes(field)
-    return x, y, Matrix(Ripple.m0(field))
+    m0_slab = Array(Ripple.interior(Ripple.m0(field)))
+    return x, y, m0_slab[:, :, 1]
 end
 
 function Makie.convert_arguments(::Type{<:Makie.Heatmap}, model::Ripple.SpectralWaveModel)
