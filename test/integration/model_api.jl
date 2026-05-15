@@ -111,10 +111,10 @@ end
 
     frequency_grid = FrequencyDirectionGrid(; frequency=[0.1], φ=[0.0])
     # `advection=` is a shortcut that sets both horizontal and spectral advection.
-    source_only = SpectralWaveModel(; grid, spectral_grid=frequency_grid, advection=nothing)
+    source_only = SpectralWaveModel(grid, frequency_grid; advection=nothing)
     @test source_only.horizontal_advection === nothing
     @test source_only.spectral_advection === nothing
-    bundled = SpectralWaveModel(; grid, spectral_grid=frequency_grid, advection=Centered())
+    bundled = SpectralWaveModel(grid, frequency_grid; advection=Centered())
     @test bundled.horizontal_advection isa Centered
     @test bundled.spectral_advection isa Centered
 end
