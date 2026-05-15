@@ -42,18 +42,17 @@ spectral_grid = PolarWaveVectorGrid(; κ = range(0.30, 0.50; length = 4),
                                       φ = range(0, 2pi; length = 17)[1:16])
 
 ## Barotropic Gaussian-cored vortex: peak azimuthal speed U₀ at radius a.
-xs, ys = xnodes(grid), ynodes(grid)
 xc, yc, a, U0 = Lx/2, Ly/2, Lx/8, 0.4
-u = zeros(Nx, Ny, Nz); v = zeros(Nx, Ny, Nz)
-for k in 1:Nz, j in 1:Ny, i in 1:Nx
-    dx, dy = xs[i] - xc, ys[j] - yc
-    r = hypot(dx, dy)
-    if r > 0
-        uθ = U0 * (r/a) * exp(0.5 - 0.5*(r/a)^2)
-        u[i, j, k] = -uθ * dy / r
-        v[i, j, k] = +uθ * dx / r
-    end
+
+@inline function vortex_uθ(x, y)
+    r = hypot(x - xc, y - yc)
+    return r == 0 ? zero(r) : U0 * (r/a) * exp(0.5 - 0.5*(r/a)^2)
 end
+
+u = CenterField(grid)
+v = CenterField(grid)
+set!(u, (x, y, z) -> -vortex_uθ(x, y) * (y - yc) / max(hypot(x - xc, y - yc), eps()))
+set!(v, (x, y, z) -> +vortex_uθ(x, y) * (x - xc) / max(hypot(x - xc, y - yc), eps()))
 
 model = SpectralWaveModel(; grid,
                             spectral_grid,
@@ -65,10 +64,13 @@ coupling = model.coupling
 
 ## Narrow-banded Gaussian initial condition: uniform in (x, y), centred on
 ## κ₀ = 0.4 and direction φ = 0.
-set!(model, N = (x, y, kx, ky) -> begin
-    κ = hypot(kx, ky); φ = atan(ky, kx)
-    exp(-((κ - 0.4)/0.05)^2 - (sin(φ/2)^2)/0.30^2)
-end)
+κ0, σκ, σφ = 0.4, 0.05, 0.30
+function initial_action(x, y, kx, ky)
+    κ = hypot(kx, ky)
+    φ = atan(ky, kx)
+    return exp(-((κ - κ0)/σκ)^2 - (sin(φ/2)^2)/σφ^2)
+end
+set!(model, N = initial_action)
 
 ## SSP-RK3 with the fused Doppler + refraction tendency.
 G  = similar(model.action)
