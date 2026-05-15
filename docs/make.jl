@@ -33,7 +33,8 @@ makedocs(;
 )
 
 deploydocs(;
-    repo = "github.com/NumericalEarth/RippleDocumentation.git",
+    repo = "github.com/NumericalEarth/Ripple.jl.git",
+    deploy_repo = "github.com/NumericalEarth/RippleDocumentation.git",
     devbranch = "main",
     push_preview = true,
 )
