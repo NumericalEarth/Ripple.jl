@@ -114,9 +114,9 @@ end
     source_only = SpectralWaveModel(; grid, spectral_grid=frequency_grid, advection=nothing)
     @test source_only.horizontal_advection === nothing
     @test source_only.spectral_advection === nothing
-    bundled = SpectralWaveModel(; grid, spectral_grid=frequency_grid, advection=WENO(order=5))
-    @test bundled.horizontal_advection isa WENO
-    @test bundled.spectral_advection isa WENO
+    bundled = SpectralWaveModel(; grid, spectral_grid=frequency_grid, advection=Centered())
+    @test bundled.horizontal_advection isa Centered
+    @test bundled.spectral_advection isa Centered
 end
 
 @testset "Source-only timestepper semantics" begin
