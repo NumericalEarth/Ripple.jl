@@ -27,11 +27,11 @@ target(x, y, kx, ky) = begin
 end
 
 alpha = 1.3
-model = SpectralWaveModel(; grid,
-                            spectral_grid,
-                            advection=nothing,
-                            sources=RelaxationToSpectrum(target; timescale=inv(alpha)),
-                            timestepper=:ForwardEuler)
+model = SpectralWaveModel(grid, spectral_grid;
+                          horizontal_advection=nothing,
+                          spectral_advection=nothing,
+                          sources=RelaxationToSpectrum(target; timescale=inv(alpha)),
+                          timestepper=:ForwardEuler)
 set!(model, N=0.0)
 
 target_action = WaveActionField(grid, spectral_grid)

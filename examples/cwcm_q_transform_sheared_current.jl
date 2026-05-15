@@ -39,15 +39,15 @@ end
 current = PrescribedLagrangianMeanCurrent(u=u, v=v, depth=1.0)
 coupling = CWCMPrescribedCurrentCoupling(current, qtransform, spectral_grid.κ)
 
-model = SpectralWaveModel(; grid,
-                            spectral_grid,
-                            coupling,
-                            advection=nothing,
-                            sources=RelaxationToSpectrum((x, y, kx, ky) ->
-                                exp(-((x - 4)^2 + (y - 2)^2) / 2) *
-                                exp(-((hypot(kx, ky) - 0.7)^2) / 0.08);
-                                timescale=0.5),
-                            timestepper=:ForwardEuler)
+model = SpectralWaveModel(grid, spectral_grid;
+                          coupling,
+                          horizontal_advection=nothing,
+                          spectral_advection=nothing,
+                          sources=RelaxationToSpectrum((x, y, kx, ky) ->
+                              exp(-((x - 4)^2 + (y - 2)^2) / 2) *
+                              exp(-((hypot(kx, ky) - 0.7)^2) / 0.08);
+                              timescale=0.5),
+                          timestepper=:ForwardEuler)
 set!(model, N=0.0)
 
 frames = [field_m0_matrix(model.action)]

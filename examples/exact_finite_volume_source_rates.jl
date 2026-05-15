@@ -26,11 +26,10 @@ wavenumber_source = WavenumberDissipation(rate=0.1,
                                           power=2)
 sources = SourceTermSet(frequency_source, wavenumber_source)
 
-model = SpectralWaveModel(; grid,
-                            spectral_grid,
-                            advection=nothing,
-                            sources,
-                            timestepper=:SemiImplicitEuler)
+model = SpectralWaveModel(grid, spectral_grid;
+                          horizontal_advection=nothing,
+                          sources,
+                          timestepper=:SemiImplicitEuler)
 
 set!(model, N=1.0)
 

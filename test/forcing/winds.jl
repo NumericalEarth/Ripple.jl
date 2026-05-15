@@ -69,11 +69,11 @@
 
     grid = RectilinearGrid(CPU(); size=(1, 1, 1), x=(0, 2), y=(-0.5, 0.5), z=(0, 1))
     spectral_grid = PolarWaveVectorGrid(; κ=[1.0], φ=[0.0, pi / 2])
-    model = SpectralWaveModel(; advection=nothing, grid,
-                                spectral_grid,
-                                sources=ExponentialWindInput(rate=ccw,
-                                                              direction=ccw,
-                                                              spreading_power=2))
+    model = SpectralWaveModel(grid, spectral_grid;
+                      horizontal_advection=nothing,
+                      sources=ExponentialWindInput(rate=ccw,
+                      direction=ccw,
+                      spreading_power=2))
     set!(model, N=1.0)
     compute_tendencies!(model)
 
@@ -90,11 +90,11 @@
                                            vmax=0.3,
                                            rmax=1.0,
                                            radius=4.0)
-    model = SpectralWaveModel(; advection=nothing, grid,
-                                spectral_grid,
-                                sources=ExponentialWindInput(rate=holland_source,
-                                                              direction=holland_source,
-                                                              spreading_power=2))
+    model = SpectralWaveModel(grid, spectral_grid;
+                      horizontal_advection=nothing,
+                      sources=ExponentialWindInput(rate=holland_source,
+                      direction=holland_source,
+                      spreading_power=2))
     set!(model, N=1.0)
     compute_tendencies!(model)
 

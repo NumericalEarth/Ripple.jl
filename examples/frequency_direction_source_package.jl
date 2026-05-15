@@ -1,8 +1,8 @@
 # # Frequency-Direction Source Package
 #
 # Operational source packages are easiest to inspect in a source-only column.
-# `advection=nothing` leaves the spectrum local while semi-implicit source
-# splitting grows wind-aligned waves and damps opposing waves.
+# `horizontal_advection=nothing` leaves the spectrum local while semi-implicit
+# source splitting grows wind-aligned waves and damps opposing waves.
 
 using Oceananigans, Ripple, CairoMakie
 
@@ -31,11 +31,10 @@ sources = SourceTermSet(
                              power=1.0),
 )
 
-model = SpectralWaveModel(; grid,
-                            spectral_grid,
-                            advection=nothing,
-                            sources,
-                            timestepper=:SemiImplicitEuler)
+model = SpectralWaveModel(grid, spectral_grid;
+                          horizontal_advection=nothing,
+                          sources,
+                          timestepper=:SemiImplicitEuler)
 
 peak_m = argmin(abs.(collect(frequencies) .- 0.18))
 east_n = argmin(abs.(collect(directions_radians) .- 0.0))

@@ -126,11 +126,12 @@ end
 canonical_model_timestepper(timestepper) =
     throw(ArgumentError("timestepper must be a Symbol; got $(typeof(timestepper))"))
 
-mutable struct SpectralWaveModel{Arch, G, SG, A, Adv, Sources, Coupling, Tend, PrevTend, C} <: AbstractModel{Nothing, Arch}
+mutable struct SpectralWaveModel{Arch, G, SG, A, HAdv, SAdv, Sources, Coupling, Tend, PrevTend, C} <: AbstractModel{Nothing, Arch}
     grid :: G
     spectral_grid :: SG
     action :: A
-    advection :: Adv
+    horizontal_advection :: HAdv
+    spectral_advection :: SAdv
     sources :: Sources
     coupling :: Coupling
     timestepper :: Symbol
@@ -140,10 +141,14 @@ mutable struct SpectralWaveModel{Arch, G, SG, A, Adv, Sources, Coupling, Tend, P
     clock :: C
 end
 
-function SpectralWaveModel(grid;
-                           spectral_grid,
+# Marker sentinel so we can detect when the user did not pass `advection=...`.
+const _ADVECTION_UNSET = Base.RefValue{Any}(nothing)
+
+function SpectralWaveModel(grid, spectral_grid;
                            action=nothing,
-                           advection=WENO(),
+                           horizontal_advection=WENO(),
+                           spectral_advection=WENO(),
+                           advection=_ADVECTION_UNSET,
                            sources=nothing,
                            velocities=nothing,
                            coupling=nothing,
@@ -151,28 +156,48 @@ function SpectralWaveModel(grid;
                            clock=Clock(time=0.0))
     grid = validate_model_physical_grid(adapt_physical_grid(grid))
     spectral_grid = validate_model_spectral_grid(spectral_grid)
+
+    if advection !== _ADVECTION_UNSET
+        horizontal_advection = advection
+        spectral_advection = advection
+    end
+
     action = action === nothing ? WaveActionField(grid, spectral_grid) :
                                   validate_model_action(action, grid, spectral_grid)
     sources = validate_model_sources(canonical_model_sources(sources))
-    advection = validate_model_advection(canonical_model_advection(advection), grid, spectral_grid)
+    horizontal_advection = validate_model_advection(canonical_model_advection(horizontal_advection), grid, spectral_grid)
+    spectral_advection = validate_model_spectral_advection(spectral_advection)
     coupling = resolve_coupling(velocities, coupling, grid, spectral_grid)
     coupling = canonical_model_coupling(coupling)
     coupling = validate_model_coupling(coupling, grid, spectral_grid)
     timestepper = canonical_model_timestepper(timestepper)
     clock = validate_model_clock(clock)
+
+    if coupling isa CWCMPrescribedCurrentCoupling && spectral_advection !== nothing &&
+       horizontal_advection !== nothing
+        @info "SpectralWaveModel: CWCM coupling with `spectral_advection` set; the fused refraction kernel handles physical transport, so `horizontal_advection` is ignored."
+    end
+
     tendencies = similar(action)
     previous_tendencies = similar(action)
     Arch = typeof(architecture(grid))
     model = SpectralWaveModel{Arch, typeof(grid), typeof(spectral_grid), typeof(action),
-                              typeof(advection), typeof(sources), typeof(coupling),
+                              typeof(horizontal_advection), typeof(spectral_advection),
+                              typeof(sources), typeof(coupling),
                               typeof(tendencies), typeof(previous_tendencies), typeof(clock)}(
-        grid, spectral_grid, action, advection, sources, coupling,
+        grid, spectral_grid, action, horizontal_advection, spectral_advection, sources, coupling,
         timestepper, tendencies, previous_tendencies, false, clock)
     update_coupling!(model)
     return model
 end
 
-SpectralWaveModel(; grid, kwargs...) = SpectralWaveModel(grid; kwargs...)
+# Validate the spectral_advection kwarg. nothing disables kinematic refraction;
+# WENO() (or another AbstractAdvectionScheme) enables the fused kernel when the
+# coupling is CWCM. Other types are rejected.
+validate_model_spectral_advection(::Nothing) = nothing
+validate_model_spectral_advection(advection::Oceananigans.Advection.AbstractAdvectionScheme) = advection
+validate_model_spectral_advection(advection) =
+    throw(ArgumentError("spectral_advection must be nothing or an Oceananigans advection scheme; got $(typeof(advection))"))
 
 fields(model::SpectralWaveModel) = (N=model.action, G=model.tendencies)
 prognostic_fields(model::SpectralWaveModel) = (N=model.action,)

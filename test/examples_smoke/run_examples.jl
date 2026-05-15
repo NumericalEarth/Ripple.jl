@@ -31,7 +31,7 @@ function test_example_module_artifacts(example_module)
     if isdefined(example_module, :model)
         model = getfield(example_module, :model)
         @test model isa SpectralWaveModel
-        @test model.advection === nothing || model.advection isa Oceananigans.Advection.AbstractAdvectionScheme
+        @test model.horizontal_advection === nothing || model.horizontal_advection isa Oceananigans.Advection.AbstractAdvectionScheme
         @test model.clock.time >= 0
         @test model.clock.iteration >= 0
         test_finite_product_field(model.action)
@@ -92,13 +92,13 @@ end
     @testset "Example semantic manifest" begin
         semantic_examples = (
             "product_field_basics.jl" => ("# # Product Field Basics", "WaveActionField", "set!", "plot_paths", "animation_paths"),
-            "source_only_fetch_limited_growth.jl" => ("# # Source-Only Fetch-Limited Growth", "fetch_limited_source_balance", "run_validation", "advection=nothing"),
-            "bounded_wave_packet_dispersion.jl" => ("# # Bounded Wave Packet Dispersion", "topology=(Bounded, Periodic, Bounded)", "advection=WENO(order=5)", "packet_hovmoller"),
-            "hasselmann_inertial_oscillation.jl" => ("# # Hasselmann Column Growth", "hasselmann_column", "run_validation", "advection=nothing"),
-            "cwcm_q_transform_sheared_current.jl" => ("# # CWCM Q-Transform", "QTransform", "CWCMPrescribedCurrentCoupling", "advection=nothing"),
-            "frequency_direction_source_package.jl" => ("# # Frequency-Direction Source Package", "FrequencyDirectionGrid", "SourceTermSet", "advection=nothing", "SemiImplicitEuler"),
+            "source_only_fetch_limited_growth.jl" => ("# # Source-Only Fetch-Limited Growth", "fetch_limited_source_balance", "run_validation", "horizontal_advection=nothing"),
+            "bounded_wave_packet_dispersion.jl" => ("# # Bounded Wave Packet Dispersion", "topology=(Bounded, Periodic, Bounded)", "horizontal_advection=WENO(order=5)", "packet_hovmoller"),
+            "hasselmann_inertial_oscillation.jl" => ("# # Hasselmann Column Growth", "hasselmann_column", "run_validation", "horizontal_advection=nothing"),
+            "cwcm_q_transform_sheared_current.jl" => ("# # CWCM Q-Transform", "QTransform", "CWCMPrescribedCurrentCoupling", "horizontal_advection=nothing"),
+            "frequency_direction_source_package.jl" => ("# # Frequency-Direction Source Package", "FrequencyDirectionGrid", "SourceTermSet", "horizontal_advection=nothing", "SemiImplicitEuler"),
             "exact_finite_volume_source_rates.jl" => ("# # Exact Finite-Volume Source Rates", "spectral_frequency_power_average", "spectral_radial_power_average", "center_frequency_factor"),
-            "vortex_refraction.jl" => ("# # Wave Refraction Through A Barotropic Vortex", "PolarWaveVectorGrid", "velocities", "rk3_step!", "advection = nothing"),
+            "vortex_refraction.jl" => ("# # Wave Refraction Through A Barotropic Vortex", "PolarWaveVectorGrid", "velocities", "Simulation", ":RK3"),
         )
 
         for (file, required_patterns) in semantic_examples
