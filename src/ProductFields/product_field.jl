@@ -1,16 +1,33 @@
 import Oceananigans
 import Oceananigans.Fields: Field, interior, set!
 import Oceananigans.BoundaryConditions: fill_halo_regions!
+import OffsetArrays: OffsetArray
 
 struct ProductGrid{PG, CG}
     physical :: PG
     coordinate :: CG
 end
 
-struct ProductField{LX, LY, LZ, LXi, LEta, PG, CG, F, T} <: AbstractArray{T, 4}
+# Bundle of metadata needed to construct any per-bin Oceananigans Field over
+# the same physical grid + location. Shared by every spectral cell in a
+# ProductField, so `physical_field(f, m, n)` builds a Field on demand that
+# just wraps a view into `flat_data` plus this cached metadata.
+struct ProductFieldStencil{L, I, O, BC}
+    loc :: L
+    indices :: I
+    offsets :: O
+    bcs :: BC
+end
+
+# ProductField is backed by a single contiguous 5D array `flat_data` that
+# stores `(x_with_halo, y_with_halo, z_slab, κ, φ)`. There is no Matrix of
+# Fields; per-bin Fields are constructed on demand by `physical_field` using
+# views into `flat_data` and the cached metadata in `stencil`.
+struct ProductField{LX, LY, LZ, LXi, LEta, PG, CG, S, D, T} <: AbstractArray{T, 4}
     grid :: PG
     coordinate_grid :: CG
-    fields :: Matrix{F}
+    stencil :: S
+    flat_data :: D
 end
 
 coordinate_float_type(coordinate_grid) = Float64
@@ -41,21 +58,25 @@ function ocean_field_location(::Type{LX}, ::Type{LY}, ::Type{LZ}) where {LX, LY,
             instantiate_location_marker(OZ))
 end
 
+# Build the shared metadata stencil and the contiguous 5D backing.
 function product_field_storage(::Type{LX}, ::Type{LY}, ::Type{LZ},
                                grid, coordinate_grid, ::Type{FT}) where {LX, LY, LZ, FT}
     Nxi, Neta = coordinate_size(coordinate_grid)
     loc = ocean_field_location(LX, LY, LZ)
     indices = surface_indices(grid, LZ)
-    first_field = Field(loc, grid, FT; indices)
-    fields = Matrix{typeof(first_field)}(undef, Nxi, Neta)
-    fields[1, 1] = first_field
 
-    for n in 1:Neta, m in 1:Nxi
-        m == 1 && n == 1 && continue
-        fields[m, n] = Field(loc, grid, FT; indices)
-    end
+    probe = Field(loc, grid, FT; indices)
+    probe_data = probe.data
+    parent_size = size(parent(probe_data))
+    ax = axes(probe_data)
+    offsets = ntuple(d -> first(ax[d]) - 1, ndims(probe_data))
+    bcs = probe.boundary_conditions
 
-    return fields
+    flat_data = Array{FT}(undef, parent_size..., Nxi, Neta)
+    fill!(flat_data, zero(FT))
+
+    stencil = ProductFieldStencil(loc, indices, offsets, bcs)
+    return stencil, flat_data
 end
 
 function ProductField{LX, LY, LZ, LXi, LEta}(grid, coordinate_grid;
@@ -74,12 +95,12 @@ function ProductField{LX, LY, LZ, LXi, LEta}(grid, coordinate_grid;
     lxi = canonical_location_marker(LXi)
     leta = canonical_location_marker(LEta)
     FT = eltype
-    fields = product_field_storage(lx, ly, lz, grid, coordinate_grid, FT)
-    field_type = Base.eltype(fields)
+    stencil, flat_data = product_field_storage(lx, ly, lz, grid, coordinate_grid, FT)
 
     return ProductField{lx, ly, lz, lxi, leta,
-                        typeof(grid), typeof(coordinate_grid), field_type, FT}(
-        grid, coordinate_grid, fields)
+                        typeof(grid), typeof(coordinate_grid),
+                        typeof(stencil), typeof(flat_data), FT}(
+        grid, coordinate_grid, stencil, flat_data)
 end
 
 function ProductField(grid, coordinate_grid;
@@ -101,8 +122,10 @@ WaveActionField(grid, coordinate_grid; kwargs...) =
     ProductField(grid, coordinate_grid; location=(Center, Center, Nothing),
                  coordinate_location=(Center, Center), kwargs...)
 
-Base.parent(f::ProductField) = f.fields
-Base.eltype(::ProductField{LX, LY, LZ, LXi, LEta, PG, CG, F, T}) where {LX, LY, LZ, LXi, LEta, PG, CG, F, T} = T
+# `parent` returns the contiguous 5D backing; `flat_data` is the public alias.
+Base.parent(f::ProductField) = f.flat_data
+flat_data(f::ProductField) = f.flat_data
+Base.eltype(::ProductField{LX, LY, LZ, LXi, LEta, PG, CG, S, D, T}) where {LX, LY, LZ, LXi, LEta, PG, CG, S, D, T} = T
 architecture(f::ProductField) = architecture(f.grid)
 grid(f::ProductField) = f.grid
 physical_grid(f::ProductField) = f.grid
@@ -112,9 +135,19 @@ location(::ProductField{LX, LY, LZ}) where {LX, LY, LZ} = (LX, LY, LZ)
 coordinate_location(::ProductField{LX, LY, LZ, LXi, LEta}) where {LX, LY, LZ, LXi, LEta} = (LXi, LEta)
 product_location(f::ProductField) = (location(f)..., coordinate_location(f)...)
 active_product_location(f::ProductField) = (location(f)[1], location(f)[2], coordinate_location(f)...)
-boundary_conditions(f::ProductField) = map(field -> field.boundary_conditions, f.fields)
+boundary_conditions(f::ProductField) = f.stencil.bcs
 
-physical_field(f::ProductField, m, n) = f.fields[m, n]
+# Build a per-bin Oceananigans Field on demand. The data is a view into
+# `flat_data`, the bcs are shared from the cached stencil, so this allocates
+# only a thin Field wrapper.
+function physical_field(f::ProductField, m, n)
+    s = f.stencil
+    ncolon = length(s.offsets)
+    slab = view(f.flat_data, ntuple(_ -> Colon(), ncolon)..., m, n)
+    backed = OffsetArray(slab, s.offsets...)
+    return Field(s.loc, f.grid, eltype(f);
+                 indices=s.indices, data=backed, boundary_conditions=s.bcs)
+end
 
 function Base.size(f::ProductField)
     Nx, Ny = horizontal_size(f.grid)
@@ -129,13 +162,17 @@ Base.axes(f::ProductField, dim::Integer) = dim <= 4 ? axes(f)[dim] : Base.OneTo(
 Base.IndexStyle(::Type{<:ProductField}) = IndexCartesian()
 
 @inline function getnode(f::ProductField, i, j, m, n)
-    data = interior(physical_field(f, m, n))
-    @inbounds return data[i, j, 1]
+    s = f.stencil
+    Hx, Hy = s.offsets[1], s.offsets[2]
+    iz = first(axes(f.flat_data, 3))
+    @inbounds return f.flat_data[i - Hx, j - Hy, iz, m, n]
 end
 
 @inline function setnode!(f::ProductField, value, i, j, m, n)
-    data = interior(physical_field(f, m, n))
-    @inbounds data[i, j, 1] = value
+    s = f.stencil
+    Hx, Hy = s.offsets[1], s.offsets[2]
+    iz = first(axes(f.flat_data, 3))
+    @inbounds f.flat_data[i - Hx, j - Hy, iz, m, n] = value
     return value
 end
 
@@ -162,12 +199,7 @@ end
 function copy_product_field!(dest::ProductField, src::ProductField)
     size(dest) == size(src) ||
         throw(DimensionMismatch("cannot copy ProductField of size $(size(src)) to size $(size(dest))"))
-
-    _, _, Nxi, Neta = size(dest)
-    for n in 1:Neta, m in 1:Nxi
-        set!(physical_field(dest, m, n), physical_field(src, m, n))
-    end
-
+    copyto!(dest.flat_data, src.flat_data)
     return dest
 end
 
@@ -180,10 +212,11 @@ end
 function interior(f::ProductField)
     Nx, Ny, Nxi, Neta = size(f)
     values = Array{eltype(f)}(undef, Nx, Ny, Nxi, Neta)
-
-    for n in 1:Neta, m in 1:Nxi
-        values[:, :, m, n] .= view(interior(physical_field(f, m, n)), :, :, 1)
+    s = f.stencil
+    Hx, Hy = s.offsets[1], s.offsets[2]
+    iz = first(axes(f.flat_data, 3))
+    @inbounds for n in 1:Neta, m in 1:Nxi, j in 1:Ny, i in 1:Nx
+        values[i, j, m, n] = f.flat_data[i - Hx, j - Hy, iz, m, n]
     end
-
     return values
 end

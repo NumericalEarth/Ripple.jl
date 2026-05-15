@@ -78,6 +78,13 @@ function validate_cwcm_coupling_cache_shape(coupling, name, cache, expected_size
     return nothing
 end
 
+resolve_coupling(::Nothing, coupling, grid, spectral_grid) = coupling
+function resolve_coupling(velocities, coupling, grid, spectral_grid)
+    coupling === nothing ||
+        throw(ArgumentError("pass either `velocities` or `coupling`, not both"))
+    return build_coupling(velocities, grid, spectral_grid; FT=Float64)
+end
+
 validate_model_coupling(::Nothing, grid, spectral_grid) = nothing
 
 function validate_model_coupling(coupling::CWCMPrescribedCurrentCoupling, grid, spectral_grid)
@@ -138,6 +145,7 @@ function SpectralWaveModel(grid;
                            action=nothing,
                            advection=WENO(),
                            sources=nothing,
+                           velocities=nothing,
                            coupling=nothing,
                            timestepper=:ForwardEuler,
                            clock=Clock(time=0.0))
@@ -147,6 +155,7 @@ function SpectralWaveModel(grid;
                                   validate_model_action(action, grid, spectral_grid)
     sources = validate_model_sources(canonical_model_sources(sources))
     advection = validate_model_advection(canonical_model_advection(advection), grid, spectral_grid)
+    coupling = resolve_coupling(velocities, coupling, grid, spectral_grid)
     coupling = canonical_model_coupling(coupling)
     coupling = validate_model_coupling(coupling, grid, spectral_grid)
     timestepper = canonical_model_timestepper(timestepper)

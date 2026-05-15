@@ -46,8 +46,10 @@ export wind_velocity, wind_speed, wind_angle
 export QKernel, QTransform, OnTheFlyQ, CacheDopplerVelocity, CacheDopplerVelocityAndDerivative
 export PrecomputeQWeights, vertical_nodes, vertical_faces
 export PrescribedLagrangianMeanCurrent, NoCurrentCoupling, CWCMPrescribedCurrentCoupling
+export AbstractLagrangianVelocities, ZeroVelocities, PrescribedVelocities, PseudomomentumVelocities
 export q_value, q_cell_integral, q_cell_integral_kappa_derivative
 export compute_doppler_velocity!, compute_doppler_velocity_derivative!, compute_pseudomomentum
+export compute_wave_current_refraction_tendency!, rk3_step!
 export pseudomomentum_field, pseudomomentum_fields
 export vertical_spacings, vertical_integral
 export compute_pseudomomentum_cell_integrals, compute_pseudomomentum_cell_integrals!
