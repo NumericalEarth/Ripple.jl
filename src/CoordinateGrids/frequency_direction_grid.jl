@@ -75,6 +75,8 @@ coordinate_float_type(::FrequencyDirectionGrid{FT}) where FT = FT
     return (κ * cos(φ), κ * sin(φ))
 end
 
+@inline spectral_coordinates(g::FrequencyDirectionGrid, m, n) = (g.frequency[m], g.φ[n])
+
 @inline radial_wavenumber(g::FrequencyDirectionGrid, m, n) = g.κ[m]
 @inline metric_jacobian(g::FrequencyDirectionGrid, m, n) = g.κ[m]
 

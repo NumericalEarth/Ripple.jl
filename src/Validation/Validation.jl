@@ -294,10 +294,9 @@ function hasselmann_column_validation()
                            z=(-1, 0))
     cgrid = PolarWaveVectorGrid(; κ=range(0.35, 1.15; length=8),
                                   φ=range(0, 2pi; length=17)[1:16])
-    target(x, y, kx, ky) = begin
-        k = hypot(kx, ky)
-        direction = k == 0 ? 0.0 : max(kx / k, 0.0)^4
-        exp(-((k - 0.75) / 0.22)^2) * direction
+    target(x, y, κ, φ) = begin
+        direction = max(cos(φ), 0.0)^4
+        exp(-((κ - 0.75) / 0.22)^2) * direction
     end
 
     alpha = 1.3
@@ -598,7 +597,7 @@ function run_performance_smoke(; Nx=6, Ny=5, Nk=5, Nθ=8)
     field = WaveActionField(grid, cgrid)
     product_field_metric = performance_metric(:product_field, :set_and_m0,
                                                "Set a ProductField and compute zeroth moment.") do
-        set!(field, (x, y, kx, ky) -> 1 + 0.01x + 0.02y + 0.03hypot(kx, ky))
+        set!(field, (x, y, κ, φ) -> 1 + 0.01x + 0.02y + 0.03κ)
         m0(field)
     end
     model = SpectralWaveModel(; advection=nothing, grid,

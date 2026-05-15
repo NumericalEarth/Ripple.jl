@@ -439,8 +439,8 @@ end
 
 function relaxation_target_value(s::RelaxationToSpectrum, model, i, j, m, n)
     xs, ys = xnodes(model.grid), ynodes(model.grid)
-    kx, ky = k_components(model.spectral_grid, m, n)
-    return s.target(xs[i], ys[j], kx, ky)
+    ξ, η = spectral_coordinates(model.spectral_grid, m, n)
+    return s.target(xs[i], ys[j], ξ, η)
 end
 
 function source_split(s::RelaxationToSpectrum, model, i, j, m, n)

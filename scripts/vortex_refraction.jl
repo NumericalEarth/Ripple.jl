@@ -46,11 +46,8 @@ model = SpectralWaveModel(; grid,
 coupling = model.coupling
 
 κ0 = 0.4; σκ = 0.05; σφ = 0.30
-set!(model, N = (x, y, kx, ky) -> begin
-    κ = hypot(kx, ky)
-    φ = atan(ky, kx)
-    exp(-((κ - κ0) / σκ)^2 - (sin(φ / 2)^2) / σφ^2)
-end)
+set!(model, N = (x, y, κ, φ) ->
+     exp(-((κ - κ0) / σκ)^2 - (sin(φ / 2)^2) / σφ^2))
 
 G  = similar(model.action)
 N1 = similar(model.action)

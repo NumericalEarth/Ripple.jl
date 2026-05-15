@@ -81,7 +81,7 @@ Base.similar(::MockBackendArray, ::Type{T}, dims::Dims) where T = MockBackendArr
 
     cgrid = PolarWaveVectorGrid(; κ=[0.5, 1.0], φ=range(0, 2pi; length=9)[1:8])
     N = WaveActionField(grid, cgrid)
-    set!(N, (x, y, kx, ky) -> 1 + kx)
+    set!(N, (x, y, κ, φ) -> 1 + κ * cos(φ))
     px, py = compute_pseudomomentum_cell_integrals(N, 1.0, qt)
     spectral_cached_qt = QTransform(q, grid, PrecomputeQWeights(qt, cgrid.κ, 1.0))
     cached_px, cached_py = compute_pseudomomentum_cell_integrals(N, 1.0, spectral_cached_qt)

@@ -19,7 +19,7 @@
     @test all(m0(N) .> 0)
     @test all(significant_wave_height(N) .> 0)
 
-    set!(N, (x, y, kx, ky) -> abs(kx) < 1e-12 && ky > 0 ? 10.0 : 1.0)
+    set!(N, (x, y, κ, φ) -> abs(φ - pi / 2) < 1e-12 ? 10.0 : 1.0)
     @test all(peak_direction(N) .≈ pi / 2)
     @test all(peak_wavenumber(N) .≈ 1.0)
     @test all(deep_water_peak_phase_speed(N; gravity=9.0) .≈ 3.0)
@@ -69,7 +69,8 @@ end
     @test mean_period(N)[1, 1] ≈ inv(expected_mean)
 
     peak_kappa = radial_wavenumber(cgrid, 3, 1)
-    set!(N, (x, y, kx, ky) -> abs(hypot(kx, ky) - peak_kappa) < 1e-12 ? 10.0 : 1.0)
+    peak_frequency_value = cgrid.frequency[3]
+    set!(N, (x, y, f, φ) -> abs(f - peak_frequency_value) < 1e-12 ? 10.0 : 1.0)
     @test peak_frequency(N)[1, 1] == cgrid.frequency[3]
     @test peak_period(N)[1, 1] == inv(cgrid.frequency[3])
     @test peak_wavenumber(N)[1, 1] == cgrid.κ[3]
@@ -88,7 +89,7 @@ end
     @test energy[1, 1] > 0
     @test total_deep_water_energy(N; gravity=9.81) ≈ energy[1, 1]
 
-    set!(N, (x, y, kx, ky) -> abs(kx) < 1e-12 && ky > 0 ? 10.0 : 1.0)
+    set!(N, (x, y, f, φ) -> abs(φ - pi / 2) < 1e-12 ? 10.0 : 1.0)
     @test peak_direction(N)[1, 1] == pi / 2
 
     pgrid = PolarWaveVectorGrid(; κ=[1.0], φ=φ)

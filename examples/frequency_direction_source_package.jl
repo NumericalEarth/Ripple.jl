@@ -43,13 +43,11 @@ north_n = argmin(abs.(collect(directions_radians) .- pi / 2))
 west_n = argmin(abs.(collect(directions_radians) .- pi))
 south_n = argmin(abs.(collect(directions_radians) .- 3pi / 2))
 
-frequency_from_kappa(kappa) = sqrt(9.81 * kappa) / (2pi)
 angular_distance(a, b) = abs(atan(sin(a - b), cos(a - b)))
 
-set!(model, N=(x, y, kx, ky) -> begin
-    frequency = frequency_from_kappa(hypot(kx, ky))
-    direction = mod(atan(ky, kx), 2pi)
-    at_peak_frequency = abs(frequency - frequencies[peak_m]) < 1e-12
+set!(model, N=(x, y, f, φ) -> begin
+    direction = mod(φ, 2pi)
+    at_peak_frequency = abs(f - frequencies[peak_m]) < 1e-12
     at_peak_frequency && angular_distance(direction, directions_radians[east_n]) < 1e-12 && return 2.0
     at_peak_frequency && angular_distance(direction, directions_radians[north_n]) < 1e-12 && return 0.4
     at_peak_frequency && angular_distance(direction, directions_radians[south_n]) < 1e-12 && return 0.4

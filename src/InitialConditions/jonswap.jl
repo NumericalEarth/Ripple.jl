@@ -1,4 +1,4 @@
-struct JONSWAPSpectrum{FT}
+struct JONSWAPSpectrum{FT} <: AbstractCartesianSpectrumProfile
     Hs :: FT
     Tp :: FT
     direction :: FT
