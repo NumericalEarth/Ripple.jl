@@ -65,6 +65,7 @@ end
         "cwcm_q_transform_sheared_current.jl",
         "frequency_direction_source_package.jl",
         "exact_finite_volume_source_rates.jl",
+        "vortex_refraction.jl",
     ]
 
     discovered_examples = sort([basename(path) for path in readdir(example_dir; join=true)
@@ -97,6 +98,7 @@ end
             "cwcm_q_transform_sheared_current.jl" => ("# # CWCM Q-Transform", "QTransform", "CWCMPrescribedCurrentCoupling", "advection=nothing"),
             "frequency_direction_source_package.jl" => ("# # Frequency-Direction Source Package", "FrequencyDirectionGrid", "SourceTermSet", "advection=nothing", "SemiImplicitEuler"),
             "exact_finite_volume_source_rates.jl" => ("# # Exact Finite-Volume Source Rates", "spectral_frequency_power_average", "spectral_radial_power_average", "center_frequency_factor"),
+            "vortex_refraction.jl" => ("# # Wave Refraction Through A Barotropic Vortex", "PolarWaveVectorGrid", "velocities", "rk3_step!", "advection = nothing"),
         )
 
         for (file, required_patterns) in semantic_examples

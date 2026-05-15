@@ -12,6 +12,7 @@ const EXAMPLE_TUTORIALS = (
     ("cwcm_q_transform_sheared_current.jl", "CWCM Q-Transform Shear"),
     ("frequency_direction_source_package.jl", "Frequency-Direction Sources"),
     ("exact_finite_volume_source_rates.jl", "Exact Finite-Volume Source Rates"),
+    ("vortex_refraction.jl", "Wave Refraction Through A Barotropic Vortex"),
 )
 
 function example_slug(filename)

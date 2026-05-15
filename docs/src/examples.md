@@ -41,6 +41,7 @@ Pages = [
     "generated/examples/cwcm_q_transform_sheared_current.md",
     "generated/examples/frequency_direction_source_package.md",
     "generated/examples/exact_finite_volume_source_rates.md",
+    "generated/examples/vortex_refraction.md",
 ]
 Depth = 1
 ```
