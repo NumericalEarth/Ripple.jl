@@ -13,7 +13,7 @@ frequencies = range(0.08, 0.30; length=16)
 directions_radians = range(0, 2pi; length=25)[1:24]
 spectral_grid = FrequencyDirectionGrid(Float64;
                                        frequency=frequencies,
-                                       theta=directions_radians)
+                                       φ=directions_radians)
 
 sources = SourceTermSet(
     PowerLawWindInput(rate=0.2,
@@ -57,7 +57,7 @@ initial_peak_frequency = peak_frequency(model.action)[1, 1]
 initial_mean_frequency = mean_frequency(model.action)[1, 1]
 initial_east_peak = model.action[1, 1, peak_m, east_n]
 initial_west_peak = model.action[1, 1, peak_m, west_n]
-initial_directional_peak = [model.action[1, 1, peak_m, n] for n in 1:length(spectral_grid.theta)]
+initial_directional_peak = [model.action[1, 1, peak_m, n] for n in 1:length(spectral_grid.φ)]
 
 east_positive, east_damping = source_split(sources, model, 1, 1, peak_m, east_n)
 west_positive, west_damping = source_split(sources, model, 1, 1, peak_m, west_n)
@@ -89,7 +89,7 @@ for n in 1:step_count
     end
 end
 
-final_directional_peak = [model.action[1, 1, peak_m, n] for n in 1:length(spectral_grid.theta)]
+final_directional_peak = [model.action[1, 1, peak_m, n] for n in 1:length(spectral_grid.φ)]
 directions = collect(directions_radians) .* 180 ./ pi
 
 push!(plot_paths,
@@ -123,4 +123,4 @@ push!(animation_paths,
 @show initial_mean_frequency
 @show final_mean_frequency
 @show plot_paths
-@show animation_paths</code></pre><h2 id="Running-The-Example"><a class="docs-heading-anchor" href="#Running-The-Example">Running The Example</a><a id="Running-The-Example-1"></a><a class="docs-heading-anchor-permalink" href="#Running-The-Example" title="Permalink"></a></h2><p>From the repository root:</p><pre><code class="language-bash hljs">julia --startup-file=no --project=. examples/frequency_direction_source_package.jl</code></pre><p>Set <code>RIPPLE_EXAMPLE_MODE=small</code> for the fast smoke-test version.</p><p>This literate page is generated from <code>examples/frequency_direction_source_package.jl</code>.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../cwcm_q_transform_sheared_current/">« CWCM Q-Transform Shear</a><a class="docs-footer-nextpage" href="../exact_finite_volume_source_rates/">Exact Finite-Volume Source Rates »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Thursday 14 May 2026 22:42">Thursday 14 May 2026</span>. Using Julia version 1.10.11.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+@show animation_paths</code></pre><h2 id="Running-The-Example"><a class="docs-heading-anchor" href="#Running-The-Example">Running The Example</a><a id="Running-The-Example-1"></a><a class="docs-heading-anchor-permalink" href="#Running-The-Example" title="Permalink"></a></h2><p>From the repository root:</p><pre><code class="language-bash hljs">julia --startup-file=no --project=. examples/frequency_direction_source_package.jl</code></pre><p>Set <code>RIPPLE_EXAMPLE_MODE=small</code> for the fast smoke-test version.</p><p>This literate page is generated from <code>examples/frequency_direction_source_package.jl</code>.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../cwcm_q_transform_sheared_current/">« CWCM Q-Transform Shear</a><a class="docs-footer-nextpage" href="../exact_finite_volume_source_rates/">Exact Finite-Volume Source Rates »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Friday 15 May 2026 16:52">Friday 15 May 2026</span>. Using Julia version 1.10.11.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
