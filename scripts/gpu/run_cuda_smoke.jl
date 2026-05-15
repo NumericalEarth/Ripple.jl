@@ -42,6 +42,7 @@ function cuda_smoke_model(arch)
     model = SpectralWaveModel(; grid,
                                 spectral_grid=cgrid,
                                 sources,
+                                advection=nothing,
                                 timestepper=:SemiImplicitEuler)
     set!(model, N=(x, y, kx, ky) -> 0.5 + 0.01x - 0.02y + 0.03hypot(kx, ky) + 0.02cos(atan(ky, kx)))
     return model
