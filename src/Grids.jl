@@ -5,17 +5,31 @@ import Oceananigans.Architectures: architecture, on_architecture
 
 const OceanGrids = Oceananigans.Grids
 
-canonical_topology(topology::NoFlux) = topology
-canonical_topology(::Type{NoFlux}) = NoFlux()
 canonical_topology(::Type{T}) where T<:OceanGrids.AbstractTopology = T()
 canonical_topology(topology::OceanGrids.AbstractTopology) = topology
 canonical_topology(topology) =
-    throw(ArgumentError("unsupported topology marker $(repr(topology)); use Periodic, Bounded, NoFlux, or their instances"))
+    throw(ArgumentError("unsupported topology marker $(repr(topology)); use Periodic, Bounded, Flat, or their instances"))
 
 function canonical_topology_tuple(topology, expected_length, name)
     length(topology) == expected_length ||
         throw(ArgumentError("$name topology must have length $expected_length"))
     return map(canonical_topology, topology)
+end
+
+# Boundary-condition markers used by spectral grids and product fields.
+# NoFlux is Ripple's wave-action no-flux BC; Periodic mirrors Oceananigans'
+# periodic topology when used as a face condition.
+canonical_bc(::Type{NoFlux}) = NoFlux()
+canonical_bc(bc::NoFlux) = bc
+canonical_bc(::Type{T}) where T<:OceanGrids.AbstractTopology = T()
+canonical_bc(bc::OceanGrids.AbstractTopology) = bc
+canonical_bc(bc) =
+    throw(ArgumentError("unsupported boundary-condition marker $(repr(bc)); use NoFlux, Periodic, Bounded, or their instances"))
+
+function canonical_bc_tuple(bcs, expected_length, name)
+    length(bcs) == expected_length ||
+        throw(ArgumentError("$name boundary_conditions must have length $expected_length"))
+    return map(canonical_bc, bcs)
 end
 
 grid_float_type(grid::AbstractGrid) = eltype(grid)

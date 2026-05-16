@@ -118,27 +118,26 @@ end
 
 import Printf: @sprintf
 
-# Historical wart: `NoFlux` is a *boundary-condition* marker that some
-# spectral grid constructors still store in the `topology` slot. For
-# display purposes we render any axis carrying it as `Bounded`, which is
-# its actual topology; the no-flux behaviour is enforced elsewhere
-# (kernel) regardless of how it is labelled here.
-display_topology(::NoFlux) = Oceananigans.Grids.Bounded()
-display_topology(t)        = t
+# Spectral-axis topology is a property of the grid type; see
+# `spectral_topology` on each `<:AbstractSpectralGrid`. Boundary
+# conditions live separately in `g.boundary_conditions`.
 
-axis_topology_label(t) = _axis_topology_label(display_topology(t))
-_axis_topology_label(::Oceananigans.Grids.Periodic) = "Periodic"
-_axis_topology_label(::Oceananigans.Grids.Bounded)  = "Bounded "
-_axis_topology_label(::Oceananigans.Grids.Flat)     = "Flat    "
-_axis_topology_label(t)                             = string(nameof(typeof(t)))
+axis_topology_label(::Oceananigans.Grids.Periodic) = "Periodic"
+axis_topology_label(::Oceananigans.Grids.Bounded)  = "Bounded "
+axis_topology_label(::Oceananigans.Grids.Flat)     = "Flat    "
+axis_topology_label(t)                             = string(nameof(typeof(t)))
 
-axis_domain_close(t) = _axis_domain_close(display_topology(t))
-_axis_domain_close(::Oceananigans.Grids.Bounded)  = "]"
-_axis_domain_close(::Oceananigans.Grids.Periodic) = ")"
-_axis_domain_close(::Oceananigans.Grids.Flat)     = "]"
-_axis_domain_close(_)                             = ")"
+axis_domain_close(::Oceananigans.Grids.Bounded)  = "]"
+axis_domain_close(::Oceananigans.Grids.Periodic) = ")"
+axis_domain_close(::Oceananigans.Grids.Flat)     = "]"
+axis_domain_close(_)                             = ")"
 
-display_topology_name(t) = nameof(typeof(display_topology(t)))
+topology_name(t) = nameof(typeof(t))
+
+axis_bc_label(::NoFlux)                      = "NoFlux"
+axis_bc_label(::Oceananigans.Grids.Periodic) = "Periodic"
+axis_bc_label(::Oceananigans.Grids.Bounded)  = "Bounded"
+axis_bc_label(bc)                            = string(nameof(typeof(bc)))
 
 axis_pretty(x) = @sprintf("%.4g", x)
 
@@ -159,18 +158,19 @@ function axis_spacing_string(faces, name)
     end
 end
 
-function axis_summary(topo, faces, name)
-    return string(axis_topology_label(topo), " ", name, " ∈ ",
+function axis_summary(topo, faces, name; bc = nothing)
+    base = string(axis_topology_label(topo), " ", name, " ∈ ",
                   axis_domain_string(topo, faces), " ",
                   axis_spacing_string(faces, name))
+    return bc === nothing ? base : string(base, "  [", axis_bc_label(bc), " BC]")
 end
 
 # Build the parametric type signature (FT, T1, T2) used in summary lines.
-# Uses `display_topology_name` so axes whose topology slot still carries
-# the legacy `NoFlux` BC marker render as `Bounded`.
+# Topology is the genuine grid topology returned by `spectral_topology(g)`;
+# BC markers are reported separately.
 function spectral_type_signature(g::AbstractSpectralGrid)
     FT = coordinate_float_type(g)
-    topo_names = map(display_topology_name, g.topology)
+    topo_names = map(topology_name, spectral_topology(g))
     return string("{", FT, ", ", topo_names[1], ", ", topo_names[2], "}")
 end
 

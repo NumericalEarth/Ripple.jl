@@ -53,7 +53,7 @@ end
     cgrid = CartesianWaveVectorGrid(Float64;
                                     kx=[0.5, 1.0],
                                     ky=[-0.25, 0.25, 0.75],
-                                    topology=(NoFlux(), Periodic()))
+                                    boundary_conditions=(NoFlux(), Periodic()))
 
     field = ProductField(grid, cgrid;
                          location=(Center, Center, Nothing),
