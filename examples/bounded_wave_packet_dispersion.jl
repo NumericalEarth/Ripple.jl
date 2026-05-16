@@ -64,7 +64,8 @@ x_nodes = collect(xnodes(grid))
 x_obs   = 280.0
 i_obs   = argmin(abs.(x_nodes .- x_obs))
 
-m0_profile() = vec(interior(m0(model.action))[:, 1, 1])
+m0_profile()    = vec(interior(m0(model.action))[:, 1, 1])
+x_kappa_frame() = [model.action[i, 1, m, 1] for i in 1:Nx, m in 1:Nk]
 
 function observer_mean_kappa()
     f = root_mean_square_wavenumber(model.action)
@@ -75,16 +76,18 @@ dt              = 0.5
 step_count      = 400
 sample_interval = 4
 
-times    = [model.clock.time]
-profiles = [m0_profile()]
-κ_obs    = [observer_mean_kappa()]
+times        = [model.clock.time]
+profiles     = [m0_profile()]
+phase_frames = [x_kappa_frame()]
+κ_obs        = [observer_mean_kappa()]
 
 for step in 1:step_count
     time_step!(model, dt)
     if step == step_count || step % sample_interval == 0
-        push!(times,    model.clock.time)
-        push!(profiles, m0_profile())
-        push!(κ_obs,    observer_mean_kappa())
+        push!(times,        model.clock.time)
+        push!(profiles,     m0_profile())
+        push!(phase_frames, x_kappa_frame())
+        push!(κ_obs,        observer_mean_kappa())
     end
 end
 
@@ -136,3 +139,27 @@ lines!(ax2, times, κ_theory; label = "stationary phase: g t² / (4 D²)", lines
 hlines!(ax2, [kappas[1], kappas[end]]; color = :gray, linestyle = :dot)
 axislegend(ax2; position = :rb)
 fig2
+
+# ## Animation in (x, κ) space
+#
+# Action density on the (``x``, ``\kappa``) plane evolves into a clear
+# fan: each ``\kappa`` ring advects rightward at its own group velocity,
+# with the lowest ``\kappa`` (longest, fastest waves) at the top moving
+# fastest.
+
+fig3 = Figure(size = (720, 360))
+ax3  = Axis(fig3[1, 1]; title  = "Action density on (x, κ)",
+                        xlabel = "x (m)",
+                        ylabel = "κ (rad/m)")
+frame_obs = Observable(first(phase_frames))
+hm3 = heatmap!(ax3, x_nodes, kappas, frame_obs;
+               colormap   = :viridis,
+               colorrange = (0, maximum(maximum.(phase_frames))))
+Colorbar(fig3[1, 2], hm3)
+
+record(fig3, "x_kappa_packet_dispersion.mp4", eachindex(phase_frames); framerate = 12) do idx
+    frame_obs[] = phase_frames[idx]
+end
+nothing #hide
+
+# ![](x_kappa_packet_dispersion.mp4)
