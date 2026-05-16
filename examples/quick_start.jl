@@ -41,28 +41,34 @@ spectral_grid = PolarWaveVectorGrid(; κ = range(0.30, 0.50; length = 4),
 
 # ## Prescribed vortex velocity
 #
-# Barotropic (depth-uniform) Gaussian-cored vortex: peak azimuthal speed
-# ``U_0`` at radius ``a``. We pass the cell-centered ``u, v`` arrays
-# directly to `SpectralWaveModel` through the `velocities` kwarg.
+# Set the velocity from a streamfunction so the flow is exactly
+# nondivergent. For a Gaussian-cored vortex with peak azimuthal speed
+# ``U_0`` at radius ``a``,
+#
+# ```math
+# \psi(x, y) = U_0\, a\, \sqrt{e} \left( 1 - \exp\!\left( -\frac{(x - x_c)^2 + (y - y_c)^2}{2 a^2} \right) \right),
+# ```
+#
+# whose gradient gives ``u = -\partial_y \psi`` and ``v = +\partial_x \psi``.
 
 xc, yc = Lx / 2, Ly / 2
 a      = Lx / 8
 U0     = 0.4
 
+ψ_vortex(x, y) = U0 * a * sqrt(exp(1)) *
+                 (1 - exp(-((x - xc)^2 + (y - yc)^2) / (2 * a^2)))
+
+ψ = CenterField(grid)
+set!(ψ, (x, y, z) -> ψ_vortex(x, y))
+fill_halo_regions!(ψ)
+
+u_field = Field(@at (Center, Center, Center) -∂y(ψ))
+v_field = Field(@at (Center, Center, Center) +∂x(ψ))
+compute!(u_field)
+compute!(v_field);
+
 xs = xnodes(grid)
 ys = ynodes(grid)
-u_field = zeros(Nx, Ny, Nz)
-v_field = zeros(Nx, Ny, Nz)
-for k in 1:Nz, j in 1:Ny, i in 1:Nx
-    dx = xs[i] - xc
-    dy = ys[j] - yc
-    r  = hypot(dx, dy)
-    if r > 0
-        uθ = U0 * (r / a) * exp(0.5 - 0.5 * (r / a)^2)
-        u_field[i, j, k] = -uθ * dy / r
-        v_field[i, j, k] = +uθ * dx / r
-    end
-end
 
 # ## Model
 #

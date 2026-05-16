@@ -40,31 +40,41 @@ spectral_grid = PolarWaveVectorGrid(; κ = range(0.30, 0.50; length = 4),
 
 # ## Vortex velocity field
 #
-# A barotropic (depth-uniform) Gaussian-cored vortex. The azimuthal velocity
-# peaks at ``r = a`` with magnitude ``U_0``.
+# Set the velocity from a streamfunction so the depth-uniform vortex flow
+# is exactly nondivergent. For a Gaussian-cored vortex with peak azimuthal
+# speed ``U_0`` at radius ``a``,
+#
+# ```math
+# \psi(x, y) = U_0\, a\, \sqrt{e} \left( 1 - \exp\!\left( -\frac{(x - x_c)^2 + (y - y_c)^2}{2 a^2} \right) \right),
+# ```
+#
+# whose gradient gives ``u = -\partial_y \psi`` and ``v = +\partial_x \psi``.
+# Set ``\psi`` on a `CenterField`, then differentiate it with Oceananigans
+# AbstractOperations and interpolate the result back to cell centers.
 
 xc, yc = Lx / 2, Ly / 2
 a  = Lx / 8
 U0 = 0.4
 
-xs = xnodes(grid)
-ys = ynodes(grid)
-u_field = zeros(Nx, Ny, Nz)
-v_field = zeros(Nx, Ny, Nz)
-for k in 1:Nz, j in 1:Ny, i in 1:Nx
-    dx = xs[i] - xc
-    dy = ys[j] - yc
-    r  = hypot(dx, dy)
-    if r > 0
-        uθ = U0 * (r / a) * exp(0.5 - 0.5 * (r / a)^2)
-        u_field[i, j, k] = -uθ * dy / r
-        v_field[i, j, k] = +uθ * dx / r
-    end
-end
+ψ_vortex(x, y) = U0 * a * sqrt(exp(1)) *
+                 (1 - exp(-((x - xc)^2 + (y - yc)^2) / (2 * a^2)))
+
+ψ = CenterField(grid)
+set!(ψ, (x, y, z) -> ψ_vortex(x, y))
+fill_halo_regions!(ψ)
+
+u_field = Field(@at (Center, Center, Center) -∂y(ψ))
+v_field = Field(@at (Center, Center, Center) +∂x(ψ))
+compute!(u_field)
+compute!(v_field)
 
 # Static plot of the vortex speed field.
 
-let speed = hypot.(view(u_field, :, :, 1), view(v_field, :, :, 1))
+xs = xnodes(grid)
+ys = ynodes(grid)
+
+let speed = hypot.(view(interior(u_field), :, :, 1),
+                   view(interior(v_field), :, :, 1))
     fig = Figure(size = (640, 540))
     ax  = Axis(fig[1, 1]; title  = "Barotropic vortex |U| (m/s)",
                            xlabel = "x (m)", ylabel = "y (m)", aspect = 1)
