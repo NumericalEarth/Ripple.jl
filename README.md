@@ -9,7 +9,13 @@ the consistent wave-current coupled model derived by [Vanneste and Young (2026)]
 It stores wave action on a product space of three-dimensional physical
 `RectilinearGrid` cells and two-dimensional spectral coordinates, with logical
 indexing `N[i, j, m, n]` for horizontally varying wave action.
-The wave evolution is coupled to Lagrangian-mean currents through a "shear-dependent" integral
+The wave evolution is described by a wave action equation,
+
+$$ \partial_t N + \nabla_x \cdot \left ( N \nabla_k \Omega \right ) - \nabla_k \cdot \left ( \Omega \nabla_k N \right ) = N^\circ $$
+
+where $N(x, y, k, l)$ is the wave action density, $\Omega$ is the wave frequency, $N^\circ$ represents diabatic processes,
+and $\nabla_x$ and $\nabla_k$ denote gradients in physical and spectral space, respectively, 
+The evolution of $N$ is coupled to Lagrangian-mean currents through a "shear-dependent" integral
 dispersion relation derived by [Vanneste and Young (2026)](https://arxiv.org/abs/2602.21976),
 
 $$ \Omega = \sigma + \boldsymbol{k} \cdot U $$
@@ -27,6 +33,9 @@ where $\boldsymbol{u}^L(x, y, z)$ is the three-dimensional Lagrangian-mean veloc
 
 $$ Q(x, y, z, \kappa) \equiv \frac{2 \kappa \cosh(2 \kappa(z + d))}{\sinh(2 \kappa d)} $$
 
+When the Stokes drift or pseudomomentum of the wave field is consistently incorporated into
+the equations that describe the evolution of $u^L$, the system conserves a form of coupled energy
+that includes both wave energy and $|u^L|^2 / 2$.
 For more information, see [Vanneste and Young (2026)](https://arxiv.org/abs/2602.21976)
 and the documentation.
 
