@@ -82,9 +82,7 @@ function oceananigans_smoke_result()
     cgrid = PolarWaveVectorGrid(Float64;
                                 κ=[0.45, 0.9],
                                 φ=range(0, 2pi; length=9)[1:8])
-    model = Base.invokelatest(SpectralWaveModel;
-                              grid=ocean_grid,
-                              spectral_grid=cgrid,
+    model = Base.invokelatest(SpectralWaveModel, ocean_grid, cgrid;
                               horizontal_advection=nothing,
                               timestepper=:ForwardEuler)
     initial_action = (x, y, kx, ky) -> 0.4 + 0.03x - 0.01y + 0.02kx - 0.015ky
@@ -149,9 +147,7 @@ function oceananigans_smoke_result()
                               field_storage_latest(current_u),
                               field_storage_latest(current_v),
                               1.0, cgrid.κ, qtransform)
-    native_current_model = Base.invokelatest(SpectralWaveModel;
-                                             grid=ocean_grid,
-                                             spectral_grid=cgrid,
+    native_current_model = Base.invokelatest(SpectralWaveModel, ocean_grid, cgrid;
                                              coupling=native_coupling,
                                              horizontal_advection=nothing,
                                              timestepper=:ForwardEuler)
