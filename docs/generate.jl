@@ -1,23 +1,15 @@
-const GENERATED_DOC_FILENAMES = (
-    "implementation_status.md",
-    "goal_completion_audit.md",
-    "external_comparison_harness.md",
-)
-
+# Each entry maps an example basename (without `.jl`) to its displayed
+# title in the Documenter table of contents. Order is the order in which
+# pages appear in the sidebar.
 const EXAMPLE_TUTORIALS = (
-    ("product_field_basics.jl", "Product Field Basics"),
-    ("source_only_fetch_limited_growth.jl", "Source-Only Fetch-Limited Growth"),
-    ("bounded_wave_packet_dispersion.jl", "Bounded Wave Packet Dispersion"),
-    ("hasselmann_inertial_oscillation.jl", "Hasselmann Column Growth"),
-    ("cwcm_q_transform_sheared_current.jl", "CWCM Q-Transform Shear"),
-    ("frequency_direction_source_package.jl", "Frequency-Direction Sources"),
-    ("exact_finite_volume_source_rates.jl", "Exact Finite-Volume Source Rates"),
-    ("vortex_refraction.jl", "Wave Refraction Through A Barotropic Vortex"),
+    ("quick_start.jl",                       "Quick Start"),
+    ("source_only_fetch_limited_growth.jl",  "Source-Only Fetch-Limited Growth"),
+    ("bounded_wave_packet_dispersion.jl",    "Bounded Wave Packet Dispersion"),
+    ("spectral_refraction_by_shear.jl",      "Spectral Refraction by a Sheared Current"),
+    ("vortex_refraction.jl",                 "Wave Refraction Through A Barotropic Vortex"),
 )
 
-function example_slug(filename)
-    return first(splitext(filename)) * ".md"
-end
+example_slug(filename) = first(splitext(filename)) * ".md"
 
 function generated_example_pages()
     pages = Pair{String, String}["Overview" => "examples.md"]
@@ -27,77 +19,51 @@ function generated_example_pages()
     return pages
 end
 
-function convert_literate_example(source_path, output_path; title)
-    lines = readlines(source_path)
-    mkpath(dirname(output_path))
+# Postamble appended to every literate example so the docs page records
+# the Julia version and the top-level packages it ran against. Mirrors
+# Oceananigans / Breeze.
+const EXAMPLE_POSTAMBLE = """
 
-    open(output_path, "w") do io
-        code_open = false
+# ---
 
-        for line in lines
-            if startswith(line, "# ")
-                if code_open
-                    println(io, "```")
-                    println(io)
-                    code_open = false
-                end
-                println(io, line[3:end])
-            elseif line == "#"
-                if code_open
-                    println(io, "```")
-                    println(io)
-                    code_open = false
-                end
-                println(io)
-            else
-                if !code_open
-                    println(io)
-                    println(io, "```julia")
-                    code_open = true
-                end
-                println(io, line)
-            end
-        end
+# ### Julia version and environment information
+#
+# This example was executed with the following version of Julia:
 
-        code_open && println(io, "```")
+using InteractiveUtils: versioninfo
+versioninfo()
 
-        println(io)
-        println(io, "## Running The Example")
-        println(io)
-        println(io, "From the repository root:")
-        println(io)
-        println(io, "```bash")
-        println(io, "julia --startup-file=no --project=. examples/$(basename(source_path))")
-        println(io, "```")
-        println(io)
-        println(io, "Set `RIPPLE_EXAMPLE_MODE=small` for the fast smoke-test version.")
-        println(io)
-        println(io, "This literate page is generated from `examples/$(basename(source_path))`.")
+# These were the top-level packages installed in the environment:
+
+import Pkg
+Pkg.status()
+"""
+
+function build_literate_examples!(docs_root)
+    # `Literate` must be available in the scope that invokes this function
+    # (typically `docs/make.jl` adds `using Literate` before `include`ing
+    # this file). Keeping the import out here lets the top-level project
+    # read `EXAMPLE_TUTORIALS` without depending on Literate.
+    examples_src_dir = joinpath(docs_root, "..", "examples")
+    output_dir       = joinpath(docs_root, "src", "generated", "examples")
+    rm(output_dir; force = true, recursive = true)
+    mkpath(output_dir)
+
+    for (filename, _title) in EXAMPLE_TUTORIALS
+        script_path = joinpath(examples_src_dir, filename)
+        @info "Literate: building $(filename)"
+        Literate.markdown(script_path, output_dir;
+                          flavor     = Literate.DocumenterFlavor(),
+                          preprocess = content -> content * EXAMPLE_POSTAMBLE,
+                          execute    = true)
     end
 
-    return output_path
+    return output_dir
 end
 
-function generate_documentation_sources!(docs_root=@__DIR__)
+function generate_documentation_sources!(docs_root = @__DIR__)
     generated_dir = joinpath(docs_root, "src", "generated")
     mkpath(generated_dir)
-
-    for filename in GENERATED_DOC_FILENAMES
-        cp(joinpath(docs_root, filename),
-           joinpath(generated_dir, filename);
-           force=true)
-    end
-
-    examples_dir = joinpath(generated_dir, "examples")
-    source_examples_dir = joinpath(docs_root, "..", "examples")
-    rm(examples_dir; force=true, recursive=true)
-    mkpath(examples_dir)
-
-    for (filename, title) in EXAMPLE_TUTORIALS
-        convert_literate_example(joinpath(source_examples_dir, filename),
-                                 joinpath(examples_dir, example_slug(filename));
-                                 title)
-    end
-
+    build_literate_examples!(docs_root)
     return generated_dir
 end

@@ -33,17 +33,16 @@ function cuda_smoke_model(arch)
     cgrid = PolarWaveVectorGrid(Float64;
                                 κ=[0.45, 0.8, 1.2],
                                 φ=range(0, 2pi; length=7)[1:6])
-    sources = SourceTermSet((WaveAgeWindInput(rate=0.01,
+    sources = GenericPhysics((WaveAgeWindInput(rate=0.01,
                                               speed=3.0,
                                               inverse_wave_age_threshold=0.0,
                                               spreading_power=1.0,
                                               gravity=1.0),
                              BottomFriction(rate=0.002)))
-    model = SpectralWaveModel(; grid,
-                                spectral_grid=cgrid,
-                                sources,
-                                advection=nothing,
-                                timestepper=:SemiImplicitEuler)
+    model = SpectralWaveModel(grid, cgrid;
+                      sources,
+                      horizontal_advection=nothing,
+                      timestepper=:SemiImplicitEuler)
     set!(model, N=(x, y, kx, ky) -> 0.5 + 0.01x - 0.02y + 0.03hypot(kx, ky) + 0.02cos(atan(ky, kx)))
     return model
 end
@@ -53,7 +52,7 @@ function cuda_frequency_diagnostic_model(arch)
     cgrid = FrequencyDirectionGrid(Float64;
                                    frequency=[0.08, 0.12, 0.18, 0.27],
                                    φ=range(0, 2pi; length=9)[1:8])
-    model = SpectralWaveModel(; grid, spectral_grid=cgrid, advection=nothing)
+    model = SpectralWaveModel(grid, cgrid; horizontal_advection=nothing)
     set!(model, N=(x, y, kx, ky) -> 0.4 + 0.02x - 0.01y +
                                       0.04hypot(kx, ky) + 0.03cos(atan(ky, kx)))
     return model

@@ -1,46 +1,52 @@
 # Examples
 
-The `examples/` directory is a literate tutorial sequence. Every checked-in
-example is executable Julia, every example is included in this documentation, and
-every example writes at least one CairoMakie plot and one CairoMakie-recorded
-MP4 animation.
+The `examples/` directory is a curated literate-tutorial sequence. Each
+example is a valid Julia script (executable with
+`julia --project=docs examples/<name>.jl`) and is also rendered into this
+documentation by [Literate.jl](https://github.com/fredrikekre/Literate.jl)
+with `execute=true`, so every figure and animation on the example pages
+is the actual output of running that script during the docs build.
+
+The four example pages walk a deliberate arc:
+
+1. **[Quick Start](@ref)** — a small barotropic-vortex refraction
+   simulation that touches the major Ripple constructs (`RectilinearGrid`,
+   `PolarWaveVectorGrid`, `SpectralWaveModel`, `velocities`,
+   `Simulation`, the diagnostic suite) in roughly fifty lines.
+2. **[Source-Only Fetch-Limited Growth](@ref)** — a single-column
+   `horizontal_advection=nothing` source-balance test that approaches an
+   analytic equilibrium under wind input and whitecapping dissipation.
+3. **[Bounded Wave Packet Dispersion](@ref)** — physical transport in a
+   bounded one-dimensional channel; group-velocity dispersion fans out a
+   compact wavenumber packet across the domain.
+4. **[Spectral Refraction by a Sheared Current](@ref)** — an isolated
+   test of advection in spectral space: a uniform-in-space spectrum sees
+   only ``c_\varphi``, and the mean direction at each ``y`` is checked
+   against the linearised prediction
+   ``\overline{\varphi}(y) \approx -T\,A\,\omega\,\cos(\omega y)``.
+5. **[Wave Refraction Through A Barotropic Vortex](@ref)** — the
+   production-resolution version of the quick start, with a three-panel
+   animation showing `m₀`, `κᵣₘₛ`, and the mean direction evolving under
+   the fused Doppler + refraction kernel.
 
 Run any example from the repository root:
 
 ```bash
-julia --startup-file=no --project=. examples/hasselmann_inertial_oscillation.jl
+julia --startup-file=no --project=docs examples/quick_start.jl
 ```
 
-Use small mode for CI-speed runs:
-
-```bash
-RIPPLE_EXAMPLE_MODE=small julia --startup-file=no --project=. examples/hasselmann_inertial_oscillation.jl
-```
-
-By default plots and animations are written under
-`joinpath(tempdir(), "ripple_example_outputs", example_name)`. Set
-`RIPPLE_EXAMPLE_OUTPUT_DIR` to collect them somewhere specific.
-
-The smoke harness runs every checked-in example and verifies finite model state,
-validation results, plot files, animation files, and the literate docs manifest:
+The smoke harness runs every checked-in example end-to-end:
 
 ```bash
 julia --startup-file=no --project=. test/examples_smoke/run_examples.jl
 ```
 
-The tutorial order starts with field construction, then adds source-only
-columns, bounded-domain WENO transport, finite-volume source semantics, and
-current-coupling projections.
-
 ```@contents
 Pages = [
-    "generated/examples/product_field_basics.md",
+    "generated/examples/quick_start.md",
     "generated/examples/source_only_fetch_limited_growth.md",
     "generated/examples/bounded_wave_packet_dispersion.md",
-    "generated/examples/hasselmann_inertial_oscillation.md",
-    "generated/examples/cwcm_q_transform_sheared_current.md",
-    "generated/examples/frequency_direction_source_package.md",
-    "generated/examples/exact_finite_volume_source_rates.md",
+    "generated/examples/spectral_refraction_by_shear.md",
     "generated/examples/vortex_refraction.md",
 ]
 Depth = 1

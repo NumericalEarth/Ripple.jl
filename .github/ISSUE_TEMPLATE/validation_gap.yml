@@ -26,6 +26,7 @@ body:
         - Default suite
         - Oceananigans optional gate
         - CUDA optional gate
+        - Metal optional gate
         - External model optional gate
     validations:
       required: true

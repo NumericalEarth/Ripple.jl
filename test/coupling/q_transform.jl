@@ -112,6 +112,17 @@ Base.similar(::MockBackendArray, ::Type{T}, dims::Dims) where T = MockBackendArr
     @test Ripple.field_storage(ocean_py) == py_average
 end
 
+@testset "QTransform rejects Flat vertical grids" begin
+    grid = RectilinearGrid(CPU();
+                           size=(2, 2),
+                           x=(0, 2),
+                           y=(0, 2),
+                           topology=(Periodic, Periodic, Flat))
+    @test zfaces(grid) == Float64[]
+    @test znodes(grid) == Float64[]
+    @test_throws ArgumentError QTransform(QKernel(Float64), grid)
+end
+
 @testset "Prescribed CWCM current coupling caches" begin
     grid = RectilinearGrid(CPU();
                            size=(2, 2, 32),
@@ -131,7 +142,7 @@ end
     @test coupling.Uy[2, 2, 2] ≈ 2 atol=1e-12
     @test maximum(abs.(coupling.dUxdkappa)) < 1e-10
 
-    model = SpectralWaveModel(; grid, spectral_grid=cgrid, coupling, advection=nothing)
+    model = SpectralWaveModel(grid, cgrid; coupling, horizontal_advection=nothing, spectral_advection=nothing)
     @test model.coupling === coupling
     time_step!(model, 0.001)
     @test all(interior(model.action) .>= 0)

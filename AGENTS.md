@@ -67,15 +67,22 @@ Oceananigans and Breeze ecosystems.
 
 ### Model Constructors
 
-- `SpectralWaveModel(grid; spectral_grid, ...)` — `grid` is positional;
-  spectral grid and physics options are kwargs
+- `SpectralWaveModel(grid, spectral_grid; ...)` — both grids positional,
+  matching Oceananigans's convention. A keyword form
+  `SpectralWaveModel(; grid, spectral_grid, ...)` is also accepted.
 - The `velocities` kwarg builds the wave-current coupling internally. Accepted
   values: `nothing` (no coupling), `ZeroVelocities()`, `PrescribedVelocities`,
   `PseudomomentumVelocities()`, or a bare NamedTuple `(; u, v)`
 - `coupling` and `velocities` are mutually exclusive
-- Default `advection=WENO()` — column-style tests/validation opt out with
-  `advection=nothing`. Bigger physical halos (`halo=(3, 3, 3)`) are required
-  for default WENO5
+- Default `horizontal_advection=WENO()` and `spectral_advection=WENO()` —
+  column-style tests/validation opt out with `horizontal_advection=nothing`.
+  Bigger physical halos (`halo=(3, 3, 3)`) are required for default WENO5.
+- With a `CWCMPrescribedCurrentCoupling` and `spectral_advection !== nothing`,
+  `compute_tendencies!` uses the fused refraction kernel that includes
+  Doppler-shifted physical transport, so `horizontal_advection` is ignored
+  in that path.
+- `advection=` is a convenience shortcut that sets both `horizontal_advection`
+  and `spectral_advection` to the same scheme.
 
 ## Naming Conventions
 

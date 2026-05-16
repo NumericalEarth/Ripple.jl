@@ -73,9 +73,9 @@ end
 function goal_completion_items(root=repo_root(); default_suite_summary=nothing)
     items = GoalChecklistItem[
         status_item(:source_only_model,
-                    file_contains(root, "src/Models/spectral_wave_model.jl", ("advection=nothing",)) &&
+                    file_contains(root, "src/Models/spectral_wave_model.jl", ("horizontal_advection=WENO()",)) &&
                     file_contains(root, "src/Models/tendencies.jl", ("source_tendency",)),
-                    "SpectralWaveModel defaults to advection=nothing and tendencies are source-only.",
+                    "SpectralWaveModel exposes horizontal_advection/spectral_advection kwargs and tendencies wire source_tendency.",
                     "restore source-only model semantics"),
         status_item(:removed_private_advection,
                     !file_exists(root, "src/Operators/Operators.jl") &&
@@ -105,9 +105,9 @@ function goal_completion_items(root=repo_root(); default_suite_summary=nothing)
                     "The curated examples are literate, documented, and visualized.",
                     "restore literate example/docs smoke coverage"),
         status_item(:optional_gates_current,
-                    file_contains(root, "scripts/validation/check_optional_runtime_gates.jl", ("oceananigans", "cuda", "swan")) &&
+                    file_contains(root, "scripts/validation/check_optional_runtime_gates.jl", ("oceananigans", "cuda", "metal", "swan")) &&
                     !isfile(joinpath(root, "scripts", "output", "run_optional_dataset_backend_smoke.jl")),
-                    "Optional gates target Oceananigans, CUDA, and external models, not Ripple private output backends.",
+                    "Optional gates target Oceananigans, CUDA, Metal, and external models, not Ripple private output backends.",
                     "update optional gate scripts"),
     ]
 

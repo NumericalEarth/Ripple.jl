@@ -18,7 +18,7 @@ include("Validation/Validation.jl")
 export CPU, GPU, architecture
 export Center, Face, Flat
 export Periodic, Bounded, NoFlux, ProductBoundaryConditions, default_wave_action_bcs
-export RectilinearGrid, horizontal_size, vertical_size
+export RectilinearGrid, InfiniteDepth, horizontal_size, vertical_size
 export xnodes, ynodes, znodes, xfaces, yfaces, zfaces
 export xspacings, yspacings, zspacings
 export ProductField, WaveActionField
@@ -45,11 +45,12 @@ export StationaryVortexWind, IdealizedHurricaneWind, HollandHurricaneWind
 export wind_velocity, wind_speed, wind_angle
 export QKernel, QTransform, OnTheFlyQ, CacheDopplerVelocity, CacheDopplerVelocityAndDerivative
 export PrecomputeQWeights, vertical_nodes, vertical_faces
-export PrescribedLagrangianMeanCurrent, NoCurrentCoupling, CWCMPrescribedCurrentCoupling
+export PrescribedLagrangianMeanCurrent, NoCurrentCoupling
+export AbstractCWCMCurrentCoupling, CWCMPrescribedCurrentCoupling, CWCMPseudomomentumCoupling
 export AbstractLagrangianVelocities, ZeroVelocities, PrescribedVelocities, PseudomomentumVelocities
 export q_value, q_cell_integral, q_cell_integral_kappa_derivative
 export compute_doppler_velocity!, compute_doppler_velocity_derivative!, compute_pseudomomentum
-export compute_wave_current_refraction_tendency!, rk3_step!
+export compute_wave_current_refraction_tendency!
 export pseudomomentum_field, pseudomomentum_fields
 export vertical_spacings, vertical_integral
 export compute_pseudomomentum_cell_integrals, compute_pseudomomentum_cell_integrals!
@@ -79,6 +80,7 @@ export QuadrupletTransferInteraction, DiscreteInteractionApproximation
 export source_tendency, source_split, implicit_source_rate
 export SpectralWaveModel, Clock, fields, prognostic_fields, compute_tendencies!, time_step!, cfl
 export Centered, UpwindBiased, WENO, FluxFormAdvection
+export AbstractPropagationSmoothing, SpatialAveraging, apply_propagation_smoothing!
 export ValidationCase, ValidationResult, default_validation_cases, run_validation
 export validation_passed, write_validation_summary, read_validation_summary
 export ExternalComparisonResult, compare_validation_summaries

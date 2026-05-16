@@ -1,8 +1,8 @@
 # Ripple.jl
 
 [![CI](https://github.com/NumericalEarth/Ripple.jl/actions/workflows/ci.yml/badge.svg)](https://github.com/NumericalEarth/Ripple.jl/actions/workflows/ci.yml)
-[![Documentation](https://github.com/NumericalEarth/Ripple.jl/actions/workflows/documentation.yml/badge.svg)](https://github.com/NumericalEarth/Ripple.jl/actions/workflows/documentation.yml)
-[![Docs](https://img.shields.io/badge/docs-stable-blue.svg)](https://NumericalEarth.github.io/Ripple.jl/stable/)
+[![Docs Build](https://github.com/NumericalEarth/Ripple.jl/actions/workflows/documentation.yml/badge.svg)](https://github.com/NumericalEarth/Ripple.jl/actions/workflows/documentation.yml)
+[![Docs](https://img.shields.io/badge/docs-dev-blue.svg)](https://NumericalEarth.github.io/Ripple.jl/dev/)
 
 Ripple.jl is an Oceananigans-style spectral wave-action model prototype. It
 stores wave action on a product space of three-dimensional physical
@@ -21,7 +21,8 @@ Set up an initially uniform, narrow-banded wave-action field and refract it
 through a barotropic Gaussian vortex. The vortex velocity is the
 Lagrangian-mean current `uᴸ`; Ripple's fused refraction kernel applies
 Doppler-shifted physical transport at `c_g + uᴸ` together with kinematic
-spectral refraction `∇_k·(c_k N)` in a single pass, advanced with SSP-RK3.
+spectral refraction `∇_k·(c_k N)` in a single pass, driven by the model's
+SSP-RK3 time-stepper through `Oceananigans.Simulation`.
 
 ```julia
 using Oceananigans, Ripple
@@ -41,7 +42,7 @@ grid = RectilinearGrid(CPU();
 spectral_grid = PolarWaveVectorGrid(; κ = range(0.30, 0.50; length = 4),
                                       φ = range(0, 2pi; length = 17)[1:16])
 
-## Barotropic Gaussian-cored vortex: peak azimuthal speed U₀ at radius a.
+# Barotropic Gaussian-cored vortex: peak azimuthal speed U₀ at radius a.
 xc, yc, a, U0 = Lx/2, Ly/2, Lx/8, 0.4
 
 @inline function vortex_uθ(x, y)
@@ -54,39 +55,34 @@ v = CenterField(grid)
 set!(u, (x, y, z) -> -vortex_uθ(x, y) * (y - yc) / max(hypot(x - xc, y - yc), eps()))
 set!(v, (x, y, z) -> +vortex_uθ(x, y) * (x - xc) / max(hypot(x - xc, y - yc), eps()))
 
-model = SpectralWaveModel(grid;
-                          spectral_grid,
-                          velocities = (; u, v),          # uᴸ paradigm
-                          advection = nothing,            # fused kernel handles transport
+model = SpectralWaveModel(grid, spectral_grid;
+                          velocities = (; u, v),
+                          horizontal_advection = nothing,  # fused kernel drives transport
                           sources = nothing,
-                          timestepper = :ForwardEuler)
-coupling = model.coupling
+                          timestepper = :RK3)
 
-## Narrow-banded Gaussian initial condition: uniform in (x, y), centred on
-## κ₀ = 0.4 and direction φ = 0. The set!(::ProductField, fun) signature
-## tracks the spectral grid — for PolarWaveVectorGrid `fun` takes (x, y, κ, φ).
+# Narrow-banded Gaussian initial condition: uniform in (x, y), centred on
+# κ₀ = 0.4 and direction φ = 0. set!(::ProductField, fun) tracks the
+# spectral grid — for PolarWaveVectorGrid `fun` takes (x, y, κ, φ).
 κ0, σκ, σφ = 0.4, 0.05, 0.30
 function initial_action(x, y, κ, φ)
     return exp(-((κ - κ0)/σκ)^2 - (sin(φ/2)^2)/σφ^2)
 end
 set!(model, N = initial_action)
 
-## SSP-RK3 with the fused Doppler + refraction tendency.
-G  = similar(model.action)
-N1 = similar(model.action)
-N2 = similar(model.action)
-for _ in 1:400
-    rk3_step!(model, coupling, G, N1, N2, 0.05)
-end
+simulation = Simulation(model; Δt = 0.05, stop_iteration = 400)
+run!(simulation)
 
 m0_field   = m0(model.action)
 κrms_field = root_mean_square_wavenumber(model.action)
 mean_dir   = mean_direction(model.action)
 ```
 
-https://github.com/user-attachments/assets/7c99215e-7de6-4955-b23a-19fd673f1fb8
+https://github.com/user-attachments/assets/fe1716be-50c4-475b-8662-d736fb57301c
 
-See also `examples/vortex_refraction.jl`.
+See `examples/vortex_refraction.jl` (a literate tutorial that produces a
+multi-panel movie of `m₀`, `κᵣₘₛ`, and the mean direction) for the full
+visualization.
 
 ## Design Shape
 
@@ -96,10 +92,14 @@ See also `examples/vortex_refraction.jl`.
 - Spectral integrals treat entries as finite-volume cell averages and multiply
   by exact spectral cell measures, not point-sample quadrature weights.
 - Physical transport is computed with Oceananigans tracer advection operators.
-  The default `advection=WENO()` matches Oceananigans' fifth-order WENO; other
-  schemes like `Centered()`, `UpwindBiased()`, and `FluxFormAdvection(...)` can
-  be passed instead. Pass `advection=nothing` to disable transport (e.g. in
-  source-only column tests).
+  The default `horizontal_advection=WENO()` matches Oceananigans' fifth-order
+  WENO; other schemes like `Centered()`, `UpwindBiased()`, and
+  `FluxFormAdvection(...)` can be passed instead. Pass
+  `horizontal_advection=nothing` to disable transport (e.g. in source-only
+  column tests).
+- Spectral kinematic refraction is controlled by `spectral_advection`, which
+  defaults to `WENO()`. Pass `spectral_advection=nothing` to disable
+  refraction.
 - Absent optional model components follow Oceananigans/Breeze-style `nothing`
   semantics: `sources=nothing` and `coupling=nothing` opt out cleanly.
 - Spectral grids use unicode coordinates: `κ` for radial wavenumber and `φ` for
@@ -109,8 +109,9 @@ See also `examples/vortex_refraction.jl`.
 - `QTransform` takes the physical `RectilinearGrid` directly and uses its
   vertical faces for perfect finite-volume integration.
 - Oceananigans is a hard dependency. CairoMakie is used by the literate
-  examples for plots and MP4 movies, while CUDA-backed storage is exercised through
-  Oceananigans' native `GPU()` architecture in the optional runtime smoke path.
+  examples for plots and MP4 movies, while CUDA- and Metal-backed storage are
+  exercised through Oceananigans' native GPU architecture in optional runtime
+  smoke paths.
 
 ## Examples
 
@@ -125,6 +126,7 @@ one CairoMakie-recorded MP4 animation.
 - `examples/cwcm_q_transform_sheared_current.jl`
 - `examples/frequency_direction_source_package.jl`
 - `examples/exact_finite_volume_source_rates.jl`
+- `examples/vortex_refraction.jl`
 
 Run the smoke harness with:
 
@@ -163,7 +165,7 @@ julia --startup-file=no --project=docs docs/make.jl
 ```
 
 The documentation workflow deploys to
-`https://NumericalEarth.github.io/Ripple.jl/stable/` after the repository is
+`https://NumericalEarth.github.io/Ripple.jl/dev/` after the repository is
 published at `NumericalEarth/Ripple.jl`.
 
 ## Publication Wiring
@@ -181,13 +183,14 @@ scripts:
 ## Optional Runtime Smokes
 
 Optional gates cover Oceananigans hard-dependency grid/field integration, CUDA
-storage through Oceananigans' `GPU()` architecture, and external wave-model
-comparison harnesses:
+and Metal storage through Oceananigans' GPU architecture, and external
+wave-model comparison harnesses:
 
 - `scripts/validation/check_optional_runtime_gates.jl`
 - `scripts/validation/run_available_optional_gates.jl`
 - `scripts/oceananigans/run_oceananigans_smoke.jl`
 - `scripts/gpu/run_cuda_smoke.jl`
+- `scripts/gpu/run_metal_smoke.jl`
 - `scripts/external_models/run_swan_fetch_limited.jl`
 - `scripts/external_models/run_wam_fetch_limited.jl`
 - `scripts/external_models/run_ww3_fetch_limited.jl`

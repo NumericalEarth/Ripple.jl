@@ -83,7 +83,7 @@ end
 function default_validation_cases()
     return (
         ValidationCase(:constant_action,
-                       "Source-free action with advection=nothing has zero tendency and is unchanged by time stepping.",
+                       "Source-free action with horizontal_advection=nothing has zero tendency and is unchanged by time stepping.",
                        constant_action_validation),
         ValidationCase(:second_moment_tensor,
                        "Spectral second moments use exact finite-volume cell moment measures.",
@@ -115,7 +115,7 @@ end
 function constant_action_validation()
     grid = RectilinearGrid(CPU(); size=(3, 2, 2), x=(0, 3), y=(0, 2), z=(-1, 0))
     cgrid = CartesianWaveVectorGrid(Float64; kx=[0.4, 0.8], ky=[-0.2, 0.2])
-    model = SpectralWaveModel(; grid, spectral_grid=cgrid, advection=nothing)
+    model = SpectralWaveModel(grid, cgrid; horizontal_advection=nothing)
     set!(model, N=1.0)
     initial = copy(interior(model.action))
     compute_tendencies!(model)
@@ -208,10 +208,10 @@ function relaxation_source_solution_validation()
     cgrid = CartesianWaveVectorGrid(Float64; kx=[0.4, 0.8], ky=[-0.2, 0.2])
     target(x, y, kx, ky) = 0.5 + 0.2kx - 0.1ky
     alpha = 0.7
-    model = SpectralWaveModel(; advection=nothing, grid,
-                                spectral_grid=cgrid,
-                                physics=RelaxationToSpectrum(target; timescale=inv(alpha)),
-                                timestepper=:ForwardEuler)
+    model = SpectralWaveModel(grid, cgrid;
+                      horizontal_advection=nothing,
+                      physics=RelaxationToSpectrum(target; timescale=inv(alpha)),
+                      timestepper=:ForwardEuler)
     set!(model, N=0.0)
     dt = 1e-3
     steps = 100
@@ -233,10 +233,10 @@ function pure_damping_decay_validation()
     cgrid = CartesianWaveVectorGrid(Float64; kx=[0.5], ky=[0.0])
     rate = 2.0
     dt = 0.1
-    model = SpectralWaveModel(; advection=nothing, grid,
-                                spectral_grid=cgrid,
-                                physics=BottomFriction(rate=rate),
-                                timestepper=:SemiImplicitEuler)
+    model = SpectralWaveModel(grid, cgrid;
+                      horizontal_advection=nothing,
+                      physics=BottomFriction(rate=rate),
+                      timestepper=:SemiImplicitEuler)
     set!(model, N=1.0)
     time_step!(model, dt)
     expected = inv(1 + rate * dt)
@@ -260,10 +260,10 @@ function fetch_limited_source_balance_validation()
                                  saturation_power=1.0,
                                  wavenumber_power=0.0),
     )
-    model = SpectralWaveModel(; advection=nothing, grid,
-                                spectral_grid=cgrid,
-                                physics=source,
-                                timestepper=:SemiImplicitEuler)
+    model = SpectralWaveModel(grid, cgrid;
+                      horizontal_advection=nothing,
+                      physics=source,
+                      timestepper=:SemiImplicitEuler)
     equilibrium_m0 = 0.5 * (1 + target_growth_rate / 4.8)
     set!(model, N=0.5 / (20weight))
     moments = Float64[m0(model.action)[1, 1]]
@@ -273,7 +273,7 @@ function fetch_limited_source_balance_validation()
     end
 
     equilibrium_action = equilibrium_m0 / weight
-    equilibrium_model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, physics=source)
+    equilibrium_model = SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, physics=source)
     set!(equilibrium_model, N=equilibrium_action)
     positive, damping = source_split(source, equilibrium_model, 1, 1, 1, 1)
 
@@ -303,10 +303,10 @@ function hasselmann_column_validation()
     alpha = 1.3
     dt = 5e-4
     steps = 200
-    model = SpectralWaveModel(; advection=nothing, grid,
-                                spectral_grid=cgrid,
-                                physics=RelaxationToSpectrum(target; timescale=inv(alpha)),
-                                timestepper=:ForwardEuler)
+    model = SpectralWaveModel(grid, cgrid;
+                      horizontal_advection=nothing,
+                      physics=RelaxationToSpectrum(target; timescale=inv(alpha)),
+                      timestepper=:ForwardEuler)
     set!(model, N=0.0)
     for _ in 1:steps
         time_step!(model, dt)
@@ -337,10 +337,10 @@ function finite_volume_source_rates_validation()
     cgrid = FrequencyDirectionGrid(; frequency=range(0.08, 0.32; length=12),
                                      φ=range(0, 2pi; length=25)[1:24])
     source = FrequencyDissipation(rate=0.4, reference_frequency=0.16, power=2)
-    model = SpectralWaveModel(; advection=nothing, grid,
-                                spectral_grid=cgrid,
-                                physics=source,
-                                timestepper=:SemiImplicitEuler)
+    model = SpectralWaveModel(grid, cgrid;
+                      horizontal_advection=nothing,
+                      physics=source,
+                      timestepper=:SemiImplicitEuler)
     set!(model, N=1.0)
     m, n = 6, 1
     _, damping = source_split(source, model, 1, 1, m, n)
@@ -601,11 +601,11 @@ function run_performance_smoke(; Nx=6, Ny=5, Nk=5, Nθ=8)
         set!(field, (x, y, kx, ky) -> 1 + 0.01x + 0.02y + 0.03hypot(kx, ky))
         m0(field)
     end
-    model = SpectralWaveModel(; advection=nothing, grid,
-                                spectral_grid=cgrid,
-                                physics=GenericPhysics(ExponentialWindInput(rate=0.03, direction=0.0),
-                                                       BottomFriction(rate=0.01)),
-                                timestepper=:SemiImplicitEuler)
+    model = SpectralWaveModel(grid, cgrid;
+                      horizontal_advection=nothing,
+                      physics=GenericPhysics(ExponentialWindInput(rate=0.03, direction=0.0),
+                                             BottomFriction(rate=0.01)),
+                      timestepper=:SemiImplicitEuler)
     set!(model, N=1.0)
     source_step_metric = performance_metric(:sources, :semi_implicit_step,
                                              "Advance one source-only semi-implicit step.") do

@@ -1,5 +1,10 @@
 using Documenter
+using DocumenterCitations
+using Literate
+using CairoMakie
 using Ripple
+
+CairoMakie.activate!(type = "png")
 
 const DOCS_ROOT = @__DIR__
 const REPO_ROOT = normpath(joinpath(DOCS_ROOT, ".."))
@@ -7,15 +12,23 @@ const RIPPLE_REMOTE = Documenter.Remotes.GitHub("NumericalEarth", "Ripple.jl")
 include(joinpath(DOCS_ROOT, "generate.jl"))
 generate_documentation_sources!(DOCS_ROOT)
 
+bib = CitationBibliography(joinpath(DOCS_ROOT, "src", "refs.bib"), style=:authoryear)
+
 makedocs(;
     modules = [Ripple],
     sitename = "Ripple.jl",
     authors = "Ripple.jl contributors",
     remotes = Dict(REPO_ROOT => (RIPPLE_REMOTE, "main")),
     format = Documenter.HTML(;
-        canonical = "https://NumericalEarth.github.io/Ripple.jl/stable/",
+        canonical = "https://NumericalEarth.github.io/RippleDocumentation/stable/",
         edit_link = "main",
         prettyurls = get(ENV, "CI", "false") == "true",
+        assets = String["assets/citations.css"],
+        # Literate-generated example pages inline base64 figures (and
+        # produce multi-megabyte HTML for the vortex animation), so bump
+        # the size threshold well above Documenter's default 200 KiB cap.
+        size_threshold_warn  = 2_000_000,
+        size_threshold       = 5_000_000,
     ),
     pages = [
         "Home" => "index.md",
@@ -23,17 +36,15 @@ makedocs(;
         "Finite-Volume Integration" => "finite_volume_integration.md",
         "API Reference" => "api_reference.md",
         "Examples" => generated_example_pages(),
-        "Validation" => "validation.md",
-        "Publication" => "publication.md",
-        "Implementation Status" => "generated/implementation_status.md",
-        "Goal Completion Audit" => "generated/goal_completion_audit.md",
-        "External Comparison Harness" => "generated/external_comparison_harness.md",
+        "References" => "references.md",
     ],
     checkdocs = :none,
+    plugins = [bib],
 )
 
 deploydocs(;
     repo = "github.com/NumericalEarth/Ripple.jl.git",
+    deploy_repo = "github.com/NumericalEarth/RippleDocumentation.git",
     devbranch = "main",
     push_preview = true,
 )

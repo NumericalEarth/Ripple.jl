@@ -15,10 +15,10 @@ end
 @testset "Model API" begin
     grid = RectilinearGrid(CPU(); size=(4, 3, 2), x=(0, 4), y=(0, 3), z=(-1, 0))
     cgrid = CartesianWaveVectorGrid(Float64; kx=range(0.4, 0.8; length=3), ky=range(-0.1, 0.1; length=3))
-    @test_throws ArgumentError SpectralWaveModel(; advection=nothing, grid=:grid, spectral_grid=cgrid)
-    @test_throws ArgumentError SpectralWaveModel(; advection=nothing, grid, spectral_grid=:spectral_grid)
+    @test_throws ArgumentError SpectralWaveModel(:grid, cgrid; horizontal_advection=nothing)
+    @test_throws ArgumentError SpectralWaveModel(grid, :spectral_grid; horizontal_advection=nothing)
 
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, timestepper=:RK3)
+    model = SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, timestepper=:RK3)
     set!(model, N=GaussianWavePacket(x0=1, y0=1, kx0=0.6, ky0=0.0))
 
     @test haskey(fields(model), :N)
@@ -28,7 +28,7 @@ end
     @test haskey(prognostic_fields(model), :N)
     @test !haskey(prognostic_fields(model), :G)
     @test model.physics === nothing
-    @test model.advection === nothing
+    @test model.horizontal_advection === nothing
     @test model.coupling === nothing
     @test eltype(model) === eltype(model.action)
     @test model.clock.iteration == 0
@@ -44,9 +44,9 @@ end
     @test !isdefined(Ripple, :Simulation)
     @test !isdefined(Ripple, :DiagnosticWriter)
     @test !isdefined(Ripple, :VerticalFiniteVolumeGrid)
-    @test_throws ArgumentError SpectralWaveModel(; grid, spectral_grid=cgrid, advection=:weno)
+    @test_throws ArgumentError SpectralWaveModel(grid, cgrid; horizontal_advection=:weno)
 
-    writer_model = SpectralWaveModel(advection=nothing, grid; spectral_grid=cgrid)
+    writer_model = SpectralWaveModel(grid, cgrid; horizontal_advection=nothing)
     set!(writer_model, N=1.0)
     output_path = tempname() * ".jld2"
     simulation = Oceananigans.Simulation(writer_model; Δt=0.01, stop_iteration=1, verbose=false)
@@ -60,58 +60,227 @@ end
     @test writer_model.clock.iteration == 1
 
     supplied_action = WaveActionField(grid, cgrid)
-    supplied_model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, action=supplied_action)
+    supplied_model = SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, action=supplied_action)
     @test supplied_model.action === supplied_action
 
     equivalent_grid = RectilinearGrid(CPU(); size=(4, 3, 2), x=(0, 4), y=(0, 3), z=(-1, 0))
     equivalent_action = WaveActionField(equivalent_grid, cgrid)
-    @test SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, action=equivalent_action).action === equivalent_action
+    @test SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, action=equivalent_action).action === equivalent_action
 
     mismatched_grid = RectilinearGrid(CPU(); size=(4, 3, 2), x=(0, 8), y=(0, 3), z=(-1, 0))
     mismatched_physical_action = WaveActionField(mismatched_grid, cgrid)
-    @test_throws ArgumentError SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, action=mismatched_physical_action)
+    @test_throws ArgumentError SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, action=mismatched_physical_action)
 
     mismatched_z_grid = RectilinearGrid(CPU(); size=(4, 3, 3), x=(0, 4), y=(0, 3), z=(-1, 0))
     mismatched_z_action = WaveActionField(mismatched_z_grid, cgrid)
-    @test_throws ArgumentError SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, action=mismatched_z_action)
+    @test_throws ArgumentError SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, action=mismatched_z_action)
 
     mismatched_cgrid = CartesianWaveVectorGrid(Float64; kx=range(0.5, 0.9; length=3), ky=range(-0.1, 0.1; length=3))
     mismatched_spectral_action = WaveActionField(grid, mismatched_cgrid)
-    @test_throws ArgumentError SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, action=mismatched_spectral_action)
-    @test_throws ArgumentError SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, action=zeros(4, 3, 3, 3))
+    @test_throws ArgumentError SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, action=mismatched_spectral_action)
+    @test_throws ArgumentError SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, action=zeros(4, 3, 3, 3))
 
     for timestepper in (:ForwardEuler, :SemiImplicitEuler, :AB2, :RK3, :LowStorageRK3, :LSRK3)
-        @test SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, timestepper).timestepper === timestepper
+        @test SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, timestepper).timestepper === timestepper
     end
-    @test_throws ArgumentError SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, timestepper=:RK4)
-    @test_throws ArgumentError SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, timestepper="RK3")
-    @test_throws ArgumentError SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, clock=:clock)
+    @test_throws ArgumentError SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, timestepper=:RK4)
+    @test_throws ArgumentError SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, timestepper="RK3")
+    @test_throws ArgumentError SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, clock=:clock)
 end
 
 @testset "Oceananigans-style absent component semantics" begin
     grid = RectilinearGrid(CPU(); size=(1, 1, 1), x=(0, 1), y=(0, 1), z=(0, 1))
     cgrid = CartesianWaveVectorGrid(Float64; kx=[0.5], ky=[0.0])
 
-    empty_sources = SpectralWaveModel(; advection=nothing, grid,
-                                       spectral_grid=cgrid,
-                                       physics=GenericPhysics())
+    empty_sources = SpectralWaveModel(grid, cgrid;
+                      horizontal_advection=nothing,
+                      physics=GenericPhysics())
     @test empty_sources.physics === nothing
 
-    compatibility = SpectralWaveModel(; advection=nothing, grid,
-                                       spectral_grid=cgrid,
-                                       physics=NoPhysics(),
-                                       coupling=NoCurrentCoupling())
+    compatibility = SpectralWaveModel(grid, cgrid;
+                      horizontal_advection=nothing,
+                      physics=NoPhysics(),
+                      coupling=NoCurrentCoupling())
     @test compatibility.physics === nothing
     @test compatibility.coupling === nothing
     @test source_tendency(compatibility.physics, compatibility, 1, 1, 1, 1) == 0
     @test implicit_source_rate(compatibility.physics, compatibility, 1, 1, 1, 1) == 0
 
-    @test_throws ArgumentError SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, physics=:wind)
-    @test_throws ArgumentError SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, physics=GenericPhysics((:wind,)))
+    @test_throws ArgumentError SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, physics=:wind)
+    @test_throws ArgumentError SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, physics=GenericPhysics((:wind,)))
 
     frequency_grid = FrequencyDirectionGrid(; frequency=[0.1], φ=[0.0])
-    source_only = SpectralWaveModel(; grid, spectral_grid=frequency_grid, advection=nothing)
-    @test source_only.advection === nothing
+    # `advection=` is a shortcut that sets both horizontal and spectral advection.
+    source_only = SpectralWaveModel(grid, frequency_grid; advection=nothing)
+    @test source_only.horizontal_advection === nothing
+    @test source_only.spectral_advection === nothing
+    bundled = SpectralWaveModel(grid, frequency_grid; advection=Centered())
+    @test bundled.horizontal_advection isa Centered
+    @test bundled.spectral_advection isa Centered
+end
+
+@testset "Flat wave grid with velocity-owned Q grid" begin
+    wave_grid = RectilinearGrid(CPU();
+                                size=(4, 3),
+                                halo=(3, 3),
+                                x=(0, 4),
+                                y=(0, 3),
+                                topology=(Periodic, Periodic, Flat))
+    q_grid = RectilinearGrid(CPU();
+                             size=(4, 3, 4),
+                             halo=(3, 3, 3),
+                             x=(0, 4),
+                             y=(0, 3),
+                             z=(-2, 0),
+                             topology=(Periodic, Periodic, Bounded))
+    cgrid = PolarWaveVectorGrid(; κ=[0.5, 1.0],
+                                  φ=[0.0, pi/2, pi, 3pi/2])
+
+    u = Oceananigans.Fields.CenterField(q_grid)
+    v = Oceananigans.Fields.CenterField(q_grid)
+    Oceananigans.set!(u, 1)
+    Oceananigans.set!(v, 2)
+
+    model = SpectralWaveModel(wave_grid, cgrid;
+                              velocities=(; u, v),
+                              horizontal_advection=nothing,
+                              timestepper=:ForwardEuler)
+
+    @test Oceananigans.Grids.topology(model.grid)[3] === Flat
+    @test model.depth isa InfiniteDepth
+    @test model.coupling.qtransform.grid === q_grid
+    @test model.coupling.current.depth ≈ 2
+    @test size(model.action) == (4, 3, 2, 4)
+    @test size(model.coupling.Ux) == (4, 3, 2)
+    @test model.coupling.Ux[1, 1, 1] ≈ 1 atol=1e-12
+    @test model.coupling.Uy[4, 3, 2] ≈ 2 atol=1e-12
+    @test maximum(abs.(model.coupling.dUxdkappa)) < 1e-10
+
+    array_model = SpectralWaveModel(wave_grid, cgrid;
+                                    velocities=(; u=ones(4, 3, vertical_size(q_grid)),
+                                                  v=zeros(4, 3, vertical_size(q_grid)),
+                                                  q_grid),
+                                    horizontal_advection=nothing,
+                                    timestepper=:ForwardEuler)
+
+    @test array_model.coupling.qtransform.grid === q_grid
+    @test array_model.coupling.Ux[1, 1, 1] ≈ 1 atol=1e-12
+    @test array_model.coupling.Uy[1, 1, 1] ≈ 0 atol=1e-12
+
+    bottom_height = [-(1 + 0.1i + 0.05j) for i in 1:4, j in 1:3]
+    ib_q_grid = Oceananigans.ImmersedBoundaryGrid(q_grid, Oceananigans.GridFittedBottom(bottom_height))
+    ib_u = Oceananigans.Fields.CenterField(ib_q_grid)
+    ib_v = Oceananigans.Fields.CenterField(ib_q_grid)
+    Oceananigans.set!(ib_u, 1)
+    Oceananigans.set!(ib_v, 0)
+    ib_model = SpectralWaveModel(wave_grid, cgrid;
+                                 velocities=(; u=ib_u, v=ib_v),
+                                 horizontal_advection=nothing,
+                                 timestepper=:ForwardEuler)
+
+    @test ib_model.depth isa InfiniteDepth
+    @test ib_model.coupling.qtransform.grid === ib_q_grid
+    @test ib_model.coupling.current.depth == Ripple.grid_depth(ib_q_grid)
+
+    auto_array_model = SpectralWaveModel(wave_grid, cgrid;
+                                         velocities=(; u=ones(4, 3, 5),
+                                                       v=zeros(4, 3, 5)),
+                                         depth=2.0,
+                                         horizontal_advection=nothing,
+                                         timestepper=:ForwardEuler)
+
+    @test horizontal_size(auto_array_model.coupling.qtransform.grid) == horizontal_size(wave_grid)
+    @test vertical_size(auto_array_model.coupling.qtransform.grid) == 5
+    @test zfaces(auto_array_model.coupling.qtransform.grid)[1] ≈ -2
+    @test auto_array_model.depth isa Oceananigans.Fields.ConstantField
+    @test auto_array_model.depth.constant == 2.0
+    @test auto_array_model.coupling.current.depth == 2.0
+    @test auto_array_model.coupling.Ux[1, 1, 1] ≈ 1 atol=1e-12
+    @test auto_array_model.coupling.Uy[1, 1, 1] ≈ 0 atol=1e-12
+
+    pseudomomentum_model = SpectralWaveModel(wave_grid, cgrid;
+                                             velocities=PseudomomentumVelocities(; q_grid),
+                                             horizontal_advection=nothing,
+                                             timestepper=:ForwardEuler)
+    set!(pseudomomentum_model.action, (x, y, kx, ky) -> 1 + 0.1kx + 0.02ky)
+    update_coupling!(pseudomomentum_model)
+
+    coupling = pseudomomentum_model.coupling
+    @test coupling isa CWCMPseudomomentumCoupling
+    @test coupling.qtransform.grid === q_grid
+    @test size(coupling.overlap) == (length(cgrid.κ), length(cgrid.κ))
+
+    px, py = compute_pseudomomentum_cell_averages(pseudomomentum_model.action,
+                                                  coupling.depth,
+                                                  coupling.qtransform)
+    expected_Ux = similar(coupling.Ux); fill!(expected_Ux, 0)
+    expected_Uy = similar(coupling.Uy); fill!(expected_Uy, 0)
+    expected_dUxdkappa = similar(coupling.dUxdkappa); fill!(expected_dUxdkappa, 0)
+    expected_dUydkappa = similar(coupling.dUydkappa); fill!(expected_dUydkappa, 0)
+    compute_doppler_velocity!(expected_Ux, expected_Uy,
+                              px, py, coupling.depth,
+                              coupling.kappa, coupling.qtransform)
+    compute_doppler_velocity_derivative!(expected_dUxdkappa, expected_dUydkappa,
+                                         px, py, coupling.depth,
+                                         coupling.kappa, coupling.qtransform)
+
+    @test coupling.Ux ≈ expected_Ux atol=1e-12
+    @test coupling.Uy ≈ expected_Uy atol=1e-12
+    @test coupling.dUxdkappa ≈ expected_dUxdkappa atol=1e-12
+    @test coupling.dUydkappa ≈ expected_dUydkappa atol=1e-12
+
+    previous_Ux = copy(coupling.Ux)
+    set!(pseudomomentum_model.action, 2 .* interior(pseudomomentum_model.action))
+    compute_tendencies!(pseudomomentum_model)
+    @test coupling.Ux ≈ 2 .* previous_Ux atol=1e-12
+
+    auto_pseudomomentum_model = SpectralWaveModel(wave_grid, cgrid;
+                                                  velocities=PseudomomentumVelocities(; Nz=7),
+                                                  depth=2.0,
+                                                  horizontal_advection=nothing,
+                                                  timestepper=:ForwardEuler)
+    auto_coupling = auto_pseudomomentum_model.coupling
+    @test auto_coupling isa CWCMPseudomomentumCoupling
+    @test horizontal_size(auto_coupling.qtransform.grid) == horizontal_size(wave_grid)
+    @test vertical_size(auto_coupling.qtransform.grid) == 7
+    @test zfaces(auto_coupling.qtransform.grid)[1] ≈ -2
+    @test auto_pseudomomentum_model.depth isa Oceananigans.Fields.ConstantField
+    @test auto_pseudomomentum_model.depth.constant == 2.0
+    @test size(auto_coupling.overlap) == (length(cgrid.κ), length(cgrid.κ))
+
+    depth = [1.0 + 0.1i + 0.05j for i in 1:4, j in 1:3]
+    depth_field = Oceananigans.Fields.CenterField(wave_grid)
+    Oceananigans.set!(depth_field, (x, y) -> 1.0 + 0.1x + 0.05y)
+    variable_depth_model = SpectralWaveModel(wave_grid, cgrid;
+                                             velocities=PseudomomentumVelocities(; Nz=6),
+                                             depth=depth_field,
+                                             horizontal_advection=nothing,
+                                             timestepper=:ForwardEuler)
+    variable_coupling = variable_depth_model.coupling
+    @test size(variable_coupling.overlap) == (4, 3, length(cgrid.κ), length(cgrid.κ))
+    @test zfaces(variable_coupling.qtransform.grid)[1] ≈ -maximum(interior(depth_field))
+
+    function_depth_model = SpectralWaveModel(wave_grid, cgrid;
+                                             velocities=PseudomomentumVelocities(; Nz=6),
+                                             depth=(x, y) -> 1.0 + 0.1x + 0.05y,
+                                             horizontal_advection=nothing,
+                                             timestepper=:ForwardEuler)
+    function_coupling = function_depth_model.coupling
+    @test function_depth_model.depth isa Oceananigans.Fields.Field
+    @test size(function_coupling.overlap) == (4, 3, length(cgrid.κ), length(cgrid.κ))
+    @test zfaces(function_coupling.qtransform.grid)[1] ≈ -maximum(interior(function_depth_model.depth))
+
+    @test_throws ArgumentError SpectralWaveModel(wave_grid, cgrid;
+                                                 velocities=(; u=ones(4, 3, 1),
+                                                               v=zeros(4, 3, 1)),
+                                                 horizontal_advection=nothing)
+    @test_throws ArgumentError SpectralWaveModel(wave_grid, cgrid;
+                                                 velocities=PseudomomentumVelocities(; Nz=6),
+                                                 depth,
+                                                 horizontal_advection=nothing)
+    @test_throws ArgumentError SpectralWaveModel(wave_grid, cgrid;
+                                                 velocities=PseudomomentumVelocities(; depth=2.0, Nz=6),
+                                                 horizontal_advection=nothing)
 end
 
 @testset "Source-only timestepper semantics" begin
@@ -120,10 +289,10 @@ end
                                    frequency=[0.08, 0.16, 0.32],
                                    φ=[0.0, pi/2, pi, 3pi/2])
     source = FrequencyDissipation(rate=0.4, reference_frequency=0.16, power=2)
-    model = SpectralWaveModel(; advection=nothing, grid,
-                                spectral_grid=cgrid,
-                                physics=source,
-                                timestepper=:SemiImplicitEuler)
+    model = SpectralWaveModel(grid, cgrid;
+                      horizontal_advection=nothing,
+                      physics=source,
+                      timestepper=:SemiImplicitEuler)
     set!(model, N=(x, y, kx, ky) -> 1 + 0.1x + 0.02hypot(kx, ky))
     compute_tendencies!(model)
 
@@ -141,10 +310,10 @@ end
 @testset "AB2 and low-storage RK3 source-only timesteppers" begin
     grid = RectilinearGrid(CPU(); size=(1, 1, 1), x=(0, 1), y=(0, 1), z=(0, 1))
     cgrid = CartesianWaveVectorGrid(Float64; kx=[0.5], ky=[0.0])
-    model = SpectralWaveModel(; advection=nothing, grid,
-                                spectral_grid=cgrid,
-                                physics=LinearWindInput(rate=0.2),
-                                timestepper=:AB2)
+    model = SpectralWaveModel(grid, cgrid;
+                      horizontal_advection=nothing,
+                      physics=LinearWindInput(rate=0.2),
+                      timestepper=:AB2)
     set!(model, N=1.0)
     time_step!(model, 0.5)
     @test model.action[1, 1, 1, 1] ≈ 1.1
@@ -153,8 +322,8 @@ end
     expected = 1.1 + 0.5 * (1.5 * 0.2 * 1.1 - 0.5 * 0.2)
     @test model.action[1, 1, 1, 1] ≈ expected
 
-    rk3 = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, physics=BottomFriction(rate=1.0), timestepper=:RK3)
-    low_storage = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid, physics=BottomFriction(rate=1.0), timestepper=:LowStorageRK3)
+    rk3 = SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, physics=BottomFriction(rate=1.0), timestepper=:RK3)
+    low_storage = SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, physics=BottomFriction(rate=1.0), timestepper=:LowStorageRK3)
     set!(rk3, N=1.0)
     set!(low_storage, N=1.0)
     time_step!(rk3, 0.1)
@@ -164,7 +333,7 @@ end
 
 @testset "External physical grid adaptation" begin
     cgrid = CartesianWaveVectorGrid(Float64; kx=[0.4, 0.8], ky=[-0.1, 0.1])
-    model = SpectralWaveModel(; advection=nothing, grid=MockExternalPhysicalGrid(), spectral_grid=cgrid)
+    model = SpectralWaveModel(MockExternalPhysicalGrid(), cgrid; horizontal_advection=nothing)
 
     @test model.grid isa RectilinearGrid
     @test horizontal_size(model.grid) == (2, 1)

@@ -25,11 +25,10 @@ import Oceananigans.Advection: EnergyConserving, EnstrophyConserving, VectorInva
     )
 
     for scheme in schemes
-        model = SpectralWaveModel(; grid,
-                                    spectral_grid,
-                                    advection=scheme,
-                                    timestepper=:ForwardEuler,
-                                    clock=Clock(time=0.0, last_Δt=dt))
+        model = SpectralWaveModel(grid, spectral_grid;
+                          horizontal_advection=scheme,
+                          timestepper=:ForwardEuler,
+                          clock=Clock(time=0.0, last_Δt=dt))
 
         for j in 1:Ny, i in 1:Nx
             x = xnodes(grid)[i]
@@ -41,11 +40,10 @@ import Oceananigans.Advection: EnergyConserving, EnstrophyConserving, VectorInva
         @test maximum(abs, interior(model.tendencies)) > 0
     end
 
-    model = SpectralWaveModel(; grid,
-                                spectral_grid,
-                                advection=WENO(order=5),
-                                timestepper=:ForwardEuler,
-                                clock=Clock(time=0.0, last_Δt=dt))
+    model = SpectralWaveModel(grid, spectral_grid;
+                      horizontal_advection=WENO(order=5),
+                      timestepper=:ForwardEuler,
+                      clock=Clock(time=0.0, last_Δt=dt))
 
     for j in 1:Ny, i in 1:Nx
         x = xnodes(grid)[i]
@@ -70,11 +68,10 @@ import Oceananigans.Advection: EnergyConserving, EnstrophyConserving, VectorInva
                                           φ=[pi / 2],
                                           φ_faces=[pi / 2 - pi / 32, pi / 2 + pi / 32])
 
-    y_model = SpectralWaveModel(; grid,
-                                  spectral_grid=y_spectral_grid,
-                                  advection=FluxFormAdvection(Centered(), WENO(order=5), nothing),
-                                  timestepper=:ForwardEuler,
-                                  clock=Clock(time=0.0, last_Δt=dt))
+    y_model = SpectralWaveModel(grid, y_spectral_grid;
+                      horizontal_advection=FluxFormAdvection(Centered(), WENO(order=5), nothing),
+                      timestepper=:ForwardEuler,
+                      clock=Clock(time=0.0, last_Δt=dt))
 
     for j in 1:Ny, i in 1:Nx
         y = ynodes(grid)[j]
@@ -100,15 +97,14 @@ import Oceananigans.Advection: EnergyConserving, EnstrophyConserving, VectorInva
     @test minimum(interior(model.action)) > 0
     @test cfl(model) ≈ abs(u) * dt / minimum(xspacings(grid))
 
-    named = SpectralWaveModel(; grid, spectral_grid, advection=(; N=WENO(order=5)))
-    @test named.advection isa Oceananigans.Advection.WENO
-    @test_throws ArgumentError SpectralWaveModel(; grid, spectral_grid, advection=(; Q=WENO()))
-    @test_throws ArgumentError SpectralWaveModel(; grid, spectral_grid, advection=EnergyConserving())
-    @test_throws ArgumentError SpectralWaveModel(; grid, spectral_grid, advection=EnstrophyConserving())
-    @test_throws ArgumentError SpectralWaveModel(; grid, spectral_grid, advection=VectorInvariant())
-    @test_throws ArgumentError SpectralWaveModel(; grid,
-                                                   spectral_grid,
-                                                   advection=FluxFormAdvection(Centered(), EnergyConserving(), nothing))
+    named = SpectralWaveModel(grid, spectral_grid; horizontal_advection=(; N=WENO(order=5)))
+    @test named.horizontal_advection isa Oceananigans.Advection.WENO
+    @test_throws ArgumentError SpectralWaveModel(grid, spectral_grid; horizontal_advection=(; Q=WENO()))
+    @test_throws ArgumentError SpectralWaveModel(grid, spectral_grid; horizontal_advection=EnergyConserving())
+    @test_throws ArgumentError SpectralWaveModel(grid, spectral_grid; horizontal_advection=EnstrophyConserving())
+    @test_throws ArgumentError SpectralWaveModel(grid, spectral_grid; horizontal_advection=VectorInvariant())
+    @test_throws ArgumentError SpectralWaveModel(grid, spectral_grid;
+                      horizontal_advection=FluxFormAdvection(Centered(), EnergyConserving(), nothing))
 
     small_halo_grid = RectilinearGrid(CPU();
                                       size=(Nx, Ny, 1),
@@ -117,7 +113,6 @@ import Oceananigans.Advection: EnergyConserving, EnstrophyConserving, VectorInva
                                       y=(0, Ly),
                                       z=(-1, 0),
                                       topology=(Periodic, Periodic, Bounded))
-    @test_throws ArgumentError SpectralWaveModel(; grid=small_halo_grid,
-                                                   spectral_grid,
-                                                   advection=WENO(order=5))
+    @test_throws ArgumentError SpectralWaveModel(small_halo_grid, spectral_grid;
+                      horizontal_advection=WENO(order=5))
 end
