@@ -79,7 +79,7 @@ end
 
 model = SpectralWaveModel(grid, spectral_grid;
                           velocities  = (; u = u_field, v = v_field),
-                          sources     = nothing,
+                          physics     = nothing,
                           timestepper = :RK3);
 
 σφ = 0.15

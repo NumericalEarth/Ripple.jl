@@ -20,7 +20,7 @@ end
     cgrid = FrequencyDirectionGrid(; frequency=range(0.1, 0.3; length=4), φ=collect(range(0, 2π * 7/8; length=8)))
 
     inp = PressureCorrelationInput(; drag=BulkWindDrag(:linear), wind=15.0)
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid,
+    model = SpectralWaveModel(grid, cgrid; horizontal_advection=nothing,
                                 physics=inp, timestepper=:ForwardEuler)
     set!(model, N=1e-3)
 
@@ -34,7 +34,7 @@ end
 
     # Zero wind → zero tendency.
     inp_calm = PressureCorrelationInput(; drag=BulkWindDrag(:linear), wind=0.0)
-    model_calm = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid,
+    model_calm = SpectralWaveModel(grid, cgrid; horizontal_advection=nothing,
                                      physics=inp_calm, timestepper=:ForwardEuler)
     set!(model_calm, N=1e-3)
     compute_tendencies!(model_calm)
@@ -55,7 +55,7 @@ end
     cgrid = FrequencyDirectionGrid(; frequency=range(0.1, 0.3; length=4), φ=collect(range(0, 2π * 7/8; length=8)))
 
     diss = MeanSpectrumWhitecapping()
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid,
+    model = SpectralWaveModel(grid, cgrid; horizontal_advection=nothing,
                                 physics=diss, timestepper=:SemiImplicitEuler)
     set!(model, N=1e-2)
 
@@ -83,7 +83,7 @@ end
     @test bundle.wind_input === inp
     @test bundle.dissipation === diss
 
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid,
+    model = SpectralWaveModel(grid, cgrid; horizontal_advection=nothing,
                                 physics=bundle, timestepper=:SemiImplicitEuler)
     set!(model, N=1e-3)
     compute_tendencies!(model)

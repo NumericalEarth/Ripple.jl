@@ -20,7 +20,7 @@ end
     cgrid = FrequencyDirectionGrid(; frequency=collect(range(0.05, 0.4; length=12)),
                                      φ=collect(range(0, 2π * 15/16; length=16)))
     dia = HasselmannDIA()
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid,
+    model = SpectralWaveModel(grid, cgrid; horizontal_advection=nothing,
                                 physics=dia, timestepper=:ForwardEuler)
     set!(model, N=0.0)
     compute_tendencies!(model)
@@ -35,7 +35,7 @@ end
     cgrid = FrequencyDirectionGrid(; frequency=collect(range(0.05, 0.4; length=16)),
                                      φ=collect(range(0, 2π * 23/24; length=24)))
     dia = HasselmannDIA()
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid,
+    model = SpectralWaveModel(grid, cgrid; horizontal_advection=nothing,
                                 physics=dia, timestepper=:ForwardEuler)
 
     # JONSWAP-like initial spectrum.
@@ -72,7 +72,7 @@ end
     dia = HasselmannDIA()
     bundle = MeanSpectrumPhysics(; wind_input=inp, dissipation=diss, nonlinear=dia)
 
-    model = SpectralWaveModel(; advection=nothing, grid, spectral_grid=cgrid,
+    model = SpectralWaveModel(grid, cgrid; horizontal_advection=nothing,
                                 physics=bundle, timestepper=:SemiImplicitEuler)
     set!(model, N=1e-5)
     compute_tendencies!(model)

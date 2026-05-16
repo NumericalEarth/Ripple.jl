@@ -73,14 +73,14 @@ ys = ynodes(grid)
 # ## Model
 #
 # `velocities = (; u, v)` builds the wave-current coupling internally;
-# `sources = nothing` disables all forcing so we're seeing pure
+# `physics = nothing` disables all forcing so we're seeing pure
 # Doppler-shifted transport plus kinematic refraction. The fused kernel
 # handles physical and spectral transport together when both CWCM coupling
 # and `spectral_advection` are set (both defaults).
 
 model = SpectralWaveModel(grid, spectral_grid;
                           velocities  = (; u = u_field, v = v_field),
-                          sources     = nothing,
+                          physics     = nothing,
                           timestepper = :RK3);
 
 # Narrow-banded Gaussian initial condition, uniform in ``(x, y)``, peaking
