@@ -32,6 +32,8 @@ makedocs(;
     ),
     pages = [
         "Home" => "index.md",
+        "Notation" => "notation.md",
+        "Theory and Numerics" => "theory.md",
         "Model API" => "model_api.md",
         "Finite-Volume Integration" => "finite_volume_integration.md",
         "API Reference" => "api_reference.md",
