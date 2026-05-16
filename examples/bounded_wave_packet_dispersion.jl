@@ -119,6 +119,4 @@ record(fig3, "x_kappa_packet_dispersion.mp4", eachindex(phase_frames); framerate
 end
 nothing #hide
 
-# ```@raw html
-# <video src="x_kappa_packet_dispersion.mp4" controls loop muted></video>
-# ```
+# ![](x_kappa_packet_dispersion.mp4)

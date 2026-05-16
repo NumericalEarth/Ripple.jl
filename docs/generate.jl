@@ -1,9 +1,3 @@
-const GENERATED_DOC_FILENAMES = (
-    "implementation_status.md",
-    "goal_completion_audit.md",
-    "external_comparison_harness.md",
-)
-
 # Each entry maps an example basename (without `.jl`) to its displayed
 # title in the Documenter table of contents. Order is the order in which
 # pages appear in the sidebar.
@@ -69,14 +63,6 @@ end
 function generate_documentation_sources!(docs_root = @__DIR__)
     generated_dir = joinpath(docs_root, "src", "generated")
     mkpath(generated_dir)
-
-    for filename in GENERATED_DOC_FILENAMES
-        cp(joinpath(docs_root, filename),
-           joinpath(generated_dir, filename);
-           force = true)
-    end
-
     build_literate_examples!(docs_root)
-
     return generated_dir
 end

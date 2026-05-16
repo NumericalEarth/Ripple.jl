@@ -32,11 +32,6 @@ makedocs(;
         "Finite-Volume Integration" => "finite_volume_integration.md",
         "API Reference" => "api_reference.md",
         "Examples" => generated_example_pages(),
-        "Validation" => "validation.md",
-        "Publication" => "publication.md",
-        "Implementation Status" => "generated/implementation_status.md",
-        "Goal Completion Audit" => "generated/goal_completion_audit.md",
-        "External Comparison Harness" => "generated/external_comparison_harness.md",
     ],
     checkdocs = :none,
 )

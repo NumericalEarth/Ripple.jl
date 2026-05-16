@@ -161,6 +161,4 @@ record(fig, "vortex_refraction.mp4", eachindex(m0_frames); framerate = 12) do id
 end
 nothing #hide
 
-# ```@raw html
-# <video src="vortex_refraction.mp4" controls loop muted></video>
-# ```
+# ![](vortex_refraction.mp4)
