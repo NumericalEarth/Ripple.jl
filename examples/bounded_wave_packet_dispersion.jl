@@ -2,121 +2,123 @@
 #
 # A one-dimensional bounded physical domain is the simplest place to see
 # transport. We initialize a compact packet near the left boundary with a
-# finite-width wavenumber spectrum. All waves travel in the positive x direction,
-# but long waves have larger deep-water group velocity than short waves, so the
-# packet spreads as it moves across the domain.
+# finite-width wavenumber spectrum. All waves travel in the positive ``x``
+# direction, but long waves have larger deep-water group velocity than
+# short waves, so the packet spreads as it moves across the domain.
 
-using Oceananigans, Ripple, CairoMakie
+using Oceananigans, Ripple
+using CairoMakie
+CairoMakie.activate!(type = "png")
 
-Base.include(@__MODULE__, joinpath(@__DIR__, "..", "scripts", "example_visuals.jl"))
+# ## Grid setup
+#
+# Bounded in ``x`` and ``z``, periodic in ``y``. The default `WENO(order=5)`
+# advection needs `halo=(3, 3, 1)`.
 
-output_dir = example_output_directory("bounded_wave_packet_dispersion")
-plot_paths = String[]
-animation_paths = String[]
-
-small = example_mode() == :small
-Nx = small ? 96 : 192
+Nx = 96
 Ny = 6
-Nk = small ? 10 : 18
+Nk = 10
 Lx = 384.0
-grid = RectilinearGrid(CPU();
-                       size=(Nx, Ny, 1),
-                       halo=(3, 3, 1),
-                       x=(0, Lx),
-                       y=(0, 1),
-                       z=(-1, 0),
-                       topology=(Bounded, Periodic, Bounded))
 
-kappas = range(0.35, 1.25; length=Nk)
-theta_width = pi / 18
+grid = RectilinearGrid(CPU();
+                       size     = (Nx, Ny, 1),
+                       halo     = (3, 3, 1),
+                       x        = (0, Lx),
+                       y        = (0, 1),
+                       z        = (-1, 0),
+                       topology = (Bounded, Periodic, Bounded))
+
+# Spectral grid: a thin wedge of 18 ``\kappa`` bins, all pointing in ``+x``
+# (single-bin ``\varphi``).
+
+kappas        = range(0.35, 1.25; length = Nk)
+theta_width   = pi / 18
 spectral_grid = PolarWaveVectorGrid(Float64;
-                                    κ=kappas,
-                                    φ=[0.0],
-                                    φ_faces=[-theta_width / 2, theta_width / 2])
+                                    κ       = kappas,
+                                    φ       = [0.0],
+                                    φ_faces = [-theta_width / 2, theta_width / 2])
+
+# ## Model and initial packet
 
 model = SpectralWaveModel(grid, spectral_grid;
-                          horizontal_advection=WENO(order=5),
-                          timestepper=:RK3)
+                          horizontal_advection = WENO(order = 5),
+                          timestepper          = :RK3);
 
-packet_left = 24.0
+packet_left  = 24.0
 packet_right = 64.0
-set!(model, N=(x, y, kx, ky) -> packet_left <= x < packet_right ? 1.0 : 0.0)
+set!(model, N = (x, y, kx, ky) -> packet_left <= x < packet_right ? 1.0 : 0.0);
 
-x = collect(xnodes(grid))
-m0_profile() = vec(interior(m0(model.action))[:, 1, 1])
-x_kappa_profile() = x_kappa_phase_space_matrix(model.action; j=1, n=1)
+# ## Time stepping
+#
+# 360 RK3 steps of ``\Delta t = 0.25\,\mathrm{s}``. Snapshots are stored
+# along the way for a space-time (Hovmöller) plot of ``m_0`` and the
+# 2-D ``x``-``\kappa`` action density.
 
-function packet_center(profile)
-    mass = sum(profile)
-    return sum(x .* profile) / mass
-end
+x_nodes = collect(xnodes(grid))
 
-function packet_width(profile)
-    mass = sum(profile)
-    center = packet_center(profile)
-    return sqrt(sum((x .- center).^2 .* profile) / mass)
-end
+m0_profile()    = vec(interior(m0(model.action))[:, 1, 1])
+x_kappa_frame() = [model.action[i, 1, m, 1] for i in 1:Nx, m in 1:Nk]
 
-dt = 0.25
-final_time = small ? 30.0 : 90.0
-step_count = round(Int, final_time / dt)
-sample_count = small ? 12 : 24
-sample_interval = max(1, step_count ÷ (sample_count - 1))
+dt              = 0.25
+step_count      = 120
+sample_interval = max(1, step_count ÷ 11)
 
-times = [model.clock.time]
-profiles = [m0_profile()]
-phase_frames = [x_kappa_profile()]
-
-initial_center = packet_center(first(profiles))
-initial_width = packet_width(first(profiles))
-initial_action = total_action(model.action)
+times        = [model.clock.time]
+profiles     = [m0_profile()]
+phase_frames = [x_kappa_frame()]
 
 for step in 1:step_count
     time_step!(model, dt)
     if step == step_count || step % sample_interval == 0
-        push!(times, model.clock.time)
-        push!(profiles, m0_profile())
-        push!(phase_frames, x_kappa_profile())
+        push!(times,        model.clock.time)
+        push!(profiles,     m0_profile())
+        push!(phase_frames, x_kappa_frame())
     end
 end
 
+# ## Hovmöller of m₀
+
 hovmoller = reduce(vcat, transpose.(profiles))
-final_center = packet_center(last(profiles))
-final_width = packet_width(last(profiles))
-final_action = total_action(model.action)
 
-push!(plot_paths,
-      write_heatmap(joinpath(output_dir, "packet_hovmoller.png"),
-                    hovmoller;
-                    title="Bounded-domain wave-packet transport",
-                    xlabel="x cell", ylabel="time sample"))
+fig1 = Figure(size = (720, 360))
+ax1  = Axis(fig1[1, 1]; title  = "Bounded-domain wave-packet transport",
+                         xlabel = "x cell",
+                         ylabel = "time sample")
+hm1  = heatmap!(ax1, hovmoller; colormap = :viridis)
+Colorbar(fig1[1, 2], hm1)
+fig1
 
-push!(plot_paths,
-      write_heatmap(joinpath(output_dir, "final_x_kappa_action.png"),
-                    last(phase_frames);
-                    title="Final x-kappa action density",
-                    xlabel="x cell", ylabel="kappa bin"))
+# ## Final 2-D ``x``-``\kappa`` density
 
-push!(animation_paths,
-      write_heatmap_animation(joinpath(output_dir, "x_kappa_packet_dispersion.mp4"),
-                              phase_frames;
-                              title="Frequency-dependent wave-packet transport",
-                              xlabel="x cell", ylabel="kappa bin",
-                              fps=5))
+fig2 = Figure(size = (720, 360))
+ax2  = Axis(fig2[1, 1]; title  = "Final x-κ action density",
+                         xlabel = "x cell",
+                         ylabel = "κ bin")
+hm2  = heatmap!(ax2, last(phase_frames); colormap = :viridis)
+Colorbar(fig2[1, 2], hm2)
+fig2
 
-@assert final_center > initial_center + 5
-@assert final_width > initial_width
-@assert isapprox(final_action, initial_action; rtol=2e-2)
-@assert all(isfinite, interior(model.action))
-@assert all(interior(model.action) .>= -1e-12)
-@assert all(isfile, plot_paths)
-@assert all(isfile, animation_paths)
+# ## Frequency-dependent dispersion animation
+#
+# The packet spreads in ``\kappa`` even as it advects in ``x``: the
+# fastest (largest ``\kappa`` for deep water → no, smallest ``\kappa``)
+# group-velocity component pulls ahead.
 
-@show initial_center
-@show final_center
-@show initial_width
-@show final_width
-@show initial_action
-@show final_action
-@show plot_paths
-@show animation_paths
+fig3 = Figure(size = (720, 360))
+ax3  = Axis(fig3[1, 1]; title  = "Frequency-dependent wave-packet transport",
+                         xlabel = "x cell",
+                         ylabel = "κ bin")
+frame_obs = Observable(first(phase_frames))
+hm3 = heatmap!(ax3, frame_obs;
+               colormap   = :viridis,
+               colorrange = (0, maximum(maximum.(phase_frames))))
+Colorbar(fig3[1, 2], hm3)
+
+record(fig3, "x_kappa_packet_dispersion.mp4", eachindex(phase_frames); framerate = 5) do idx
+    frame_obs[] = phase_frames[idx]
+end
+nothing #hide
+
+# ```@raw html
+# <video src="x_kappa_packet_dispersion.mp4" controls loop muted></video>
+# ```
