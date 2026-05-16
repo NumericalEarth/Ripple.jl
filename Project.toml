@@ -1,21 +1,17 @@
 name = "Ripple"
 uuid = "c2bd03f4-9d5f-4a3d-9b69-5e7f9c5319b8"
-authors = ["Ripple.jl contributors"]
 version = "0.1.0"
+authors = ["Ripple.jl contributors"]
 
 [deps]
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
+Atomix = "a9b6321e-bd34-4604-b9c9-b65b8de01458"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
+NCDatasets = "85f8d34a-cbdd-5861-8df4-14fed0d494ab"
 Oceananigans = "9e8cae18-63c1-5223-a75c-80ca9d6e9a09"
 OffsetArrays = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
 Serialization = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
-
-[extras]
-Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-
-[targets]
-test = ["Test"]
 
 [weakdeps]
 Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
@@ -25,11 +21,19 @@ RippleMakieExt = "Makie"
 
 [compat]
 Adapt = "3, 4"
+Atomix = "1.1.3"
 CairoMakie = "0.12, 0.13, 0.14, 0.15"
 KernelAbstractions = "0.9"
 Makie = "0.21, 0.22, 0.23, 0.24"
+NCDatasets = "0.14.15"
 Oceananigans = "0.107"
 OffsetArrays = "1"
 Serialization = "1.10"
 Test = "1.10"
 julia = "1.10"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]

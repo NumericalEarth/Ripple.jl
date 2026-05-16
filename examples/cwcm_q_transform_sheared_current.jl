@@ -43,7 +43,7 @@ model = SpectralWaveModel(; grid,
                             spectral_grid,
                             coupling,
                             advection=nothing,
-                            sources=RelaxationToSpectrum((x, y, kx, ky) ->
+                            physics=RelaxationToSpectrum((x, y, kx, ky) ->
                                 exp(-((x - 4)^2 + (y - 2)^2) / 2) *
                                 exp(-((hypot(kx, ky) - 0.7)^2) / 0.08);
                                 timescale=0.5),

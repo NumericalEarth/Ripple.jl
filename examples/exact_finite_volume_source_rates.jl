@@ -24,12 +24,12 @@ frequency_source = FrequencyDissipation(rate=0.4,
 wavenumber_source = WavenumberDissipation(rate=0.1,
                                           reference_wavenumber=spectral_grid.κ[2],
                                           power=2)
-sources = SourceTermSet(frequency_source, wavenumber_source)
+physics = GenericPhysics(frequency_source, wavenumber_source)
 
 model = SpectralWaveModel(; grid,
                             spectral_grid,
                             advection=nothing,
-                            sources,
+                            physics,
                             timestepper=:SemiImplicitEuler)
 
 set!(model, N=1.0)
@@ -49,7 +49,7 @@ center_wavenumber_factor = (spectral_grid.κ[m] / wavenumber_source.reference_wa
 expected_damping = frequency_source.rate * frequency_factor +
                    wavenumber_source.rate * wavenumber_factor
 
-positive, damping = source_split(sources, model, 1, 1, m, n)
+positive, damping = source_split(physics, model, 1, 1, m, n)
 
 @assert positive == 0
 @assert damping ≈ expected_damping

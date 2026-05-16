@@ -71,7 +71,7 @@
     spectral_grid = PolarWaveVectorGrid(; κ=[1.0], φ=[0.0, pi / 2])
     model = SpectralWaveModel(; advection=nothing, grid,
                                 spectral_grid,
-                                sources=ExponentialWindInput(rate=ccw,
+                                physics=ExponentialWindInput(rate=ccw,
                                                               direction=ccw,
                                                               spreading_power=2))
     set!(model, N=1.0)
@@ -92,7 +92,7 @@
                                            radius=4.0)
     model = SpectralWaveModel(; advection=nothing, grid,
                                 spectral_grid,
-                                sources=ExponentialWindInput(rate=holland_source,
+                                physics=ExponentialWindInput(rate=holland_source,
                                                               direction=holland_source,
                                                               spreading_power=2))
     set!(model, N=1.0)

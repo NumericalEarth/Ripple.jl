@@ -30,7 +30,7 @@ alpha = 1.3
 model = SpectralWaveModel(; grid,
                             spectral_grid,
                             advection=nothing,
-                            sources=RelaxationToSpectrum(target; timescale=inv(alpha)),
+                            physics=RelaxationToSpectrum(target; timescale=inv(alpha)),
                             timestepper=:ForwardEuler)
 set!(model, N=0.0)
 

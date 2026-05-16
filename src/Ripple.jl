@@ -10,7 +10,7 @@ include("Diagnostics/Diagnostics.jl")
 include("InitialConditions/InitialConditions.jl")
 include("Coupling/Coupling.jl")
 include("Forcing/Forcing.jl")
-include("Sources/Sources.jl")
+include("Physics/Physics.jl")
 include("Models/Models.jl")
 include("OceananigansIntegration.jl")
 include("Validation/Validation.jl")
@@ -57,7 +57,14 @@ export compute_pseudomomentum_cell_averages, compute_pseudomomentum_cell_average
 export compute_pseudomomentum_tendency_cell_averages!, pseudomomentum_tendency_fields
 export cwcm_momentum_tendency_fields!
 export update_coupling!
-export NoSource, SourceTermSet, RelaxationToSpectrum
+export AbstractPhysicsTerm, AbstractWindInput, AbstractDissipation, AbstractNonlinear, AbstractPhysicsBundle
+export AbstractDrag, BulkWindDrag, WaveSupportedDrag, friction_velocity, drag_coefficient
+export DiagnosticTail, action_tail_factor
+export DynamicSubstepLimiter, parametric_action_bound
+export prepare_physics
+export PressureCorrelationInput, MeanSpectrumWhitecapping, LocalSaturationDissipation, MeanSpectrumPhysics
+export HasselmannDIA
+export NoPhysics, GenericPhysics, RelaxationToSpectrum
 export LinearWindInput, ExponentialWindInput, PowerLawWindInput, WaveAgeWindInput, SaturationDissipation
 export WhitecappingDissipation, FrequencyDissipation, WavenumberDissipation
 export MeanFrequencyDissipation, PeakFrequencyDissipation, MeanSquareWavenumberDissipation

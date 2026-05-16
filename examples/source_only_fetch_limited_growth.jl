@@ -27,7 +27,7 @@ growth_rate = target_growth_rate / directional_growth_weight
 whitecapping_rate = 4.8
 saturation_threshold = 0.5
 
-sources = SourceTermSet((
+physics = GenericPhysics((
     ExponentialWindInput(rate=growth_rate, direction=0.0, spreading_power=2),
     WhitecappingDissipation(rate=whitecapping_rate,
                              saturation_threshold=saturation_threshold,
@@ -38,7 +38,7 @@ sources = SourceTermSet((
 model = SpectralWaveModel(; grid,
                             spectral_grid,
                             advection=nothing,
-                            sources,
+                            physics,
                             timestepper=:SemiImplicitEuler)
 
 weight = spectral_weight(spectral_grid, 1, 1)
@@ -76,7 +76,7 @@ push!(animation_paths,
 writer_model = SpectralWaveModel(grid;
                                   spectral_grid,
                                   advection=nothing,
-                                  sources,
+                                  physics,
                                   timestepper=:SemiImplicitEuler)
 set!(writer_model, N=saturation_threshold / (20 * weight))
 writer_simulation = Simulation(writer_model; Δt=dt, stop_iteration=1, verbose=false)

@@ -96,7 +96,7 @@ end
             "bounded_wave_packet_dispersion.jl" => ("# # Bounded Wave Packet Dispersion", "topology=(Bounded, Periodic, Bounded)", "advection=WENO(order=5)", "packet_hovmoller"),
             "hasselmann_inertial_oscillation.jl" => ("# # Hasselmann Column Growth", "hasselmann_column", "run_validation", "advection=nothing"),
             "cwcm_q_transform_sheared_current.jl" => ("# # CWCM Q-Transform", "QTransform", "CWCMPrescribedCurrentCoupling", "advection=nothing"),
-            "frequency_direction_source_package.jl" => ("# # Frequency-Direction Source Package", "FrequencyDirectionGrid", "SourceTermSet", "advection=nothing", "SemiImplicitEuler"),
+            "frequency_direction_source_package.jl" => ("# # Frequency-Direction Source Package", "FrequencyDirectionGrid", "GenericPhysics", "advection=nothing", "SemiImplicitEuler"),
             "exact_finite_volume_source_rates.jl" => ("# # Exact Finite-Volume Source Rates", "spectral_frequency_power_average", "spectral_radial_power_average", "center_frequency_factor"),
             "vortex_refraction.jl" => ("# # Wave Refraction Through A Barotropic Vortex", "PolarWaveVectorGrid", "velocities", "rk3_step!", "advection = nothing"),
         )

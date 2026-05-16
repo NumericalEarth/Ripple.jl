@@ -77,7 +77,7 @@ model = SpectralWaveModel(; grid,
                             spectral_grid,
                             velocities = (; u = u_field, v = v_field),
                             advection = nothing,
-                            sources = nothing,
+                            physics = nothing,
                             timestepper = :ForwardEuler)
 coupling = model.coupling
 

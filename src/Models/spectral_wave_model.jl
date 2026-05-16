@@ -8,25 +8,25 @@ validate_model_clock(clock::Clock) = clock
 validate_model_clock(clock) =
     throw(ArgumentError("clock must be a Clock; got $(typeof(clock))"))
 
-canonical_model_sources(sources) = sources
-canonical_model_sources(::NoSource) = nothing
-canonical_model_sources(sources::SourceTermSet) = isempty(sources) ? nothing : sources
+canonical_model_physics(physics) = physics
+canonical_model_physics(::NoPhysics) = nothing
+canonical_model_physics(physics::GenericPhysics) = isempty(physics) ? nothing : physics
 
-validate_model_sources(::Nothing) = nothing
+validate_model_physics(::Nothing) = nothing
 
-function validate_model_sources(sources::SourceTermSet)
-    for source in sources
-        source isa AbstractSourceTerm ||
-            throw(ArgumentError("SourceTermSet terms must be AbstractSourceTerm instances; got $(typeof(source))"))
+function validate_model_physics(physics::GenericPhysics)
+    for term in physics
+        term isa AbstractPhysicsTerm ||
+            throw(ArgumentError("GenericPhysics terms must be AbstractPhysicsTerm instances; got $(typeof(term))"))
     end
 
-    return sources
+    return physics
 end
 
-function validate_model_sources(sources)
-    sources isa AbstractSourceTerm ||
-        throw(ArgumentError("sources must be nothing or an AbstractSourceTerm; got $(typeof(sources))"))
-    return sources
+function validate_model_physics(physics)
+    physics isa AbstractPhysicsTerm ||
+        throw(ArgumentError("physics must be nothing or an AbstractPhysicsTerm; got $(typeof(physics))"))
+    return physics
 end
 
 canonical_model_coupling(coupling) = coupling
@@ -126,12 +126,12 @@ end
 canonical_model_timestepper(timestepper) =
     throw(ArgumentError("timestepper must be a Symbol; got $(typeof(timestepper))"))
 
-mutable struct SpectralWaveModel{Arch, G, SG, A, Adv, Sources, Coupling, Tend, PrevTend, C} <: AbstractModel{Nothing, Arch}
+mutable struct SpectralWaveModel{Arch, G, SG, A, Adv, Physics, Coupling, Tend, PrevTend, C} <: AbstractModel{Nothing, Arch}
     grid :: G
     spectral_grid :: SG
     action :: A
     advection :: Adv
-    sources :: Sources
+    physics :: Physics
     coupling :: Coupling
     timestepper :: Symbol
     tendencies :: Tend
@@ -144,7 +144,7 @@ function SpectralWaveModel(grid;
                            spectral_grid,
                            action=nothing,
                            advection=WENO(),
-                           sources=nothing,
+                           physics=nothing,
                            velocities=nothing,
                            coupling=nothing,
                            timestepper=:ForwardEuler,
@@ -153,7 +153,7 @@ function SpectralWaveModel(grid;
     spectral_grid = validate_model_spectral_grid(spectral_grid)
     action = action === nothing ? WaveActionField(grid, spectral_grid) :
                                   validate_model_action(action, grid, spectral_grid)
-    sources = validate_model_sources(canonical_model_sources(sources))
+    physics = validate_model_physics(canonical_model_physics(physics))
     advection = validate_model_advection(canonical_model_advection(advection), grid, spectral_grid)
     coupling = resolve_coupling(velocities, coupling, grid, spectral_grid)
     coupling = canonical_model_coupling(coupling)
@@ -164,9 +164,9 @@ function SpectralWaveModel(grid;
     previous_tendencies = similar(action)
     Arch = typeof(architecture(grid))
     model = SpectralWaveModel{Arch, typeof(grid), typeof(spectral_grid), typeof(action),
-                              typeof(advection), typeof(sources), typeof(coupling),
+                              typeof(advection), typeof(physics), typeof(coupling),
                               typeof(tendencies), typeof(previous_tendencies), typeof(clock)}(
-        grid, spectral_grid, action, advection, sources, coupling,
+        grid, spectral_grid, action, advection, physics, coupling,
         timestepper, tendencies, previous_tendencies, false, clock)
     update_coupling!(model)
     return model

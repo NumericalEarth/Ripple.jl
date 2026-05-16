@@ -1,0 +1,51 @@
+$ WAVEWATCH III grid preprocessor for the Ripple duration-limited comparison.
+$ Single-point homogeneous deep-water domain (3x3 mask trick), matches Ripple
+$ spectral grid: 25 logarithmic frequency bins (XFR=1.1, f0=0.04118 Hz) × 24
+$ directions.
+$
+  'Ripple duration test'
+$
+$ XFR, f0, NFR, NDIR, RTHETA
+  1.10  0.04118  25  24  0.
+$
+$ Run flags: FLDRY FLCX FLCY FLCTH FLCK FLSOU
+   F F F F F T
+$
+$ Time steps: global, x/y CFL, intra-spectral CFL, source-term min
+  600.  600.  600. 15.
+$
+  &MISC FLAGTR = 0 /
+END OF NAMELISTS
+$
+$ Rectangular grid, 3×3, trivial mask
+$ 'TYPE'  FLAG  'NONE'
+  'RECT' T 'NONE'
+$ NX  NY
+   3   3
+$ SX (deg or m)  SY (deg or m)  unit-scale
+   1.  1.  1.E-2
+$ X0  Y0  Z-scale
+  -1. -1.  1.E-2
+$
+$ Bathymetry: pretend 2500 m deep everywhere — “deep water”
+  -5.  5.75  10  -2500. 3 1 '(....)' 'UNIT' 'input'
+$
+   1  1  1
+   1  1  1
+   1  1  1
+$
+$ Mask: all active
+  10  1 1 '(....)' 'PART' 'input'
+$
+   0  0  F
+   0  0  F
+   0  0
+$
+$ Obstruction grid (none)
+   0. 0. 0. 0.  0
+$
+$ Output point list (one point at the grid center)
+   0.   0.   'point01'
+   0.   0.   'STOPSTRING'
+$
+$ End.

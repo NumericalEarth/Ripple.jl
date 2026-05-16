@@ -1,35 +1,53 @@
-abstract type AbstractSourceTerm end
+abstract type AbstractPhysicsTerm end
 
-struct NoSource <: AbstractSourceTerm end
+# Category-aligned subtypes. Lets the tendency dispatcher tell wind-input from
+# dissipation from nonlinear interactions, and lets package bundles constrain
+# what they accept.
+abstract type AbstractWindInput   <: AbstractPhysicsTerm end
+abstract type AbstractDissipation <: AbstractPhysicsTerm end
+abstract type AbstractNonlinear   <: AbstractPhysicsTerm end
 
-struct SourceTermSet{Terms} <: AbstractSourceTerm
+# A `PhysicsPackage` (= `AbstractPhysicsBundle`) groups terms whose evaluation
+# can share per-grid-point state (bulk moments, drag, wave-supported stress).
+# `GenericPhysics` is the tuple wrapper that user-supplied `(t1, t2, ...)`
+# auto-converts into; it has no shared state.
+abstract type AbstractPhysicsBundle <: AbstractPhysicsTerm end
+
+struct NoPhysics <: AbstractPhysicsTerm end
+
+struct GenericPhysics{Terms} <: AbstractPhysicsBundle
     terms :: Terms
 end
 
-SourceTermSet(terms::Tuple=()) = SourceTermSet{typeof(terms)}(terms)
-SourceTermSet(term::AbstractSourceTerm, terms::AbstractSourceTerm...) =
-    SourceTermSet((term, terms...))
+GenericPhysics(terms::Tuple=()) = GenericPhysics{typeof(terms)}(terms)
+GenericPhysics(term::AbstractPhysicsTerm, terms::AbstractPhysicsTerm...) =
+    GenericPhysics((term, terms...))
 
-Base.length(s::SourceTermSet) = length(s.terms)
-Base.isempty(s::SourceTermSet) = isempty(s.terms)
-Base.iterate(s::SourceTermSet) = iterate(s.terms)
-Base.iterate(s::SourceTermSet, state) = iterate(s.terms, state)
-Base.getindex(s::SourceTermSet, i::Int) = getindex(s.terms, i)
+Base.length(s::GenericPhysics) = length(s.terms)
+Base.isempty(s::GenericPhysics) = isempty(s.terms)
+Base.iterate(s::GenericPhysics) = iterate(s.terms)
+Base.iterate(s::GenericPhysics, state) = iterate(s.terms, state)
+Base.getindex(s::GenericPhysics, i::Int) = getindex(s.terms, i)
 
-struct RelaxationToSpectrum{F, FT} <: AbstractSourceTerm
+# Shared infrastructure — drag, diagnostic tail, dynamic substep limiter.
+include("shared/drag.jl")
+include("shared/parametric_tail.jl")
+include("shared/substep_limiter.jl")
+
+struct RelaxationToSpectrum{F, FT} <: AbstractPhysicsTerm
     target :: F
     timescale :: FT
 end
 
 RelaxationToSpectrum(target; timescale) = RelaxationToSpectrum(target, float(timescale))
 
-struct LinearWindInput{Rate} <: AbstractSourceTerm
+struct LinearWindInput{Rate} <: AbstractPhysicsTerm
     rate :: Rate
 end
 
 LinearWindInput(; rate=0.0) = LinearWindInput(source_parameter(rate))
 
-struct ExponentialWindInput{Rate, Direction, Power} <: AbstractSourceTerm
+struct ExponentialWindInput{Rate, Direction, Power} <: AbstractPhysicsTerm
     rate :: Rate
     direction :: Direction
     spreading_power :: Power
@@ -38,7 +56,7 @@ end
 ExponentialWindInput(; rate=0.0, direction=0.0, spreading_power=2.0) =
     ExponentialWindInput(source_parameter(rate), direction, float(spreading_power))
 
-struct PowerLawWindInput{Rate, Speed, Direction, FT} <: AbstractSourceTerm
+struct PowerLawWindInput{Rate, Speed, Direction, FT} <: AbstractPhysicsTerm
     rate :: Rate
     speed :: Speed
     direction :: Direction
@@ -64,7 +82,7 @@ function PowerLawWindInput(; rate=0.0,
                              float(spreading_power))
 end
 
-struct WaveAgeWindInput{Rate, Speed, Direction, FT} <: AbstractSourceTerm
+struct WaveAgeWindInput{Rate, Speed, Direction, FT} <: AbstractPhysicsTerm
     rate :: Rate
     speed :: Speed
     direction :: Direction
@@ -93,7 +111,7 @@ function WaveAgeWindInput(; rate=0.0,
                             float(gravity))
 end
 
-struct SaturationDissipation{Rate, FT} <: AbstractSourceTerm
+struct SaturationDissipation{Rate, FT} <: AbstractPhysicsTerm
     rate :: Rate
     threshold :: FT
     power :: FT
@@ -102,7 +120,7 @@ end
 SaturationDissipation(; rate=0.0, threshold=1.0, power=1.0) =
     SaturationDissipation(source_parameter(rate), float(threshold), float(power))
 
-struct WhitecappingDissipation{Rate, FT} <: AbstractSourceTerm
+struct WhitecappingDissipation{Rate, FT} <: AbstractPhysicsTerm
     rate :: Rate
     saturation_threshold :: FT
     saturation_power :: FT
@@ -121,7 +139,7 @@ WhitecappingDissipation(; rate=0.0,
                             float(wavenumber_power),
                             float(reference_wavenumber))
 
-struct MeanFrequencyDissipation{Rate, FT} <: AbstractSourceTerm
+struct MeanFrequencyDissipation{Rate, FT} <: AbstractPhysicsTerm
     rate :: Rate
     reference_frequency :: FT
     power :: FT
@@ -130,7 +148,7 @@ end
 MeanFrequencyDissipation(; rate=0.0, reference_frequency=1.0, power=1.0) =
     MeanFrequencyDissipation(source_parameter(rate), float(reference_frequency), float(power))
 
-struct PeakFrequencyDissipation{Rate, FT} <: AbstractSourceTerm
+struct PeakFrequencyDissipation{Rate, FT} <: AbstractPhysicsTerm
     rate :: Rate
     reference_frequency :: FT
     power :: FT
@@ -139,7 +157,7 @@ end
 PeakFrequencyDissipation(; rate=0.0, reference_frequency=1.0, power=1.0) =
     PeakFrequencyDissipation(source_parameter(rate), float(reference_frequency), float(power))
 
-struct FrequencyDissipation{Rate, FT} <: AbstractSourceTerm
+struct FrequencyDissipation{Rate, FT} <: AbstractPhysicsTerm
     rate :: Rate
     reference_frequency :: FT
     power :: FT
@@ -148,7 +166,7 @@ end
 FrequencyDissipation(; rate=0.0, reference_frequency=1.0, power=1.0) =
     FrequencyDissipation(source_parameter(rate), float(reference_frequency), float(power))
 
-struct WavenumberDissipation{Rate, FT} <: AbstractSourceTerm
+struct WavenumberDissipation{Rate, FT} <: AbstractPhysicsTerm
     rate :: Rate
     reference_wavenumber :: FT
     power :: FT
@@ -157,7 +175,7 @@ end
 WavenumberDissipation(; rate=0.0, reference_wavenumber=1.0, power=1.0) =
     WavenumberDissipation(source_parameter(rate), float(reference_wavenumber), float(power))
 
-struct MeanSquareWavenumberDissipation{Rate, FT} <: AbstractSourceTerm
+struct MeanSquareWavenumberDissipation{Rate, FT} <: AbstractPhysicsTerm
     rate :: Rate
     reference_wavenumber :: FT
     power :: FT
@@ -166,7 +184,7 @@ end
 MeanSquareWavenumberDissipation(; rate=0.0, reference_wavenumber=1.0, power=1.0) =
     MeanSquareWavenumberDissipation(source_parameter(rate), float(reference_wavenumber), float(power))
 
-struct PeakWavenumberDissipation{Rate, FT} <: AbstractSourceTerm
+struct PeakWavenumberDissipation{Rate, FT} <: AbstractPhysicsTerm
     rate :: Rate
     reference_wavenumber :: FT
     power :: FT
@@ -175,7 +193,7 @@ end
 PeakWavenumberDissipation(; rate=0.0, reference_wavenumber=1.0, power=1.0) =
     PeakWavenumberDissipation(source_parameter(rate), float(reference_wavenumber), float(power))
 
-struct DepthLimitedBreaking{Rate, Depth, FT} <: AbstractSourceTerm
+struct DepthLimitedBreaking{Rate, Depth, FT} <: AbstractPhysicsTerm
     rate :: Rate
     depth :: Depth
     gamma :: FT
@@ -190,7 +208,7 @@ DepthLimitedBreaking(; rate=0.0, depth=1.0, gamma=0.78, power=2.0, minimum_depth
                          float(power),
                          float(minimum_depth))
 
-struct BottomFriction{Rate, Depth, FT} <: AbstractSourceTerm
+struct BottomFriction{Rate, Depth, FT} <: AbstractPhysicsTerm
     rate :: Rate
     depth :: Depth
     reference_depth :: FT
@@ -217,7 +235,7 @@ function BottomFriction(; rate=0.0,
                           float(reference_wavenumber))
 end
 
-struct IceDamping{Rate, Concentration, FT} <: AbstractSourceTerm
+struct IceDamping{Rate, Concentration, FT} <: AbstractPhysicsTerm
     rate :: Rate
     concentration :: Concentration
     wavenumber_power :: FT
@@ -233,7 +251,7 @@ IceDamping(; rate=0.0,
                float(wavenumber_power),
                float(reference_wavenumber))
 
-struct SwellDissipation{Rate, Direction, FT} <: AbstractSourceTerm
+struct SwellDissipation{Rate, Direction, FT} <: AbstractPhysicsTerm
     rate :: Rate
     direction :: Direction
     spreading_power :: FT
@@ -252,7 +270,7 @@ SwellDissipation(; rate=0.0,
                      float(wavenumber_power),
                      float(reference_wavenumber))
 
-struct MeanDirectionDissipation{Rate, FT} <: AbstractSourceTerm
+struct MeanDirectionDissipation{Rate, FT} <: AbstractPhysicsTerm
     rate :: Rate
     power :: FT
 end
@@ -260,13 +278,13 @@ end
 MeanDirectionDissipation(; rate=0.0, power=1.0) =
     MeanDirectionDissipation(source_parameter(rate), float(power))
 
-struct DirectionalDiffusion{Rate} <: AbstractSourceTerm
+struct DirectionalDiffusion{Rate} <: AbstractPhysicsTerm
     rate :: Rate
 end
 
 DirectionalDiffusion(; rate=0.0) = DirectionalDiffusion(source_parameter(rate))
 
-struct DirectionalAdvection{Velocity} <: AbstractSourceTerm
+struct DirectionalAdvection{Velocity} <: AbstractPhysicsTerm
     velocity :: Velocity
 end
 
@@ -275,13 +293,13 @@ function DirectionalAdvection(; velocity=0.0, angular_velocity=nothing)
     return DirectionalAdvection(source_parameter(value))
 end
 
-struct RadialDiffusion{Rate} <: AbstractSourceTerm
+struct RadialDiffusion{Rate} <: AbstractPhysicsTerm
     rate :: Rate
 end
 
 RadialDiffusion(; rate=0.0) = RadialDiffusion(source_parameter(rate))
 
-struct RadialAdvection{Velocity} <: AbstractSourceTerm
+struct RadialAdvection{Velocity} <: AbstractPhysicsTerm
     velocity :: Velocity
 end
 
@@ -301,7 +319,7 @@ function SpectralTransferInteraction(from::Tuple{Int, Int},
     return SpectralTransferInteraction(from[1], from[2], to[1], to[2], source_parameter(rate))
 end
 
-struct NonlinearSpectralTransfer{Interactions, FT} <: AbstractSourceTerm
+struct NonlinearSpectralTransfer{Interactions, FT} <: AbstractPhysicsTerm
     interactions :: Interactions
     power :: FT
 end
@@ -332,7 +350,7 @@ function SpectralTransferStencil(bins, coefficients; rate=0.0)
     return SpectralTransferStencil(normalized_bins, normalized_coefficients, source_parameter(rate))
 end
 
-struct NonlinearInvariantTransfer{Stencils, FT} <: AbstractSourceTerm
+struct NonlinearInvariantTransfer{Stencils, FT} <: AbstractPhysicsTerm
     stencils :: Stencils
     power :: FT
 end
@@ -361,7 +379,7 @@ function TriadTransferInteraction(parent1::Tuple{Int, Int},
                                     source_parameter(rate))
 end
 
-struct TriadSpectralTransfer{Interactions, FT} <: AbstractSourceTerm
+struct TriadSpectralTransfer{Interactions, FT} <: AbstractPhysicsTerm
     interactions :: Interactions
     power :: FT
     frequency_tolerance :: FT
@@ -395,7 +413,7 @@ function QuadrupletTransferInteraction(donor1::Tuple{Int, Int},
                                          source_parameter(rate))
 end
 
-struct DiscreteInteractionApproximation{Interactions, FT} <: AbstractSourceTerm
+struct DiscreteInteractionApproximation{Interactions, FT} <: AbstractPhysicsTerm
     interactions :: Interactions
     power :: FT
     resonance_tolerance :: FT
@@ -411,14 +429,14 @@ split_growth_rate(rate, action_value) =
 split_damping_rate(rate, action_value) =
     rate >= 0 ? (zero(rate * action_value), rate) : (-rate * action_value, zero(rate))
 
-source_split(::NoSource, model, i, j, m, n) = (zero(eltype(model.action)), zero(eltype(model.action)))
-source_tendency(::NoSource, model, i, j, m, n) = zero(eltype(model.action))
+source_split(::NoPhysics, model, i, j, m, n) = (zero(eltype(model.action)), zero(eltype(model.action)))
+source_tendency(::NoPhysics, model, i, j, m, n) = zero(eltype(model.action))
 source_split(::Nothing, model, i, j, m, n) = (zero(eltype(model.action)), zero(eltype(model.action)))
 source_tendency(::Nothing, model, i, j, m, n) = zero(eltype(model.action))
-implicit_source_rate(source::AbstractSourceTerm, model, i, j, m, n) = source_split(source, model, i, j, m, n)[2]
+implicit_source_rate(source::AbstractPhysicsTerm, model, i, j, m, n) = source_split(source, model, i, j, m, n)[2]
 implicit_source_rate(::Nothing, model, i, j, m, n) = zero(eltype(model.action))
 
-function source_tendency(s::SourceTermSet, model, i, j, m, n)
+function source_tendency(s::GenericPhysics, model, i, j, m, n)
     total = zero(eltype(model.action))
     for term in s.terms
         total += source_tendency(term, model, i, j, m, n)
@@ -426,7 +444,7 @@ function source_tendency(s::SourceTermSet, model, i, j, m, n)
     return total
 end
 
-function source_split(s::SourceTermSet, model, i, j, m, n)
+function source_split(s::GenericPhysics, model, i, j, m, n)
     positive = zero(eltype(model.action))
     damping = zero(eltype(model.action))
     for term in s.terms
@@ -1455,3 +1473,13 @@ function local_zeroth_moment(model, i, j)
     end
     return total
 end
+
+# Bundle interface — prepare_physics + state-aware source_split fallbacks.
+include("bundle_interface.jl")
+
+# Operational physics packages.
+include("WindInput/pressure_correlation.jl")
+include("Dissipation/mean_spectrum.jl")
+include("Packages/mean_spectrum_physics.jl")
+include("NonlinearInteractions/hasselmann_dia.jl")
+include("Dissipation/local_saturation.jl")

@@ -19,7 +19,7 @@ spectral_grid = FrequencyDirectionGrid(Float64;
                                        frequency=frequencies,
                                        φ=directions_radians)
 
-sources = SourceTermSet(
+physics = GenericPhysics(
     PowerLawWindInput(rate=0.2,
                       speed=12.0,
                       direction=0.0,
@@ -34,7 +34,7 @@ sources = SourceTermSet(
 model = SpectralWaveModel(; grid,
                             spectral_grid,
                             advection=nothing,
-                            sources,
+                            physics,
                             timestepper=:SemiImplicitEuler)
 
 peak_m = argmin(abs.(collect(frequencies) .- 0.18))
@@ -63,8 +63,8 @@ initial_east_peak = model.action[1, 1, peak_m, east_n]
 initial_west_peak = model.action[1, 1, peak_m, west_n]
 initial_directional_peak = [model.action[1, 1, peak_m, n] for n in 1:length(spectral_grid.φ)]
 
-east_positive, east_damping = source_split(sources, model, 1, 1, peak_m, east_n)
-west_positive, west_damping = source_split(sources, model, 1, 1, peak_m, west_n)
+east_positive, east_damping = source_split(physics, model, 1, 1, peak_m, east_n)
+west_positive, west_damping = source_split(physics, model, 1, 1, peak_m, west_n)
 
 @assert initial_peak_frequency > 0
 @assert east_positive > 0
