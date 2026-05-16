@@ -59,7 +59,7 @@ compatible_model_spectral_grid(a, b) =
                 coordinate_faces(a, 1) == coordinate_faces(b, 1) &&
                 coordinate_faces(a, 2) == coordinate_faces(b, 2) &&
                 spectral_weights(a) == spectral_weights(b) &&
-                a.topology == b.topology)
+                a.boundary_conditions == b.boundary_conditions)
 
 function validate_model_action(action::ProductField, grid, spectral_grid)
     compatible_model_physical_grid(physical_grid(action), grid) ||
@@ -130,7 +130,7 @@ end
 canonical_model_timestepper(timestepper) =
     throw(ArgumentError("timestepper must be a Symbol; got $(typeof(timestepper))"))
 
-mutable struct SpectralWaveModel{Arch, G, SG, Depth, A, HAdv, SAdv, Sources, Coupling, GA, Tend, PrevTend, C} <: AbstractModel{Nothing, Arch}
+mutable struct SpectralWaveModel{Arch, G, SG, Depth, A, HAdv, SAdv, Sources, Coupling, GA, BCs, Tend, PrevTend, C} <: AbstractModel{Nothing, Arch}
     grid :: G
     spectral_grid :: SG
     depth :: Depth
@@ -140,6 +140,7 @@ mutable struct SpectralWaveModel{Arch, G, SG, Depth, A, HAdv, SAdv, Sources, Cou
     sources :: Sources
     coupling :: Coupling
     propagation_smoothing :: GA
+    boundary_conditions :: BCs
     timestepper :: Symbol
     tendencies :: Tend
     previous_tendencies :: PrevTend
@@ -161,6 +162,7 @@ function SpectralWaveModel(grid, spectral_grid;
                            velocities=nothing,
                            coupling=nothing,
                            propagation_smoothing=nothing,
+                           boundary_conditions=nothing,
                            timestepper=:ForwardEuler,
                            clock=Clock(time=0.0))
     grid = validate_model_physical_grid(adapt_physical_grid(grid))
@@ -182,6 +184,9 @@ function SpectralWaveModel(grid, spectral_grid;
     coupling = validate_model_coupling(coupling, grid, spectral_grid)
     timestepper = canonical_model_timestepper(timestepper)
     clock = validate_model_clock(clock)
+    boundary_conditions = boundary_conditions === nothing ?
+                          default_wave_action_bcs(grid, spectral_grid) :
+                          validate_model_boundary_conditions(boundary_conditions, grid, spectral_grid)
 
     if coupling isa AbstractCWCMCurrentCoupling && spectral_advection !== nothing &&
        horizontal_advection !== nothing
@@ -195,14 +200,23 @@ function SpectralWaveModel(grid, spectral_grid;
                               typeof(horizontal_advection), typeof(spectral_advection),
                               typeof(sources), typeof(coupling),
                               typeof(propagation_smoothing),
+                              typeof(boundary_conditions),
                               typeof(tendencies), typeof(previous_tendencies), typeof(clock)}(
         grid, spectral_grid, depth, action, horizontal_advection, spectral_advection, sources, coupling,
-        propagation_smoothing,
+        propagation_smoothing, boundary_conditions,
         timestepper, tendencies, previous_tendencies, false, clock,
         nothing)
     update_coupling!(model)
     return model
 end
+
+# Currently a passthrough — the fused refraction kernel hardcodes no-flux
+# at κ faces regardless of what the user requests, so the BC slot is
+# informational. Validate the type so we can wire kernel sensitivity to
+# user-supplied BCs in a follow-up without an API break.
+validate_model_boundary_conditions(bcs::ProductBoundaryConditions, grid, spectral_grid) = bcs
+validate_model_boundary_conditions(bcs, grid, spectral_grid) =
+    throw(ArgumentError("boundary_conditions must be a ProductBoundaryConditions; got $(typeof(bcs))"))
 
 # Validate the spectral_advection kwarg. nothing disables kinematic refraction;
 # WENO() (or another AbstractAdvectionScheme) enables the fused kernel when the

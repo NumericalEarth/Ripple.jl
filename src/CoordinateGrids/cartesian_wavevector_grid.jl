@@ -1,12 +1,16 @@
-struct CartesianWaveVectorGrid{FT, A, KX, KY, KXF, KYF, W, Topo} <: AbstractSpectralGrid
+struct CartesianWaveVectorGrid{FT, A, KX, KY, KXF, KYF, W, BCs} <: AbstractSpectralGrid
     architecture :: A
     kx :: KX
     ky :: KY
     kx_faces :: KXF
     ky_faces :: KYF
     weights :: W
-    topology :: Topo
+    boundary_conditions :: BCs
 end
+
+# Both wavenumber components are physically bounded; boundary conditions
+# at the faces live in `boundary_conditions`.
+spectral_topology(::CartesianWaveVectorGrid) = (Bounded(), Bounded())
 
 CartesianWaveVectorGrid(FT::DataType; kwargs...) = CartesianWaveVectorGrid(CPU(), FT; kwargs...)
 
@@ -15,8 +19,8 @@ function CartesianWaveVectorGrid(arch::AbstractArchitecture = CPU(),
                                  kx, ky,
                                  kx_faces = nothing,
                                  ky_faces = nothing,
-                                 topology = (Bounded(), Bounded()))
-    topology = canonical_topology_tuple(topology, 2, "CartesianWaveVectorGrid")
+                                 boundary_conditions = (NoFlux(), NoFlux()))
+    boundary_conditions = canonical_bc_tuple(boundary_conditions, 2, "CartesianWaveVectorGrid")
     kxc_host = collect(FT, kx)
     kyc_host = collect(FT, ky)
     kxf_host = kx_faces === nothing ? centers_to_faces(kxc_host) : collect(FT, kx_faces)
@@ -32,8 +36,8 @@ function CartesianWaveVectorGrid(arch::AbstractArchitecture = CPU(),
     kyf = on_architecture(arch, kyf_host)
     weights = on_architecture(arch, weights_host)
     return CartesianWaveVectorGrid{FT, typeof(arch), typeof(kxc), typeof(kyc),
-                                   typeof(kxf), typeof(kyf), typeof(weights), typeof(topology)}(
-        arch, kxc, kyc, kxf, kyf, weights, topology)
+                                   typeof(kxf), typeof(kyf), typeof(weights), typeof(boundary_conditions)}(
+        arch, kxc, kyc, kxf, kyf, weights, boundary_conditions)
 end
 
 architecture(g::CartesianWaveVectorGrid) = g.architecture
@@ -69,6 +73,8 @@ end
 
 function Base.show(io::IO, g::CartesianWaveVectorGrid)
     println(io, summary(g))
-    _print_spectral_axes(io, (axis_summary(g.topology[1], g.kx_faces, "kx"),
-                              axis_summary(g.topology[2], g.ky_faces, "ky")))
+    topo = spectral_topology(g)
+    bcs  = g.boundary_conditions
+    _print_spectral_axes(io, (axis_summary(topo[1], g.kx_faces, "kx"; bc = bcs[1]),
+                              axis_summary(topo[2], g.ky_faces, "ky"; bc = bcs[2])))
 end
