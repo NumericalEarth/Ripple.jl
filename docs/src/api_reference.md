@@ -38,7 +38,7 @@ This page groups the main exported names by workflow.
 - Physical transport: `Centered`, `UpwindBiased`, `WENO`, `FluxFormAdvection`
 - Propagation smoothing: `AbstractPropagationSmoothing`, `SpatialAveraging`,
   `apply_propagation_smoothing!`
-- Source composition: `GenericPhysics`, `NoPhysics`, `source_tendency`,
+- Source composition: `SourceTermSet`, `NoSource`, `source_tendency`,
   `source_split`, `implicit_source_rate`
 - Source pieces: `RelaxationToSpectrum`, `LinearWindInput`,
   `ExponentialWindInput`, `PowerLawWindInput`, `WaveAgeWindInput`,

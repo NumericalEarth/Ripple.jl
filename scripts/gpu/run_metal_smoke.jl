@@ -115,7 +115,7 @@ function intrinsic_transport_model(arch, ::Type{FT}) where FT
     model = SpectralWaveModel(; grid,
                                 spectral_grid=cgrid,
                                 horizontal_advection=WENO(order=5),
-                                physics=nothing,
+                                sources=nothing,
                                 timestepper=:ForwardEuler)
     set!(model.action, action_values(FT, size(model.action)))
     return model
@@ -171,7 +171,7 @@ function refraction_model(arch, ::Type{FT}) where FT
                                 velocities=(; u, v),
                                 horizontal_advection=WENO(order=5),
                                 spectral_advection=WENO(order=5),
-                                physics=nothing,
+                                sources=nothing,
                                 timestepper=:ForwardEuler)
     set!(model.action, action_values(FT, size(model.action)))
     return model

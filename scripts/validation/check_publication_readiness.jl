@@ -81,7 +81,7 @@ function publication_content_status(root)
                            "github.com/NumericalEarth/Ripple.jl.git"),
         "docs/src/model_api.md" => ("Semantics Contract",
                                     "horizontal_advection=nothing",
-                                    "physics=nothing",
+                                    "sources=nothing",
                                     "coupling=nothing",
                                     "RectilinearGrid",
                                     "QTransform"),

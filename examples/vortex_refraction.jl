@@ -94,7 +94,7 @@ end
 
 model = SpectralWaveModel(grid, spectral_grid;
                           velocities  = (; u = u_field, v = v_field),
-                          physics     = nothing,
+                          sources     = nothing,
                           timestepper = :RK3);
 
 # Narrow-banded Gaussian initial condition, uniform in ``(x, y)``, peaking

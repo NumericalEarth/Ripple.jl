@@ -17,7 +17,7 @@
 ##### BJA defaults: C_ds = -2.1, δ₁ = 0.4, δ₂ = 0.6, p = 0.5.
 ##### ST3 historical defaults (WAM4): C_ds = -4.5, δ₁ = 0.5, δ₂ = 0.5.
 
-struct MeanSpectrumWhitecapping{FT} <: AbstractDissipation
+struct MeanSpectrumWhitecapping{FT} <: AbstractSourceTerm
     C_ds    :: FT          # dimensionless dissipation strength (negative)
     δ₁      :: FT          # weight on linear k/k̄ term
     δ₂      :: FT          # weight on quadratic (k/k̄)² term

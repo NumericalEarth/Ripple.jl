@@ -27,7 +27,7 @@ end
     @test fields(model).G === model.tendencies
     @test haskey(prognostic_fields(model), :N)
     @test !haskey(prognostic_fields(model), :G)
-    @test model.physics === nothing
+    @test model.sources === nothing
     @test model.horizontal_advection === nothing
     @test model.coupling === nothing
     @test eltype(model) === eltype(model.action)
@@ -94,20 +94,20 @@ end
 
     empty_sources = SpectralWaveModel(grid, cgrid;
                       horizontal_advection=nothing,
-                      physics=GenericPhysics())
-    @test empty_sources.physics === nothing
+                      sources=SourceTermSet())
+    @test empty_sources.sources === nothing
 
     compatibility = SpectralWaveModel(grid, cgrid;
                       horizontal_advection=nothing,
-                      physics=NoPhysics(),
+                      sources=NoSource(),
                       coupling=NoCurrentCoupling())
-    @test compatibility.physics === nothing
+    @test compatibility.sources === nothing
     @test compatibility.coupling === nothing
-    @test source_tendency(compatibility.physics, compatibility, 1, 1, 1, 1) == 0
-    @test implicit_source_rate(compatibility.physics, compatibility, 1, 1, 1, 1) == 0
+    @test source_tendency(compatibility.sources, compatibility, 1, 1, 1, 1) == 0
+    @test implicit_source_rate(compatibility.sources, compatibility, 1, 1, 1, 1) == 0
 
-    @test_throws ArgumentError SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, physics=:wind)
-    @test_throws ArgumentError SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, physics=GenericPhysics((:wind,)))
+    @test_throws ArgumentError SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, sources=:wind)
+    @test_throws ArgumentError SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, sources=SourceTermSet((:wind,)))
 
     frequency_grid = FrequencyDirectionGrid(; frequency=[0.1], φ=[0.0])
     # `advection=` is a shortcut that sets both horizontal and spectral advection.
@@ -291,7 +291,7 @@ end
     source = FrequencyDissipation(rate=0.4, reference_frequency=0.16, power=2)
     model = SpectralWaveModel(grid, cgrid;
                       horizontal_advection=nothing,
-                      physics=source,
+                      sources=source,
                       timestepper=:SemiImplicitEuler)
     set!(model, N=(x, y, kx, ky) -> 1 + 0.1x + 0.02hypot(kx, ky))
     compute_tendencies!(model)
@@ -312,7 +312,7 @@ end
     cgrid = CartesianWaveVectorGrid(Float64; kx=[0.5], ky=[0.0])
     model = SpectralWaveModel(grid, cgrid;
                       horizontal_advection=nothing,
-                      physics=LinearWindInput(rate=0.2),
+                      sources=LinearWindInput(rate=0.2),
                       timestepper=:AB2)
     set!(model, N=1.0)
     time_step!(model, 0.5)
@@ -322,8 +322,8 @@ end
     expected = 1.1 + 0.5 * (1.5 * 0.2 * 1.1 - 0.5 * 0.2)
     @test model.action[1, 1, 1, 1] ≈ expected
 
-    rk3 = SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, physics=BottomFriction(rate=1.0), timestepper=:RK3)
-    low_storage = SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, physics=BottomFriction(rate=1.0), timestepper=:LowStorageRK3)
+    rk3 = SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, sources=BottomFriction(rate=1.0), timestepper=:RK3)
+    low_storage = SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, sources=BottomFriction(rate=1.0), timestepper=:LowStorageRK3)
     set!(rk3, N=1.0)
     set!(low_storage, N=1.0)
     time_step!(rk3, 0.1)

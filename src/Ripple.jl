@@ -10,9 +10,10 @@ include("Diagnostics/Diagnostics.jl")
 include("InitialConditions/InitialConditions.jl")
 include("Coupling/Coupling.jl")
 include("Forcing/Forcing.jl")
-include("Physics/Physics.jl")
+include("Sources/Sources.jl")
 include("Models/Models.jl")
 include("OceananigansIntegration.jl")
+include("Physics/Physics.jl")
 include("Validation/Validation.jl")
 
 export CPU, GPU, architecture
@@ -58,14 +59,7 @@ export compute_pseudomomentum_cell_averages, compute_pseudomomentum_cell_average
 export compute_pseudomomentum_tendency_cell_averages!, pseudomomentum_tendency_fields
 export cwcm_momentum_tendency_fields!
 export update_coupling!
-export AbstractPhysicsTerm, AbstractWindInput, AbstractDissipation, AbstractNonlinear, AbstractPhysicsBundle
-export AbstractDrag, BulkWindDrag, WaveSupportedDrag, friction_velocity, drag_coefficient
-export DiagnosticTail, action_tail_factor
-export DynamicSubstepLimiter, parametric_action_bound
-export prepare_physics
-export PressureCorrelationInput, MeanSpectrumWhitecapping, LocalSaturationDissipation, MeanSpectrumPhysics
-export HasselmannDIA
-export NoPhysics, GenericPhysics, RelaxationToSpectrum
+export NoSource, SourceTermSet, RelaxationToSpectrum
 export LinearWindInput, ExponentialWindInput, PowerLawWindInput, WaveAgeWindInput, SaturationDissipation
 export WhitecappingDissipation, FrequencyDissipation, WavenumberDissipation
 export MeanFrequencyDissipation, PeakFrequencyDissipation, MeanSquareWavenumberDissipation
@@ -78,6 +72,14 @@ export SpectralTransferStencil, NonlinearInvariantTransfer
 export TriadTransferInteraction, TriadSpectralTransfer
 export QuadrupletTransferInteraction, DiscreteInteractionApproximation
 export source_tendency, source_split, implicit_source_rate
+# ST3/ST4/DIA source-term family (src/Physics/)
+export BulkWindDrag, WaveSupportedDrag, drag_coefficient, friction_velocity
+export DiagnosticTail, action_tail_factor
+export DynamicSubstepLimiter, parametric_action_bound
+export PressureCorrelationInput
+export LocalSaturationDissipation, MeanSpectrumWhitecapping
+export HasselmannDIA
+export MeanSpectrumPhysics
 export SpectralWaveModel, Clock, fields, prognostic_fields, compute_tendencies!, time_step!, cfl
 export Centered, UpwindBiased, WENO, FluxFormAdvection
 export AbstractPropagationSmoothing, SpatialAveraging, apply_propagation_smoothing!

@@ -8,25 +8,25 @@ validate_model_clock(clock::Clock) = clock
 validate_model_clock(clock) =
     throw(ArgumentError("clock must be a Clock; got $(typeof(clock))"))
 
-canonical_model_physics(physics) = physics
-canonical_model_physics(::NoPhysics) = nothing
-canonical_model_physics(physics::GenericPhysics) = isempty(physics) ? nothing : physics
+canonical_model_sources(sources) = sources
+canonical_model_sources(::NoSource) = nothing
+canonical_model_sources(sources::SourceTermSet) = isempty(sources) ? nothing : sources
 
-validate_model_physics(::Nothing) = nothing
+validate_model_sources(::Nothing) = nothing
 
-function validate_model_physics(physics::GenericPhysics)
-    for term in physics
-        term isa AbstractPhysicsTerm ||
-            throw(ArgumentError("GenericPhysics terms must be AbstractPhysicsTerm instances; got $(typeof(term))"))
+function validate_model_sources(sources::SourceTermSet)
+    for source in sources
+        source isa AbstractSourceTerm ||
+            throw(ArgumentError("SourceTermSet terms must be AbstractSourceTerm instances; got $(typeof(source))"))
     end
 
-    return physics
+    return sources
 end
 
-function validate_model_physics(physics)
-    physics isa AbstractPhysicsTerm ||
-        throw(ArgumentError("physics must be nothing or an AbstractPhysicsTerm; got $(typeof(physics))"))
-    return physics
+function validate_model_sources(sources)
+    sources isa AbstractSourceTerm ||
+        throw(ArgumentError("sources must be nothing or an AbstractSourceTerm; got $(typeof(sources))"))
+    return sources
 end
 
 canonical_model_coupling(coupling) = coupling
@@ -130,14 +130,14 @@ end
 canonical_model_timestepper(timestepper) =
     throw(ArgumentError("timestepper must be a Symbol; got $(typeof(timestepper))"))
 
-mutable struct SpectralWaveModel{Arch, G, SG, Depth, A, HAdv, SAdv, Physics, Coupling, GA, BCs, Tend, PrevTend, C} <: AbstractModel{Nothing, Arch}
+mutable struct SpectralWaveModel{Arch, G, SG, Depth, A, HAdv, SAdv, Sources, Coupling, GA, BCs, Tend, PrevTend, C} <: AbstractModel{Nothing, Arch}
     grid :: G
     spectral_grid :: SG
     depth :: Depth
     action :: A
     horizontal_advection :: HAdv
     spectral_advection :: SAdv
-    physics :: Physics
+    sources :: Sources
     coupling :: Coupling
     propagation_smoothing :: GA
     boundary_conditions :: BCs
@@ -157,7 +157,7 @@ function SpectralWaveModel(grid, spectral_grid;
                            horizontal_advection=WENO(),
                            spectral_advection=WENO(),
                            advection=_ADVECTION_UNSET,
-                           physics=nothing,
+                           sources=nothing,
                            depth=InfiniteDepth(),
                            velocities=nothing,
                            coupling=nothing,
@@ -176,7 +176,7 @@ function SpectralWaveModel(grid, spectral_grid;
 
     action = action === nothing ? WaveActionField(grid, spectral_grid) :
                                   validate_model_action(action, grid, spectral_grid)
-    physics = validate_model_physics(canonical_model_physics(physics))
+    sources = validate_model_sources(canonical_model_sources(sources))
     horizontal_advection = validate_model_advection(canonical_model_advection(horizontal_advection), grid, spectral_grid)
     spectral_advection = validate_model_spectral_advection(spectral_advection)
     coupling = resolve_coupling(velocities, coupling, grid, spectral_grid, depth)
@@ -198,11 +198,11 @@ function SpectralWaveModel(grid, spectral_grid;
     Arch = typeof(architecture(grid))
     model = SpectralWaveModel{Arch, typeof(grid), typeof(spectral_grid), typeof(depth), typeof(action),
                               typeof(horizontal_advection), typeof(spectral_advection),
-                              typeof(physics), typeof(coupling),
+                              typeof(sources), typeof(coupling),
                               typeof(propagation_smoothing),
                               typeof(boundary_conditions),
                               typeof(tendencies), typeof(previous_tendencies), typeof(clock)}(
-        grid, spectral_grid, depth, action, horizontal_advection, spectral_advection, physics, coupling,
+        grid, spectral_grid, depth, action, horizontal_advection, spectral_advection, sources, coupling,
         propagation_smoothing, boundary_conditions,
         timestepper, tendencies, previous_tendencies, false, clock,
         nothing)

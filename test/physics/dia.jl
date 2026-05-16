@@ -1,6 +1,6 @@
 @testset "HasselmannDIA construction" begin
     dia = HasselmannDIA()
-    @test dia isa AbstractNonlinear
+    @test dia isa Ripple.AbstractSourceTerm
     @test dia.C ≈ 2.78e7   # WW3 NLPROP default
     @test dia.λ ≈ 0.25
     @test dia.gravity ≈ 9.81
@@ -21,7 +21,7 @@ end
                                      φ=collect(range(0, 2π * 15/16; length=16)))
     dia = HasselmannDIA()
     model = SpectralWaveModel(grid, cgrid; horizontal_advection=nothing,
-                                physics=dia, timestepper=:ForwardEuler)
+                                sources=dia, timestepper=:ForwardEuler)
     set!(model, N=0.0)
     compute_tendencies!(model)
     @test all(interior(model.tendencies) .== 0)
@@ -36,7 +36,7 @@ end
                                      φ=collect(range(0, 2π * 23/24; length=24)))
     dia = HasselmannDIA()
     model = SpectralWaveModel(grid, cgrid; horizontal_advection=nothing,
-                                physics=dia, timestepper=:ForwardEuler)
+                                sources=dia, timestepper=:ForwardEuler)
 
     # JONSWAP-like initial spectrum.
     Nκ, Nφ = 16, 24
@@ -48,8 +48,7 @@ end
         model.action[1, 1, m, n] = 1e-4 * exp(-(f - fp)^2 / (0.02)^2) * directional
     end
 
-    state = prepare_physics(dia, model)
-    transfer = state.transfer
+    transfer = Ripple._compute_dia_transfer(dia, model)
     total = sum(transfer[1, 1, m, n] * Ripple.spectral_weight(cgrid, m, n)
                 for n in 1:Nφ, m in 1:Nκ)
     # NN snapping introduces O(Δσ + Δθ) error — should still be small relative
@@ -73,7 +72,7 @@ end
     bundle = MeanSpectrumPhysics(; wind_input=inp, dissipation=diss, nonlinear=dia)
 
     model = SpectralWaveModel(grid, cgrid; horizontal_advection=nothing,
-                                physics=bundle, timestepper=:SemiImplicitEuler)
+                                sources=bundle, timestepper=:SemiImplicitEuler)
     set!(model, N=1e-5)
     compute_tendencies!(model)
     @test all(isfinite, interior(model.tendencies))

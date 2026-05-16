@@ -87,7 +87,7 @@ hurricane = HollandHurricaneWind(; center          = storm_track,
 
 # ## Physics bundle
 #
-# `MeanSpectrumPhysics` co-optimizes the three terms via `prepare_physics`,
+# `MeanSpectrumPhysics` co-optimizes the three terms via `prepare_sources!`,
 # which runs three KernelAbstractions kernels once per time step to
 # precompute (i) the wave-supported-stress cap for the wind input, (ii)
 # bulk spectral moments needed by mean-spectrum-based terms, and (iii) the
@@ -99,7 +99,7 @@ wind_input  = PressureCorrelationInput(; drag      = BulkWindDrag(:linear),
 dissipation = LocalSaturationDissipation(; B_r     = 1.05e-2,
                                            σ_power = 1.0)
 nonlinear   = HasselmannDIA(; C = 1.5e7)
-physics     = MeanSpectrumPhysics(; wind_input, dissipation, nonlinear)
+sources     = MeanSpectrumPhysics(; wind_input, dissipation, nonlinear)
 
 # ## Model
 #
@@ -110,7 +110,7 @@ physics     = MeanSpectrumPhysics(; wind_input, dissipation, nonlinear)
 
 model = SpectralWaveModel(grid, spectral_grid;
                           advection   = WENO(),
-                          physics,
+                          sources,
                           timestepper = :SemiImplicitEuler)
 
 # Spin-up seed: a small uniform action density.

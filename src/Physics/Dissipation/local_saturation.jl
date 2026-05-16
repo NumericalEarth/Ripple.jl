@@ -15,7 +15,7 @@
 ##### Simplification vs full ST4: no directional sector integral (no `cos^sB`
 ##### projection), no cumulative breaking, no swell boundary-layer damping.
 
-struct LocalSaturationDissipation{FT} <: AbstractDissipation
+struct LocalSaturationDissipation{FT} <: AbstractSourceTerm
     C_ds    :: FT      # WW3 ST4 SDSC2 default: -2.2e-5 (negative for dissipation)
     B_r     :: FT      # saturation threshold
     p       :: FT      # exponent on the overshoot

@@ -210,7 +210,7 @@ function relaxation_source_solution_validation()
     alpha = 0.7
     model = SpectralWaveModel(grid, cgrid;
                       horizontal_advection=nothing,
-                      physics=RelaxationToSpectrum(target; timescale=inv(alpha)),
+                      sources=RelaxationToSpectrum(target; timescale=inv(alpha)),
                       timestepper=:ForwardEuler)
     set!(model, N=0.0)
     dt = 1e-3
@@ -235,7 +235,7 @@ function pure_damping_decay_validation()
     dt = 0.1
     model = SpectralWaveModel(grid, cgrid;
                       horizontal_advection=nothing,
-                      physics=BottomFriction(rate=rate),
+                      sources=BottomFriction(rate=rate),
                       timestepper=:SemiImplicitEuler)
     set!(model, N=1.0)
     time_step!(model, dt)
@@ -251,7 +251,7 @@ function fetch_limited_source_balance_validation()
     target_growth_rate = 1.2
     weight = spectral_weight(cgrid, 1, 1)
     directional_weight = wind_directional_weight(cgrid, 1, 1, 0.0, 2)
-    source = GenericPhysics(
+    source = SourceTermSet(
         ExponentialWindInput(rate=target_growth_rate / directional_weight,
                              direction=0.0,
                              spreading_power=2),
@@ -262,7 +262,7 @@ function fetch_limited_source_balance_validation()
     )
     model = SpectralWaveModel(grid, cgrid;
                       horizontal_advection=nothing,
-                      physics=source,
+                      sources=source,
                       timestepper=:SemiImplicitEuler)
     equilibrium_m0 = 0.5 * (1 + target_growth_rate / 4.8)
     set!(model, N=0.5 / (20weight))
@@ -273,7 +273,7 @@ function fetch_limited_source_balance_validation()
     end
 
     equilibrium_action = equilibrium_m0 / weight
-    equilibrium_model = SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, physics=source)
+    equilibrium_model = SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, sources=source)
     set!(equilibrium_model, N=equilibrium_action)
     positive, damping = source_split(source, equilibrium_model, 1, 1, 1, 1)
 
@@ -305,7 +305,7 @@ function hasselmann_column_validation()
     steps = 200
     model = SpectralWaveModel(grid, cgrid;
                       horizontal_advection=nothing,
-                      physics=RelaxationToSpectrum(target; timescale=inv(alpha)),
+                      sources=RelaxationToSpectrum(target; timescale=inv(alpha)),
                       timestepper=:ForwardEuler)
     set!(model, N=0.0)
     for _ in 1:steps
@@ -339,7 +339,7 @@ function finite_volume_source_rates_validation()
     source = FrequencyDissipation(rate=0.4, reference_frequency=0.16, power=2)
     model = SpectralWaveModel(grid, cgrid;
                       horizontal_advection=nothing,
-                      physics=source,
+                      sources=source,
                       timestepper=:SemiImplicitEuler)
     set!(model, N=1.0)
     m, n = 6, 1
@@ -603,8 +603,8 @@ function run_performance_smoke(; Nx=6, Ny=5, Nk=5, Nθ=8)
     end
     model = SpectralWaveModel(grid, cgrid;
                       horizontal_advection=nothing,
-                      physics=GenericPhysics(ExponentialWindInput(rate=0.03, direction=0.0),
-                                             BottomFriction(rate=0.01)),
+                      sources=SourceTermSet(ExponentialWindInput(rate=0.03, direction=0.0),
+                      BottomFriction(rate=0.01)),
                       timestepper=:SemiImplicitEuler)
     set!(model, N=1.0)
     source_step_metric = performance_metric(:sources, :semi_implicit_step,

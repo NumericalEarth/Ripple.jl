@@ -59,11 +59,11 @@ wind_input  = PressureCorrelationInput(; drag      = BulkWindDrag(:linear),
 dissipation = LocalSaturationDissipation(; B_r     = 1.05e-2,
                                            σ_power = 1.0)
 nonlinear   = HasselmannDIA(; C = 1.5e7)
-physics     = MeanSpectrumPhysics(; wind_input, dissipation, nonlinear)
+sources     = MeanSpectrumPhysics(; wind_input, dissipation, nonlinear)
 
 model = SpectralWaveModel(grid, spectral_grid;
                           advection   = WENO(),
-                          physics,
+                          sources,
                           timestepper = :SemiImplicitEuler)
 
 total_weight = sum(spectral_weight(spectral_grid, m, n) for m in 1:NFREQ, n in 1:NDIR)

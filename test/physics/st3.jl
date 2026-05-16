@@ -2,7 +2,7 @@
     drag = BulkWindDrag(:linear)
     inp = PressureCorrelationInput(; drag=drag, wind=10.0)
 
-    @test inp isa AbstractWindInput
+    @test inp isa Ripple.AbstractSourceTerm
     @test inp.β_max == 1.2
     @test inp.z_α == 0.011
     @test inp.p_in == 2.0
@@ -21,7 +21,7 @@ end
 
     inp = PressureCorrelationInput(; drag=BulkWindDrag(:linear), wind=15.0)
     model = SpectralWaveModel(grid, cgrid; horizontal_advection=nothing,
-                                physics=inp, timestepper=:ForwardEuler)
+                                sources=inp, timestepper=:ForwardEuler)
     set!(model, N=1e-3)
 
     # Sin must be non-negative when wind aligns with wave direction and inverse wave
@@ -35,7 +35,7 @@ end
     # Zero wind → zero tendency.
     inp_calm = PressureCorrelationInput(; drag=BulkWindDrag(:linear), wind=0.0)
     model_calm = SpectralWaveModel(grid, cgrid; horizontal_advection=nothing,
-                                     physics=inp_calm, timestepper=:ForwardEuler)
+                                     sources=inp_calm, timestepper=:ForwardEuler)
     set!(model_calm, N=1e-3)
     compute_tendencies!(model_calm)
     @test all(interior(model_calm.tendencies) .== 0)
@@ -43,7 +43,7 @@ end
 
 @testset "MeanSpectrumWhitecapping construction" begin
     d = MeanSpectrumWhitecapping()
-    @test d isa AbstractDissipation
+    @test d isa Ripple.AbstractSourceTerm
     @test d.C_ds == -2.1            # BJA default
     @test d.δ₁ == 0.4
     @test d.δ₂ == 0.6
@@ -56,7 +56,7 @@ end
 
     diss = MeanSpectrumWhitecapping()
     model = SpectralWaveModel(grid, cgrid; horizontal_advection=nothing,
-                                physics=diss, timestepper=:SemiImplicitEuler)
+                                sources=diss, timestepper=:SemiImplicitEuler)
     set!(model, N=1e-2)
 
     # Dissipation must produce only damping (positive part is zero).
@@ -78,13 +78,12 @@ end
     diss = MeanSpectrumWhitecapping()
     bundle = MeanSpectrumPhysics(; wind_input=inp, dissipation=diss)
 
-    @test bundle isa AbstractPhysicsBundle
-    @test bundle isa AbstractPhysicsTerm
+    @test bundle isa Ripple.AbstractSourceTerm
     @test bundle.wind_input === inp
     @test bundle.dissipation === diss
 
     model = SpectralWaveModel(grid, cgrid; horizontal_advection=nothing,
-                                physics=bundle, timestepper=:SemiImplicitEuler)
+                                sources=bundle, timestepper=:SemiImplicitEuler)
     set!(model, N=1e-3)
     compute_tendencies!(model)
     # Bundle is the sum: input growth - dissipation damping.

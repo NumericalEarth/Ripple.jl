@@ -22,7 +22,7 @@
 
     @testset "WaveSupportedDrag stub" begin
         d = WaveSupportedDrag(; alpha0=0.0095, z_u=10.0)
-        @test d isa AbstractDrag
+        @test d isa Ripple.AbstractDrag
         @test d.alpha0 == 0.0095
         @test d.z_u == 10.0
         # Unimplemented — should throw until ST3 wind input lands.
@@ -60,15 +60,9 @@ end
     @test isapprox(parametric_action_bound(lim, σ, 2k), bound / 8; rtol=1e-12)
 end
 
-@testset "Abstract physics type hierarchy" begin
-    @test AbstractWindInput   <: AbstractPhysicsTerm
-    @test AbstractDissipation <: AbstractPhysicsTerm
-    @test AbstractNonlinear   <: AbstractPhysicsTerm
-    @test AbstractPhysicsBundle <: AbstractPhysicsTerm
-    @test GenericPhysics <: AbstractPhysicsBundle
-    @test NoPhysics <: AbstractPhysicsTerm
-
-    # prepare_physics returns `nothing` for non-bundle terms and `Nothing` for empty.
-    @test prepare_physics(NoPhysics(), nothing) === nothing
-    @test prepare_physics(nothing, nothing) === nothing
+@testset "Bundle prepare_sources default" begin
+    # prepare_sources returns `nothing` for non-bundle terms; bundles override
+    # to return a NamedTuple of per-grid-point state.
+    @test Ripple.prepare_sources(NoSource(), nothing) === nothing
+    @test Ripple.prepare_sources(nothing, nothing) === nothing
 end

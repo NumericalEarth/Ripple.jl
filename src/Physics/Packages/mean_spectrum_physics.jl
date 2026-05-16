@@ -18,7 +18,7 @@ import KernelAbstractions
 import KernelAbstractions: @kernel, @index
 import Oceananigans.Architectures: architecture, device
 
-struct MeanSpectrumPhysics{I, D, NL, Ex} <: AbstractPhysicsBundle
+struct MeanSpectrumPhysics{I, D, NL, Ex} <: AbstractSourceTerm
     wind_input  :: I
     dissipation :: D
     nonlinear   :: NL
@@ -218,14 +218,21 @@ end
 _compute_wind_input_state(::Any, ::Any) = nothing
 _compute_wind_input_state(::Nothing, ::Any) = nothing
 
-function prepare_physics(b::MeanSpectrumPhysics, model)
+# Per-nonlinear-term state precompute. Defaults to `nothing`; concrete bundle
+# members override (e.g. `HasselmannDIA`).
+_prepare_nonlinear_state(::Nothing, model) = nothing
+_prepare_nonlinear_state(t, model) = nothing
+_prepare_nonlinear_state(s::HasselmannDIA, model) =
+    (transfer = _compute_dia_transfer(s, model),)
+
+function prepare_sources(b::MeanSpectrumPhysics, model)
     wind_state = _compute_wind_input_state(b.wind_input, model)
     diss_state = _compute_mean_spectrum_state(b.dissipation, model)
-    nl_state   = prepare_physics(b.nonlinear, model)
+    nl_state   = _prepare_nonlinear_state(b.nonlinear, model)
     return (wind_input  = wind_state,
             dissipation = diss_state,
             nonlinear   = nl_state,
-            extras      = map(t -> prepare_physics(t, model), b.extras))
+            extras      = map(t -> _prepare_nonlinear_state(t, model), b.extras))
 end
 
 function source_split(b::MeanSpectrumPhysics, state::NamedTuple, model, i, j, m, n)

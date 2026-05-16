@@ -21,7 +21,7 @@
 ##### rather than iterative wave-supported drag. ST4 sheltering (s_u > 0)
 ##### requires a precomputed Sin/c integral and lives in the bundle path.
 
-struct PressureCorrelationInput{Drag, Wind, Dir, FT} <: AbstractWindInput
+struct PressureCorrelationInput{Drag, Wind, Dir, FT} <: AbstractSourceTerm
     drag       :: Drag        # AbstractDrag for u* (typically BulkWindDrag)
     wind       :: Wind        # scalar speed OR wind-field struct (Vortex/Hurricane/...)
     direction  :: Dir         # scalar angle [rad] used only when `wind` is a scalar speed;
@@ -138,7 +138,7 @@ end
 #####
 ##### State-aware source_split with stress cap. `state.stress_factor[i,j]` is a
 ##### scalar in [0, 1] that scales the raw rate down to satisfy τ_w ≤ τ_max =
-##### ρ_a u*². Computed once per (i,j) in `prepare_physics`. This is a one-pass
+##### ρ_a u*². Computed once per (i,j) in `prepare_sources!`. This is a one-pass
 ##### approximation of WW3's iterative τ_w feedback — enough to suppress the
 ##### bistability that makes ST3-lite overshoot at moderate winds.
 #####

@@ -33,7 +33,7 @@ function cuda_smoke_model(arch)
     cgrid = PolarWaveVectorGrid(Float64;
                                 κ=[0.45, 0.8, 1.2],
                                 φ=range(0, 2pi; length=7)[1:6])
-    sources = GenericPhysics((WaveAgeWindInput(rate=0.01,
+    sources = SourceTermSet((WaveAgeWindInput(rate=0.01,
                                               speed=3.0,
                                               inverse_wave_age_threshold=0.0,
                                               spreading_power=1.0,

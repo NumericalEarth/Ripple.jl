@@ -25,9 +25,9 @@ methods, and how they map to model kwargs.
   when the coupling is a CWCM coupling. When both CWCM
   coupling and `spectral_advection` are set, the fused kernel handles physical
   transport too, and `horizontal_advection` is ignored.
-- `physics=nothing` means no source tendency is applied.
+- `sources=nothing` means no source tendency is applied.
 - `coupling=nothing` means no current-coupling update is applied.
-- `GenericPhysics()`, `NoPhysics()`, and `NoCurrentCoupling()` are compatibility
+- `SourceTermSet()`, `NoSource()`, and `NoCurrentCoupling()` are compatibility
   inputs and normalize to `nothing`.
 - With all optional dynamics absent, `time_step!` advances the clock and leaves
   the action field unchanged.

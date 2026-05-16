@@ -32,7 +32,7 @@ import KernelAbstractions: @kernel, @index
 import Oceananigans.Architectures: architecture, device
 using Atomix: @atomic
 
-struct HasselmannDIA{FT} <: AbstractNonlinear
+struct HasselmannDIA{FT} <: AbstractSourceTerm
     C        :: FT
     λ        :: FT
     Δθ_plus  :: FT
@@ -222,8 +222,6 @@ function _compute_dia_transfer(s::HasselmannDIA, model)
     return transfer
 end
 
-prepare_physics(s::HasselmannDIA, model) = (transfer = _compute_dia_transfer(s, model),)
-
 function source_split(s::HasselmannDIA, state::NamedTuple, model, i, j, m, n)
     FT = eltype(model.action)
     @inbounds T = state.transfer[i, j, m, n]
@@ -243,7 +241,7 @@ function source_tendency(s::HasselmannDIA, state::NamedTuple, model, i, j, m, n)
 end
 
 function source_split(s::HasselmannDIA, model, i, j, m, n)
-    state = prepare_physics(s, model)
+    state = (transfer = _compute_dia_transfer(s, model),)
     return source_split(s, state, model, i, j, m, n)
 end
 
