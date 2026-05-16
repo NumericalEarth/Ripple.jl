@@ -78,6 +78,8 @@ m0_field   = m0(model.action)
 mean_dir   = mean_direction(model.action)
 ```
 
+https://github.com/user-attachments/assets/fe1716be-50c4-475b-8662-d736fb57301c
+
 See `examples/vortex_refraction.jl` (a literate tutorial that produces a
 multi-panel movie of `m₀`, `κᵣₘₛ`, and the mean direction) for the full
 visualization.
