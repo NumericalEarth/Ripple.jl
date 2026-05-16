@@ -1,5 +1,9 @@
 using Documenter
+using Literate
+using CairoMakie
 using Ripple
+
+CairoMakie.activate!(type = "png")
 
 const DOCS_ROOT = @__DIR__
 const REPO_ROOT = normpath(joinpath(DOCS_ROOT, ".."))
@@ -16,6 +20,11 @@ makedocs(;
         canonical = "https://NumericalEarth.github.io/RippleDocumentation/stable/",
         edit_link = "main",
         prettyurls = get(ENV, "CI", "false") == "true",
+        # Literate-generated example pages inline base64 figures (and
+        # produce multi-megabyte HTML for the vortex animation), so bump
+        # the size threshold well above Documenter's default 200 KiB cap.
+        size_threshold_warn  = 2_000_000,
+        size_threshold       = 5_000_000,
     ),
     pages = [
         "Home" => "index.md",
@@ -23,11 +32,6 @@ makedocs(;
         "Finite-Volume Integration" => "finite_volume_integration.md",
         "API Reference" => "api_reference.md",
         "Examples" => generated_example_pages(),
-        "Validation" => "validation.md",
-        "Publication" => "publication.md",
-        "Implementation Status" => "generated/implementation_status.md",
-        "Goal Completion Audit" => "generated/goal_completion_audit.md",
-        "External Comparison Harness" => "generated/external_comparison_harness.md",
     ],
     checkdocs = :none,
 )
