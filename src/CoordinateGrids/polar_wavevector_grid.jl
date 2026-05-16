@@ -108,3 +108,15 @@ end
     return polar_second_moment_measures(g.κ_faces[m], g.κ_faces[m+1],
                                         g.φ_faces[n], g.φ_faces[n+1])
 end
+
+function Base.summary(g::PolarWaveVectorGrid)
+    return string(spectral_size_string(g),
+                  " PolarWaveVectorGrid", spectral_type_signature(g),
+                  " on ", summary(architecture(g)))
+end
+
+function Base.show(io::IO, g::PolarWaveVectorGrid)
+    println(io, summary(g))
+    _print_spectral_axes(io, (axis_summary(g.topology[1], g.κ_faces, "κ"),
+                              axis_summary(g.topology[2], g.φ_faces, "φ")))
+end

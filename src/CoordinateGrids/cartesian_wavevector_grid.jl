@@ -60,3 +60,15 @@ end
            (x₂^2 - x₁^2) * (y₂^2 - y₁^2) / 4,
            (x₂ - x₁) * (y₂^3 - y₁^3) / 3
 end
+
+function Base.summary(g::CartesianWaveVectorGrid)
+    return string(spectral_size_string(g),
+                  " CartesianWaveVectorGrid", spectral_type_signature(g),
+                  " on ", summary(architecture(g)))
+end
+
+function Base.show(io::IO, g::CartesianWaveVectorGrid)
+    println(io, summary(g))
+    _print_spectral_axes(io, (axis_summary(g.topology[1], g.kx_faces, "kx"),
+                              axis_summary(g.topology[2], g.ky_faces, "ky")))
+end

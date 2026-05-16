@@ -87,3 +87,18 @@ end
     return polar_second_moment_measures(g.κ_faces[m], g.κ_faces[m+1],
                                         g.φ_faces[n], g.φ_faces[n+1])
 end
+
+function Base.summary(g::FrequencyDirectionGrid)
+    return string(spectral_size_string(g),
+                  " FrequencyDirectionGrid", spectral_type_signature(g),
+                  " on ", summary(architecture(g)))
+end
+
+function Base.show(io::IO, g::FrequencyDirectionGrid)
+    println(io, summary(g))
+    κ_line = string("derived κ ∈ ", axis_domain_string(g.topology[1], g.κ_faces),
+                    " via deep-water dispersion")
+    _print_spectral_axes(io, (axis_summary(g.topology[1], g.frequency_faces, "f"),
+                              axis_summary(g.topology[2], g.φ_faces, "φ"),
+                              κ_line))
+end
