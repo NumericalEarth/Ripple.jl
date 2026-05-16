@@ -4,8 +4,9 @@
 [![Docs Build](https://github.com/NumericalEarth/Ripple.jl/actions/workflows/documentation.yml/badge.svg)](https://github.com/NumericalEarth/Ripple.jl/actions/workflows/documentation.yml)
 [![Docs](https://img.shields.io/badge/docs-dev-blue.svg)](https://NumericalEarth.github.io/Ripple.jl/dev/)
 
-Ripple.jl is an Oceananigans-style spectral wave-action model prototype. It
-stores wave action on a product space of three-dimensional physical
+Ripple.jl is an Oceananigans-style spectral wave-action model prototype based on
+the coupled model derived by [Vanneste and Young (2026)](https://arxiv.org/abs/2602.21976).
+It stores wave action on a product space of three-dimensional physical
 `RectilinearGrid` cells and two-dimensional spectral coordinates, with logical
 indexing `N[i, j, m, n]` for horizontally varying wave action.
 
