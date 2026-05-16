@@ -12,32 +12,35 @@ import Oceananigans
     type_cartesian = CartesianWaveVectorGrid(Float64;
                                              kx=[-0.2, 0.2],
                                              ky=[0.1],
-                                             topology=(Periodic, Bounded))
-    @test type_cartesian.topology[1] isa Periodic
-    @test type_cartesian.topology[2] isa Bounded
+                                             boundary_conditions=(Periodic, Bounded))
+    @test type_cartesian.boundary_conditions[1] isa Periodic
+    @test type_cartesian.boundary_conditions[2] isa Bounded
+    @test Ripple.spectral_topology(type_cartesian) == (Bounded(), Bounded())
 
     type_polar = PolarWaveVectorGrid(;
                                      κ=[0.4, 0.8],
                                      φ=[0.0, pi],
-                                     topology=(NoFlux, Periodic))
-    @test type_polar.topology[1] isa NoFlux
-    @test type_polar.topology[2] isa Periodic
+                                     boundary_conditions=(NoFlux, Periodic))
+    @test type_polar.boundary_conditions[1] isa NoFlux
+    @test type_polar.boundary_conditions[2] isa Periodic
+    @test Ripple.spectral_topology(type_polar) == (Bounded(), Periodic())
 
     type_frequency = FrequencyDirectionGrid(;
                                             frequency=[0.1, 0.2],
                                             φ=[0.0, pi],
-                                            topology=(Bounded, Periodic))
-    @test type_frequency.topology[1] isa Bounded
-    @test type_frequency.topology[2] isa Periodic
+                                            boundary_conditions=(Bounded, Periodic))
+    @test type_frequency.boundary_conditions[1] isa Bounded
+    @test type_frequency.boundary_conditions[2] isa Periodic
+    @test Ripple.spectral_topology(type_frequency) == (Bounded(), Periodic())
     @test_throws Exception RectilinearGrid(CPU(); size=(1, 1, 1), x=(0, 1), y=(0, 1), z=(0, 1), topology=(Periodic,))
-    @test_throws ArgumentError CartesianWaveVectorGrid(Float64; kx=[0.0], ky=[0.0], topology=(:periodic, Bounded))
+    @test_throws ArgumentError CartesianWaveVectorGrid(Float64; kx=[0.0], ky=[0.0], boundary_conditions=(:periodic, Bounded))
 
     polar = PolarWaveVectorGrid(Float32;
                                 κ=[0.4, 0.8],
                                 φ=[0.0f0, Float32(pi)],
                                 κ_faces=[0.2, 0.6, 1.0],
                                 φ_faces=Float32[-pi/2, pi/2, 3pi/2],
-                                topology=(NoFlux, Periodic))
+                                boundary_conditions=(NoFlux, Periodic))
     @test eltype(polar.κ) === Float32
     @test eltype(polar.φ) === Float32
     @test architecture(polar) isa CPU
@@ -49,15 +52,15 @@ import Oceananigans
                                          φ=[0.0, pi],
                                          frequency_faces=[0.05, 0.15, 0.25],
                                          φ_faces=[-pi/2, pi/2, 3pi/2],
-                                         topology=(Bounded, Periodic))
+                                         boundary_conditions=(Bounded, Periodic))
     @test architecture(fgrid_check) isa CPU
     @test_throws ArgumentError FrequencyDirectionGrid(; φ=[0.0])
     @test_throws ArgumentError FrequencyDirectionGrid(; frequency=[0.1])
 
     cgrid = CartesianWaveVectorGrid(Float64; kx=range(-1, 1; length=5), ky=range(-2, 2; length=9))
     @test coordinate_size(cgrid) == (5, 9)
-    @test cgrid.topology[1] isa Bounded
-    @test cgrid.topology[2] isa Bounded
+    @test cgrid.boundary_conditions[1] isa NoFlux
+    @test cgrid.boundary_conditions[2] isa NoFlux
     @test all(diff(coordinate_centers(cgrid, 1)) .> 0)
     @test all(diff(coordinate_centers(cgrid, 2)) .> 0)
     @test all(diff(coordinate_faces(cgrid, 1)) .> 0)
@@ -107,8 +110,8 @@ import Oceananigans
     @test_throws ArgumentError CartesianWaveVectorGrid(Float64; kx=[0.0], ky=[0.0], kx_faces=[0.1, 1.0])
 
     pgrid = PolarWaveVectorGrid(; κ=range(0.25, 1.0; length=4), φ=range(0, 2pi; length=9)[1:8])
-    @test pgrid.topology[1] isa NoFlux
-    @test pgrid.topology[2] isa Periodic
+    @test pgrid.boundary_conditions[1] isa NoFlux
+    @test pgrid.boundary_conditions[2] isa Periodic
     @test all(diff(coordinate_centers(pgrid, 1)) .> 0)
     @test all(diff(coordinate_centers(pgrid, 2)) .> 0)
     @test all(diff(coordinate_faces(pgrid, 1)) .> 0)
@@ -158,8 +161,9 @@ import Oceananigans
 
     fgrid = FrequencyDirectionGrid(; frequency=range(0.08, 0.2; length=4), φ=range(0, 2pi; length=9)[1:8])
     @test coordinate_size(fgrid) == (4, 8)
-    @test fgrid.topology[1] isa Bounded
-    @test fgrid.topology[2] isa Periodic
+    @test fgrid.boundary_conditions[1] isa NoFlux
+    @test fgrid.boundary_conditions[2] isa Periodic
+    @test Ripple.spectral_topology(fgrid) == (Bounded(), Periodic())
     @test all(diff(coordinate_centers(fgrid, 1)) .> 0)
     @test all(diff(coordinate_centers(fgrid, 2)) .> 0)
     @test all(diff(coordinate_faces(fgrid, 1)) .> 0)

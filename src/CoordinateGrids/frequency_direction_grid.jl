@@ -1,4 +1,4 @@
-struct FrequencyDirectionGrid{FT, A, F, Φ, FF, ΦF, K, KF, W, Topo} <: AbstractSpectralGrid
+struct FrequencyDirectionGrid{FT, A, F, Φ, FF, ΦF, K, KF, W, BCs} <: AbstractSpectralGrid
     architecture :: A
     frequency :: F
     φ :: Φ
@@ -7,8 +7,13 @@ struct FrequencyDirectionGrid{FT, A, F, Φ, FF, ΦF, K, KF, W, Topo} <: Abstract
     κ :: K
     κ_faces :: KF
     weights :: W
-    topology :: Topo
+    boundary_conditions :: BCs
 end
+
+# `frequency` is bounded, `φ` is periodic. Boundary conditions on
+# the κ/frequency axis are a separate concern stored in
+# `boundary_conditions`.
+spectral_topology(::FrequencyDirectionGrid) = (Bounded(), Periodic())
 
 FrequencyDirectionGrid(FT::DataType; kwargs...) = FrequencyDirectionGrid(CPU(), FT; kwargs...)
 
@@ -19,10 +24,10 @@ function FrequencyDirectionGrid(arch::AbstractArchitecture = CPU(),
                                 frequency_faces = nothing,
                                 φ_faces = nothing,
                                 gravity = FT(9.81),
-                                topology = (Bounded(), Periodic()))
+                                boundary_conditions = (NoFlux(), Periodic()))
     frequency === nothing && throw(ArgumentError("FrequencyDirectionGrid requires `frequency`"))
     φ === nothing && throw(ArgumentError("FrequencyDirectionGrid requires `φ`"))
-    topology = canonical_topology_tuple(topology, 2, "FrequencyDirectionGrid")
+    boundary_conditions = canonical_bc_tuple(boundary_conditions, 2, "FrequencyDirectionGrid")
     fc_host = collect(FT, frequency)
     φc_host = collect(FT, φ)
     validate_coordinate_centers("φ", φc_host)
@@ -59,8 +64,8 @@ function FrequencyDirectionGrid(arch::AbstractArchitecture = CPU(),
 
     return FrequencyDirectionGrid{FT, typeof(arch), typeof(fc), typeof(φc),
                                   typeof(ff), typeof(φf), typeof(κc), typeof(κf),
-                                  typeof(weights), typeof(topology)}(
-        arch, fc, φc, ff, φf, κc, κf, weights, topology)
+                                  typeof(weights), typeof(boundary_conditions)}(
+        arch, fc, φc, ff, φf, κc, κf, weights, boundary_conditions)
 end
 
 architecture(g::FrequencyDirectionGrid) = g.architecture
@@ -96,9 +101,11 @@ end
 
 function Base.show(io::IO, g::FrequencyDirectionGrid)
     println(io, summary(g))
-    κ_line = string("derived κ ∈ ", axis_domain_string(g.topology[1], g.κ_faces),
+    topo = spectral_topology(g)
+    bcs  = g.boundary_conditions
+    κ_line = string("derived κ ∈ ", axis_domain_string(topo[1], g.κ_faces),
                     " via deep-water dispersion")
-    _print_spectral_axes(io, (axis_summary(g.topology[1], g.frequency_faces, "f"),
-                              axis_summary(g.topology[2], g.φ_faces, "φ"),
+    _print_spectral_axes(io, (axis_summary(topo[1], g.frequency_faces, "f"; bc = bcs[1]),
+                              axis_summary(topo[2], g.φ_faces,         "φ"; bc = bcs[2]),
                               κ_line))
 end

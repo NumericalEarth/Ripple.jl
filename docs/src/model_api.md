@@ -8,6 +8,8 @@ The `SpectralWaveModel` API exposes wave-action transport in physical and
 wavevector phase space. This is the same organizing principle used by
 [VannesteYoung2026](@citet), who combine Doppler-shifted action transport with
 wave pseudomomentum forcing of the current equations.
+See [Notation](@ref) and [Theory](@ref) for the continuum equations, numerical
+methods, and how they map to model kwargs.
 
 ## Semantics Contract
 

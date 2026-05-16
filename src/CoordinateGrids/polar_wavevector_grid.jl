@@ -1,12 +1,17 @@
-struct PolarWaveVectorGrid{FT, A, K, Φ, KF, ΦF, W, Topo} <: AbstractSpectralGrid
+struct PolarWaveVectorGrid{FT, A, K, Φ, KF, ΦF, W, BCs} <: AbstractSpectralGrid
     architecture :: A
     κ :: K
     φ :: Φ
     κ_faces :: KF
     φ_faces :: ΦF
     weights :: W
-    topology :: Topo
+    boundary_conditions :: BCs
 end
+
+# Spectral-axis topology is determined entirely by the grid type. `κ` is
+# physically bounded, `φ` is physically periodic — boundary conditions are
+# a separate concern carried by `boundary_conditions`.
+spectral_topology(::PolarWaveVectorGrid) = (Bounded(), Periodic())
 
 PolarWaveVectorGrid(FT::DataType; kwargs...) = PolarWaveVectorGrid(CPU(), FT; kwargs...)
 
@@ -16,10 +21,10 @@ function PolarWaveVectorGrid(arch::AbstractArchitecture = CPU(),
                              φ = nothing,
                              κ_faces = nothing,
                              φ_faces = nothing,
-                             topology = (NoFlux(), Periodic()))
+                             boundary_conditions = (NoFlux(), Periodic()))
     κ === nothing && throw(ArgumentError("PolarWaveVectorGrid requires `κ`"))
     φ === nothing && throw(ArgumentError("PolarWaveVectorGrid requires `φ`"))
-    topology = canonical_topology_tuple(topology, 2, "PolarWaveVectorGrid")
+    boundary_conditions = canonical_bc_tuple(boundary_conditions, 2, "PolarWaveVectorGrid")
     κc_host = collect(FT, κ)
     φc_host = collect(FT, φ)
     validate_coordinate_centers("φ", φc_host)
@@ -46,8 +51,8 @@ function PolarWaveVectorGrid(arch::AbstractArchitecture = CPU(),
     φf = on_architecture(arch, φf_host)
     weights = on_architecture(arch, weights_host)
     return PolarWaveVectorGrid{FT, typeof(arch), typeof(κc), typeof(φc),
-                               typeof(κf), typeof(φf), typeof(weights), typeof(topology)}(
-        arch, κc, φc, κf, φf, weights, topology)
+                               typeof(κf), typeof(φf), typeof(weights), typeof(boundary_conditions)}(
+        arch, κc, φc, κf, φf, weights, boundary_conditions)
 end
 
 architecture(g::PolarWaveVectorGrid) = g.architecture
@@ -117,6 +122,8 @@ end
 
 function Base.show(io::IO, g::PolarWaveVectorGrid)
     println(io, summary(g))
-    _print_spectral_axes(io, (axis_summary(g.topology[1], g.κ_faces, "κ"),
-                              axis_summary(g.topology[2], g.φ_faces, "φ")))
+    topo = spectral_topology(g)
+    bcs  = g.boundary_conditions
+    _print_spectral_axes(io, (axis_summary(topo[1], g.κ_faces, "κ"; bc = bcs[1]),
+                              axis_summary(topo[2], g.φ_faces, "φ"; bc = bcs[2])))
 end

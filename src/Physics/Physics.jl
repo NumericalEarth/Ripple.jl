@@ -897,7 +897,7 @@ end
 function directional_diffusion_spacing(cgrid)
     cgrid isa Union{PolarWaveVectorGrid, FrequencyDirectionGrid} ||
         throw(ArgumentError("DirectionalDiffusion requires a direction-coordinate spectral grid"))
-    cgrid.topology[2] isa Periodic ||
+    cgrid.boundary_conditions[2] isa Periodic ||
         throw(ArgumentError("DirectionalDiffusion requires periodic directional topology"))
     spacings = coordinate_spacings(cgrid, 2)
     first_spacing = first(spacings)
@@ -936,7 +936,7 @@ end
 function source_split(s::DirectionalAdvection, model, i, j, m, n)
     model.spectral_grid isa Union{PolarWaveVectorGrid, FrequencyDirectionGrid} ||
         throw(ArgumentError("DirectionalAdvection requires a direction-coordinate spectral grid"))
-    model.spectral_grid.topology[2] isa Periodic ||
+    model.spectral_grid.boundary_conditions[2] isa Periodic ||
         throw(ArgumentError("DirectionalAdvection requires periodic directional topology"))
 
     velocity = source_value(s.velocity, model, i, j)
@@ -984,7 +984,7 @@ end
 function source_split(s::RadialDiffusion, model, i, j, m, n)
     model.spectral_grid isa Union{PolarWaveVectorGrid, FrequencyDirectionGrid} ||
         throw(ArgumentError("RadialDiffusion requires a radial-coordinate spectral grid"))
-    model.spectral_grid.topology[1] isa Periodic &&
+    model.spectral_grid.boundary_conditions[1] isa Periodic &&
         throw(ArgumentError("RadialDiffusion uses no-flux radial boundaries and does not support periodic radial topology"))
 
     rate = source_value(s.rate, model, i, j)
@@ -1027,7 +1027,7 @@ end
 function source_split(s::RadialAdvection, model, i, j, m, n)
     model.spectral_grid isa Union{PolarWaveVectorGrid, FrequencyDirectionGrid} ||
         throw(ArgumentError("RadialAdvection requires a radial-coordinate spectral grid"))
-    model.spectral_grid.topology[1] isa Periodic &&
+    model.spectral_grid.boundary_conditions[1] isa Periodic &&
         throw(ArgumentError("RadialAdvection uses no-flux radial boundaries and does not support periodic radial topology"))
 
     velocity = source_value(s.velocity, model, i, j)

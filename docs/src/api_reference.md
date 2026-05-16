@@ -36,6 +36,8 @@ This page groups the main exported names by workflow.
 - Model state: `SpectralWaveModel`, `Clock`, `fields`, `prognostic_fields`,
   `compute_tendencies!`, `time_step!`, `cfl`
 - Physical transport: `Centered`, `UpwindBiased`, `WENO`, `FluxFormAdvection`
+- Propagation smoothing: `AbstractPropagationSmoothing`, `SpatialAveraging`,
+  `apply_propagation_smoothing!`
 - Source composition: `GenericPhysics`, `NoPhysics`, `source_tendency`,
   `source_split`, `implicit_source_rate`
 - Source pieces: `RelaxationToSpectrum`, `LinearWindInput`,

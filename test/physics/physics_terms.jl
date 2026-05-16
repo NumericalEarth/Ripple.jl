@@ -795,7 +795,7 @@ end
     @test_throws ArgumentError compute_tendencies!(bad_model)
 
     bounded_direction = PolarWaveVectorGrid(; κ=[1.0], φ=[0.0, pi],
-                                            topology=(NoFlux(), Bounded()))
+                                            boundary_conditions=(NoFlux(), Bounded()))
     bad_model = SpectralWaveModel(grid, bounded_direction; horizontal_advection=nothing, physics=advection)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
@@ -836,7 +836,7 @@ end
     @test_throws ArgumentError compute_tendencies!(bad_model)
 
     periodic_radial = PolarWaveVectorGrid(; κ=[0.5, 1.0], φ=[0.0],
-                                          topology=(Periodic(), Periodic()))
+                                          boundary_conditions=(Periodic(), Periodic()))
     bad_model = SpectralWaveModel(grid, periodic_radial; horizontal_advection=nothing, physics=diffusion)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)
@@ -894,7 +894,7 @@ end
     @test_throws ArgumentError compute_tendencies!(bad_model)
 
     periodic_radial = PolarWaveVectorGrid(; κ=[0.5, 1.0], φ=[0.0],
-                                          topology=(Periodic(), Periodic()))
+                                          boundary_conditions=(Periodic(), Periodic()))
     bad_model = SpectralWaveModel(grid, periodic_radial; horizontal_advection=nothing, physics=advection)
     set!(bad_model, N=1.0)
     @test_throws ArgumentError compute_tendencies!(bad_model)

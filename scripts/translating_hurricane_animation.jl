@@ -12,15 +12,15 @@ CairoMakie.activate!(type = "png")
 const OUTPUT_PATH = joinpath(@__DIR__, "..", "translating_hurricane.mp4")
 
 # ## Configuration
-Nx = Ny   = 60
-Lx = Ly   = 1.8e6                            # 1800 km basin
-T_FINAL   = 36 * 3600.0                      # 36 hours
-DT        = 90.0
-FRAME_DT  = 30 * 60.0                        # 30-min frames → 72 frames
+Nx = Ny   = 36
+Lx = Ly   = 1.5e6                            # 1500 km basin
+T_FINAL   = 18 * 3600.0                      # 18 hours
+DT        = 120.0
+FRAME_DT  = 30 * 60.0                        # 30-min frames → 36 frames
 
-# Spectral grid: 24 frequencies × 16 directions.
-NFREQ = 24
-NDIR  = 16
+# Spectral grid: 16 frequencies × 12 directions.
+NFREQ = 16
+NDIR  = 12
 f0    = 0.04118
 xfr   = 1.10
 frequency_centers = [f0 * xfr^(k - 1) for k in 1:NFREQ]

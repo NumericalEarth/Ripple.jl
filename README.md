@@ -4,10 +4,40 @@
 [![Docs Build](https://github.com/NumericalEarth/Ripple.jl/actions/workflows/documentation.yml/badge.svg)](https://github.com/NumericalEarth/Ripple.jl/actions/workflows/documentation.yml)
 [![Docs](https://img.shields.io/badge/docs-dev-blue.svg)](https://NumericalEarth.github.io/Ripple.jl/dev/)
 
-Ripple.jl is an Oceananigans-style spectral wave-action model prototype. It
-stores wave action on a product space of three-dimensional physical
+Ripple.jl is an Oceananigans-style spectral wave-action model prototype based on
+the consistent wave-current coupled model derived by [Vanneste and Young (2026)](https://arxiv.org/abs/2602.21976).
+It stores wave action on a product space of three-dimensional physical
 `RectilinearGrid` cells and two-dimensional spectral coordinates, with logical
 indexing `N[i, j, m, n]` for horizontally varying wave action.
+The wave evolution is described by a wave action equation,
+
+$$ \partial_t N + \nabla_x \cdot \left ( N \nabla_k \Omega \right ) - \nabla_k \cdot \left ( \Omega \nabla_k N \right ) = N^\circ $$
+
+where $N(x, y, k, l)$ is the wave action density, $\Omega$ is the wave frequency, $N^\circ$ represents diabatic processes,
+and $\nabla_x$ and $\nabla_k$ denote gradients in physical and spectral space, respectively, 
+The evolution of $N$ is coupled to Lagrangian-mean currents through a "shear-dependent" integral
+dispersion relation derived by [Vanneste and Young (2026)](https://arxiv.org/abs/2602.21976),
+
+$$ \Omega = \sigma + \boldsymbol{k} \cdot U $$
+
+where $\sigma$ is the intrinsic frequency,
+
+$$ \sigma(x, \kappa) = \sqrt{g \kappa \tanh \left ( \kappa \, d(x, y) \right )} $$
+
+in water with depth $d(x, y)$, gravitational acceleration $g$, and wavenumber magnitude
+$\kappa = \sqrt{k^2 + l^2}$. The "Doppler velocity" $U$ is defined via the integral "Q-transform",
+
+$$ U(x, y, \kappa) \equiv \int_{-d}^0 u^L Q(x, y, z, \kappa) \, \mathrm{d} z $$
+
+where $\boldsymbol{u}^L(x, y, z)$ is the three-dimensional Lagrangian-mean velocity and
+
+$$ Q(x, y, z, \kappa) \equiv \frac{2 \kappa \cosh(2 \kappa(z + d))}{\sinh(2 \kappa d)} $$
+
+When the Stokes drift or pseudomomentum of the wave field is consistently incorporated into
+the equations that describe the evolution of $u^L$, the system conserves a form of coupled energy
+that includes both wave energy and $|u^L|^2 / 2$.
+For more information, see [Vanneste and Young (2026)](https://arxiv.org/abs/2602.21976)
+and the documentation.
 
 Ripple uses Oceananigans tracer advection schemes for horizontal physical
 transport of each spectral bin. Ripple intentionally does not define its own
