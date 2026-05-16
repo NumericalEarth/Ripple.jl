@@ -12,7 +12,7 @@ disabled with `nothing`. Oceananigans is a hard dependency, and Ripple does
 not define private advection schemes, simulation drivers, or output writers.
 
 ```@contents
-Pages = ["model_api.md", "finite_volume_integration.md", "api_reference.md", "examples.md"]
+Pages = ["notation.md", "theory.md", "model_api.md", "finite_volume_integration.md", "api_reference.md", "examples.md"]
 Depth = 2
 ```
 
@@ -30,3 +30,6 @@ about fifty lines.
 For a longer tour at production resolution with an animated three-panel
 movie of `m₀`, `κᵣₘₛ`, and the mean direction, follow on to
 [Wave Refraction Through A Barotropic Vortex](@ref).
+
+For notation, continuum equations, and the numerical implementation behind the
+model, start with [Notation](@ref) and [Theory](@ref).
