@@ -14,4 +14,6 @@ goal_completion_checklist.tsv
 optional_gate_outputs/
 vortex_refraction_output/
 garden_sprinkler_output/
+validation/duration_limited_ww3/output/
+translating_hurricane.mp4
 .claude/
