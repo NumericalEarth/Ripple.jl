@@ -109,3 +109,79 @@ function spectral_second_moment_measures(g::AbstractSpectralGrid, m, n)
     weight = spectral_cell_measure(g, m, n)
     return kx^2 * weight, kx * ky * weight, ky^2 * weight
 end
+
+#####
+##### Pretty-printing helpers shared by all spectral grids. The visual
+##### style mirrors `Oceananigans.Grids.RectilinearGrid`'s `show` method:
+##### a one-line summary above a tree of per-axis dimension summaries.
+#####
+
+import Printf: @sprintf
+
+# Historical wart: `NoFlux` is a *boundary-condition* marker that some
+# spectral grid constructors still store in the `topology` slot. For
+# display purposes we render any axis carrying it as `Bounded`, which is
+# its actual topology; the no-flux behaviour is enforced elsewhere
+# (kernel) regardless of how it is labelled here.
+display_topology(::NoFlux) = Oceananigans.Grids.Bounded()
+display_topology(t)        = t
+
+axis_topology_label(t) = _axis_topology_label(display_topology(t))
+_axis_topology_label(::Oceananigans.Grids.Periodic) = "Periodic"
+_axis_topology_label(::Oceananigans.Grids.Bounded)  = "Bounded "
+_axis_topology_label(::Oceananigans.Grids.Flat)     = "Flat    "
+_axis_topology_label(t)                             = string(nameof(typeof(t)))
+
+axis_domain_close(t) = _axis_domain_close(display_topology(t))
+_axis_domain_close(::Oceananigans.Grids.Bounded)  = "]"
+_axis_domain_close(::Oceananigans.Grids.Periodic) = ")"
+_axis_domain_close(::Oceananigans.Grids.Flat)     = "]"
+_axis_domain_close(_)                             = ")"
+
+display_topology_name(t) = nameof(typeof(display_topology(t)))
+
+axis_pretty(x) = @sprintf("%.4g", x)
+
+function axis_domain_string(topo, faces)
+    return string("[", axis_pretty(first(faces)), ", ",
+                       axis_pretty(last(faces)),
+                       axis_domain_close(topo))
+end
+
+function axis_spacing_string(faces, name)
+    Δ = diff(collect(faces))
+    if length(Δ) > 0 && all(d -> isapprox(d, first(Δ); rtol=1e-10, atol=1e-14), Δ)
+        return @sprintf("regularly spaced with Δ%s=%s", name, axis_pretty(first(Δ)))
+    else
+        return @sprintf("variably spaced with min(Δ%s)=%s, max(Δ%s)=%s",
+                        name, axis_pretty(minimum(Δ)),
+                        name, axis_pretty(maximum(Δ)))
+    end
+end
+
+function axis_summary(topo, faces, name)
+    return string(axis_topology_label(topo), " ", name, " ∈ ",
+                  axis_domain_string(topo, faces), " ",
+                  axis_spacing_string(faces, name))
+end
+
+# Build the parametric type signature (FT, T1, T2) used in summary lines.
+# Uses `display_topology_name` so axes whose topology slot still carries
+# the legacy `NoFlux` BC marker render as `Bounded`.
+function spectral_type_signature(g::AbstractSpectralGrid)
+    FT = coordinate_float_type(g)
+    topo_names = map(display_topology_name, g.topology)
+    return string("{", FT, ", ", topo_names[1], ", ", topo_names[2], "}")
+end
+
+spectral_size_string(g::AbstractSpectralGrid) =
+    string(coordinate_size(g)[1], "×", coordinate_size(g)[2])
+
+function _print_spectral_axes(io::IO, axes::Tuple{Vararg{String}})
+    n = length(axes)
+    for i in 1:n
+        prefix = i == n ? "└── " : "├── "
+        write(io, prefix, axes[i])
+        i < n && write(io, '\n')
+    end
+end
