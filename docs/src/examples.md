@@ -19,7 +19,12 @@ The four example pages walk a deliberate arc:
 3. **[Bounded Wave Packet Dispersion](@ref)** — physical transport in a
    bounded one-dimensional channel; group-velocity dispersion fans out a
    compact wavenumber packet across the domain.
-4. **[Wave Refraction Through A Barotropic Vortex](@ref)** — the
+4. **[Spectral Refraction by a Sheared Current](@ref)** — an isolated
+   test of advection in spectral space: a uniform-in-space spectrum sees
+   only ``c_\varphi``, and the mean direction at each ``y`` is checked
+   against the linearised prediction
+   ``\overline{\varphi}(y) \approx -T\,A\,\omega\,\cos(\omega y)``.
+5. **[Wave Refraction Through A Barotropic Vortex](@ref)** — the
    production-resolution version of the quick start, with a three-panel
    animation showing `m₀`, `κᵣₘₛ`, and the mean direction evolving under
    the fused Doppler + refraction kernel.
@@ -41,6 +46,7 @@ Pages = [
     "generated/examples/quick_start.md",
     "generated/examples/source_only_fetch_limited_growth.md",
     "generated/examples/bounded_wave_packet_dispersion.md",
+    "generated/examples/spectral_refraction_by_shear.md",
     "generated/examples/vortex_refraction.md",
 ]
 Depth = 1
