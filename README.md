@@ -9,6 +9,8 @@ the consistent wave-current coupled model derived by [Vanneste and Young (2026)]
 It stores wave action on a product space of three-dimensional physical
 `RectilinearGrid` cells and two-dimensional spectral coordinates, with logical
 indexing `N[i, j, m, n]` for horizontally varying wave action.
+The wave evolution is coupled to Lagrangian-mean currents through a "shear-dependent" integral
+dispersion relation described by [Vanneste and Young (2026)](https://arxiv.org/abs/2602.21976).
 
 Ripple uses Oceananigans tracer advection schemes for horizontal physical
 transport of each spectral bin. Ripple intentionally does not define its own
