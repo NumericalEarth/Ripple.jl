@@ -1,6 +1,6 @@
 import KernelAbstractions
 import KernelAbstractions: @kernel, @index
-import Oceananigans.Architectures: architecture, device
+import Oceananigans.Architectures: architecture, device, on_architecture
 
 """
     AbstractPropagationSmoothing
@@ -52,8 +52,8 @@ end
 SpatialAveraging(; αs = 0.5, αn = 0.5) =
     SpatialAveraging(promote(float(αs), float(αn))..., nothing, nothing, nothing, nothing, nothing, nothing)
 
-@inline _gse_periodic(i, N) = i < 1 ? i + N : (i > N ? i - N : i)
-@inline _gse_clamp(i, N) = i < 1 ? 1 : (i > N ? N : i)
+@inline _gse_periodic(i, N) = ifelse(i < 1, i + N, ifelse(i > N, i - N, i))
+@inline _gse_clamp(i, N) = ifelse(i < 1, 1, ifelse(i > N, N, i))
 
 # Tolman 2002 Eq. 15 averaging kernel. For each (i, j, m, n) target cell, the
 # four corners of the averaging rectangle (aligned with the bin's propagation
@@ -94,21 +94,23 @@ SpatialAveraging(; αs = 0.5, αn = 0.5) =
         i1 = i0 + 1
         j1 = j0 + 1
 
-        i0c = periodic_x ? _gse_periodic(i0, Nx) : _gse_clamp(i0, Nx)
-        i1c = periodic_x ? _gse_periodic(i1, Nx) : _gse_clamp(i1, Nx)
-        j0c = periodic_y ? _gse_periodic(j0, Ny) : _gse_clamp(j0, Ny)
-        j1c = periodic_y ? _gse_periodic(j1, Ny) : _gse_clamp(j1, Ny)
+        i0c = ifelse(periodic_x, _gse_periodic(i0, Nx), _gse_clamp(i0, Nx))
+        i1c = ifelse(periodic_x, _gse_periodic(i1, Nx), _gse_clamp(i1, Nx))
+        j0c = ifelse(periodic_y, _gse_periodic(j0, Ny), _gse_clamp(j0, Ny))
+        j1c = ifelse(periodic_y, _gse_periodic(j1, Ny), _gse_clamp(j1, Ny))
 
         f00 = N_in[i0c + Hx, j0c + Hy, iz, m, n]
         f10 = N_in[i1c + Hx, j0c + Hy, iz, m, n]
         f01 = N_in[i0c + Hx, j1c + Hy, iz, m, n]
         f11 = N_in[i1c + Hx, j1c + Hy, iz, m, n]
 
-        acc += (1 - wi) * (1 - wj) * f00 + wi * (1 - wj) * f10 +
-               (1 - wi) * wj * f01 + wi * wj * f11
+        one_w = one(wi)
+        acc += (one_w - wi) * (one_w - wj) * f00 + wi * (one_w - wj) * f10 +
+               (one_w - wi) * wj * f01 + wi * wj * f11
     end
 
-    @inbounds N_out[i + Hx, j + Hy, iz, m, n] = acc / 4
+    four = one(acc) + one(acc) + one(acc) + one(acc)
+    @inbounds N_out[i + Hx, j + Hy, iz, m, n] = acc / four
 end
 
 # Lazily populate the per-bin tables that `_spatial_averaging_kernel!` reads.
@@ -117,32 +119,35 @@ function ensure_spatial_averaging_tables!(averaging::SpatialAveraging, model)
     Nx, Ny, Nκ, Nφ = size(model.action)
     FT = eltype(model.action)
     gravity = FT(9.81)
+    arch = architecture(model.grid)
 
     if averaging.cg_table === nothing || length(averaging.cg_table) != Nκ
+        κ = Array(cgrid.κ)
         cg = zeros(FT, Nκ)
         Δcg = zeros(FT, Nκ)
         for m in 1:Nκ
-            cg[m] = 0.5 * sqrt(gravity / cgrid.κ[m])
+            cg[m] = FT(1) / FT(2) * sqrt(gravity / κ[m])
         end
         for m in 1:Nκ
-            cg_lo = m == 1  ? cg[1]  : 0.5 * sqrt(gravity / cgrid.κ[m - 1])
-            cg_hi = m == Nκ ? cg[Nκ] : 0.5 * sqrt(gravity / cgrid.κ[m + 1])
-            Δcg[m] = abs(cg_lo - cg_hi) / 2
+            cg_lo = m == 1  ? cg[1]  : FT(1) / FT(2) * sqrt(gravity / κ[m - 1])
+            cg_hi = m == Nκ ? cg[Nκ] : FT(1) / FT(2) * sqrt(gravity / κ[m + 1])
+            Δcg[m] = abs(cg_lo - cg_hi) / FT(2)
         end
-        averaging.cg_table = cg
-        averaging.Δcg_table = Δcg
+        averaging.cg_table = on_architecture(arch, cg)
+        averaging.Δcg_table = on_architecture(arch, Δcg)
     end
 
     if averaging.cos_table === nothing || length(averaging.cos_table) != Nφ
+        φ = Array(cgrid.φ)
         cs = zeros(FT, Nφ)
         sn = zeros(FT, Nφ)
         for n in 1:Nφ
-            cs[n] = cos(cgrid.φ[n])
-            sn[n] = sin(cgrid.φ[n])
+            cs[n] = cos(φ[n])
+            sn[n] = sin(φ[n])
         end
-        averaging.cos_table = cs
-        averaging.sin_table = sn
-        averaging.Δφ = FT(first(coordinate_spacings(cgrid, 2)))
+        averaging.cos_table = on_architecture(arch, cs)
+        averaging.sin_table = on_architecture(arch, sn)
+        averaging.Δφ = FT(first(Array(coordinate_spacings(cgrid, 2))))
     end
 
     if averaging.scratch === nothing || size(averaging.scratch) != size(model.action)
@@ -162,8 +167,7 @@ function apply_propagation_smoothing!(model, averaging::SpatialAveraging, dt)
     grid = model.grid
     cgrid = model.spectral_grid
     Nx, Ny, Nκ, Nφ = size(model.action)
-    Hx, Hy = halo_size_3d(grid)[1:2]
-    iz = data_z_index(model.action)
+    Hx, Hy, iz = product_field_data_indices(model.action)
 
     Δx = first(xspacings(grid))
     Δy = first(yspacings(grid))
@@ -187,9 +191,8 @@ function apply_propagation_smoothing!(model, averaging::SpatialAveraging, dt)
 
     # Swap the freshly-averaged values back into model.action. Use a KA kernel
     # to stay GPU-friendly.
-    Hx_, Hy_, _ = halo_size_3d(grid)
     swap = _spatial_averaging_copy!(device(arch), (8, 8, 1, 1), (Nx, Ny, Nκ, Nφ))
-    swap(flat_data(model.action), flat_data(averaging.scratch), Hx_, Hy_, iz)
+    swap(flat_data(model.action), flat_data(averaging.scratch), Hx, Hy, iz)
     KernelAbstractions.synchronize(device(arch))
 
     return model

@@ -84,6 +84,28 @@ function cuda_gate_evidence()
     return (:available, string(evidence, "; CUDA.functional() is true"))
 end
 
+function metal_gate_evidence()
+    status, evidence = package_load_evidence(:Metal)
+    status === :available || return status, evidence
+    metal = getfield(@__MODULE__, :Metal)
+
+    functional = try
+        Base.invokelatest(getproperty(metal, :functional))
+    catch err
+        return (:missing,
+                string(evidence,
+                       "; Metal.functional() failed: ",
+                       compact_optional_gate_error(err)))
+    end
+
+    functional ||
+        return (:missing,
+                string(evidence,
+                       "; Metal.functional() is false, so no usable Metal device/runtime was detected"))
+
+    return (:available, string(evidence, "; Metal.functional() is true"))
+end
+
 function executable_evidence(names)
     for name in names
         path = Sys.which(String(name))
@@ -144,6 +166,7 @@ any_available_status(statuses) =
 function optional_gate_statuses()
     ocean_status, ocean_evidence = package_load_evidence(:Oceananigans)
     cuda_status, cuda_evidence = cuda_gate_evidence()
+    metal_status, metal_evidence = metal_gate_evidence()
     swan_status, swan_evidence = external_gate_readiness("SWAN", (:swanrun, :swan))
     wam_status, wam_evidence = external_gate_readiness("WAM", (:wam,))
     ww3_status, ww3_evidence = external_gate_readiness("WW3", (:ww3_shel, :ww3_multi, :ww3_grid, :ww3_prep))
@@ -159,6 +182,10 @@ function optional_gate_statuses()
                            cuda_status,
                            cuda_evidence,
                            "julia --startup-file=no --project=. scripts/gpu/run_cuda_smoke.jl OUTPUT.tsv"),
+        OptionalGateStatus(:metal,
+                           metal_status,
+                           metal_evidence,
+                           "julia --startup-file=no --project=. scripts/gpu/run_metal_smoke.jl OUTPUT.tsv"),
         OptionalGateStatus(:swan,
                            swan_status,
                            swan_evidence,
