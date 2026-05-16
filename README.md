@@ -10,7 +10,25 @@ It stores wave action on a product space of three-dimensional physical
 `RectilinearGrid` cells and two-dimensional spectral coordinates, with logical
 indexing `N[i, j, m, n]` for horizontally varying wave action.
 The wave evolution is coupled to Lagrangian-mean currents through a "shear-dependent" integral
-dispersion relation described by [Vanneste and Young (2026)](https://arxiv.org/abs/2602.21976).
+dispersion relation derived by [Vanneste and Young (2026)](https://arxiv.org/abs/2602.21976),
+
+$$ \Omega = \sigma + \boldsymbol{k} \cdot U $$
+
+where $\sigma$ is the intrinsic frequency,
+
+$$ \sigma(x, \kappa) = \sqrt{g \kappa \tanh \left ( \kappa \, d(x, y) \right )} $$
+
+in water with depth $d(x, y)$, gravitational acceleration $g$, and wavenumber magnitude
+$\kappa = \sqrt{k^2 + l^2}$. The "Doppler velocity" $U$ is defined via the integral "Q-transform",
+
+$$ U(x, y, \kappa) \equiv \int_{-d}^0 u^L Q(x, y, z, \kappa) \, \mathrm{d} z $$
+
+where $\boldsymbol{u}^L(x, y, z)$ is the three-dimensional Lagrangian-mean velocity and
+
+$$ Q(x, y, z, \kappa) \equiv \frac{2 \kappa \cosh(2 \kappa(z + d))}{\sinh(2 \kappa d)} $$
+
+For more information, see [Vanneste and Young (2026)](https://arxiv.org/abs/2602.21976)
+and the documentation.
 
 Ripple uses Oceananigans tracer advection schemes for horizontal physical
 transport of each spectral bin. Ripple intentionally does not define its own
