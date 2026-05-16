@@ -18,7 +18,7 @@ include("Validation/Validation.jl")
 export CPU, GPU, architecture
 export Center, Face, Flat
 export Periodic, Bounded, NoFlux, ProductBoundaryConditions, default_wave_action_bcs
-export RectilinearGrid, horizontal_size, vertical_size
+export RectilinearGrid, InfiniteDepth, horizontal_size, vertical_size
 export xnodes, ynodes, znodes, xfaces, yfaces, zfaces
 export xspacings, yspacings, zspacings
 export ProductField, WaveActionField
@@ -45,7 +45,8 @@ export StationaryVortexWind, IdealizedHurricaneWind, HollandHurricaneWind
 export wind_velocity, wind_speed, wind_angle
 export QKernel, QTransform, OnTheFlyQ, CacheDopplerVelocity, CacheDopplerVelocityAndDerivative
 export PrecomputeQWeights, vertical_nodes, vertical_faces
-export PrescribedLagrangianMeanCurrent, NoCurrentCoupling, CWCMPrescribedCurrentCoupling
+export PrescribedLagrangianMeanCurrent, NoCurrentCoupling
+export AbstractCWCMCurrentCoupling, CWCMPrescribedCurrentCoupling, CWCMPseudomomentumCoupling
 export AbstractLagrangianVelocities, ZeroVelocities, PrescribedVelocities, PseudomomentumVelocities
 export q_value, q_cell_integral, q_cell_integral_kappa_derivative
 export compute_doppler_velocity!, compute_doppler_velocity_derivative!, compute_pseudomomentum

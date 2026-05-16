@@ -4,6 +4,10 @@ Ripple treats spectral values as finite-volume cell averages. A value stored at
 `N[i, j, m, n]` represents the average over physical cell `(i, j)` and
 spectral control volume `(m, n)`.
 
+This finite-volume interpretation mirrors the action-conservation form of
+wave-ray theory, where action rather than energy is the invariant for
+wavetrains in moving or time-dependent media [BrethertonGarrett1968](@citep).
+
 Spectral integrals are therefore sums of cell averages multiplied by exact cell
 measures:
 

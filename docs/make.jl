@@ -1,4 +1,5 @@
 using Documenter
+using DocumenterCitations
 using Ripple
 
 const DOCS_ROOT = @__DIR__
@@ -6,6 +7,8 @@ const REPO_ROOT = normpath(joinpath(DOCS_ROOT, ".."))
 const RIPPLE_REMOTE = Documenter.Remotes.GitHub("NumericalEarth", "Ripple.jl")
 include(joinpath(DOCS_ROOT, "generate.jl"))
 generate_documentation_sources!(DOCS_ROOT)
+
+bib = CitationBibliography(joinpath(DOCS_ROOT, "src", "refs.bib"), style=:authoryear)
 
 makedocs(;
     modules = [Ripple],
@@ -16,6 +19,7 @@ makedocs(;
         canonical = "https://NumericalEarth.github.io/Ripple.jl/stable/",
         edit_link = "main",
         prettyurls = get(ENV, "CI", "false") == "true",
+        assets = String["assets/citations.css"],
     ),
     pages = [
         "Home" => "index.md",
@@ -25,11 +29,13 @@ makedocs(;
         "Examples" => generated_example_pages(),
         "Validation" => "validation.md",
         "Publication" => "publication.md",
+        "References" => "references.md",
         "Implementation Status" => "generated/implementation_status.md",
         "Goal Completion Audit" => "generated/goal_completion_audit.md",
         "External Comparison Harness" => "generated/external_comparison_harness.md",
     ],
     checkdocs = :none,
+    plugins = [bib],
 )
 
 deploydocs(;

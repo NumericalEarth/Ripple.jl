@@ -112,6 +112,17 @@ Base.similar(::MockBackendArray, ::Type{T}, dims::Dims) where T = MockBackendArr
     @test Ripple.field_storage(ocean_py) == py_average
 end
 
+@testset "QTransform rejects Flat vertical grids" begin
+    grid = RectilinearGrid(CPU();
+                           size=(2, 2),
+                           x=(0, 2),
+                           y=(0, 2),
+                           topology=(Periodic, Periodic, Flat))
+    @test zfaces(grid) == Float64[]
+    @test znodes(grid) == Float64[]
+    @test_throws ArgumentError QTransform(QKernel(Float64), grid)
+end
+
 @testset "Prescribed CWCM current coupling caches" begin
     grid = RectilinearGrid(CPU();
                            size=(2, 2, 32),

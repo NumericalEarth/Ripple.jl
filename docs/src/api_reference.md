@@ -5,8 +5,8 @@ This page groups the main exported names by workflow.
 ## Grids And Fields
 
 - Architectures: `CPU`, `GPU`, `architecture`
-- Physical grids: `RectilinearGrid`, `horizontal_size`, `vertical_size`,
-  `xnodes`, `ynodes`, `znodes`, `xfaces`, `yfaces`, `zfaces`,
+- Physical grids: `RectilinearGrid`, `InfiniteDepth`, `horizontal_size`,
+  `vertical_size`, `xnodes`, `ynodes`, `znodes`, `xfaces`, `yfaces`, `zfaces`,
   `xspacings`, `yspacings`, `zspacings`
 - Product fields: `ProductGrid`, `ProductField`, `WaveActionField`, `grid`,
   `physical_grid`, `coordinate_grid`, `product_grid`, `interior`, `parent`,
@@ -51,7 +51,9 @@ This page groups the main exported names by workflow.
   `PrecomputeQWeights`, `CacheDopplerVelocity`,
   `CacheDopplerVelocityAndDerivative`
 - Current coupling: `PrescribedLagrangianMeanCurrent`,
-  `NoCurrentCoupling`, `CWCMPrescribedCurrentCoupling`,
+  `NoCurrentCoupling`, `AbstractCWCMCurrentCoupling`,
+  `CWCMPrescribedCurrentCoupling`, `CWCMPseudomomentumCoupling`,
+  `ZeroVelocities`, `PrescribedVelocities`, `PseudomomentumVelocities`,
   `q_cell_integral`, `q_cell_integral_kappa_derivative`,
   `compute_doppler_velocity!`, `compute_doppler_velocity_derivative!`,
   `update_coupling!`

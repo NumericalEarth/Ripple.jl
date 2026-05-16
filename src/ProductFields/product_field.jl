@@ -1,6 +1,9 @@
 import Oceananigans
 import Oceananigans.Fields: Field, interior, set!
 import Oceananigans.BoundaryConditions: fill_halo_regions!
+import Oceananigans.Architectures: architecture, device, on_architecture
+import KernelAbstractions
+import KernelAbstractions: @kernel, @index
 import OffsetArrays: OffsetArray
 
 struct ProductGrid{PG, CG}
@@ -72,8 +75,7 @@ function product_field_storage(::Type{LX}, ::Type{LY}, ::Type{LZ},
     offsets = ntuple(d -> first(ax[d]) - 1, ndims(probe_data))
     bcs = probe.boundary_conditions
 
-    flat_data = Array{FT}(undef, parent_size..., Nxi, Neta)
-    fill!(flat_data, zero(FT))
+    flat_data = on_architecture(architecture(grid), zeros(FT, parent_size..., Nxi, Neta))
 
     stencil = ProductFieldStencil(loc, indices, offsets, bcs)
     return stencil, flat_data
@@ -161,6 +163,13 @@ Base.axes(f::ProductField) = map(Base.OneTo, size(f))
 Base.axes(f::ProductField, dim::Integer) = dim <= 4 ? axes(f)[dim] : Base.OneTo(1)
 Base.IndexStyle(::Type{<:ProductField}) = IndexCartesian()
 
+function product_field_data_indices(f::ProductField)
+    s = f.stencil
+    Hx, Hy = -s.offsets[1], -s.offsets[2]
+    iz = first(axes(f.flat_data, 3))
+    return Hx, Hy, iz
+end
+
 @inline function getnode(f::ProductField, i, j, m, n)
     s = f.stencil
     Hx, Hy = s.offsets[1], s.offsets[2]
@@ -211,12 +220,16 @@ end
 
 function interior(f::ProductField)
     Nx, Ny, Nxi, Neta = size(f)
-    values = Array{eltype(f)}(undef, Nx, Ny, Nxi, Neta)
-    s = f.stencil
-    Hx, Hy = s.offsets[1], s.offsets[2]
-    iz = first(axes(f.flat_data, 3))
-    @inbounds for n in 1:Neta, m in 1:Nxi, j in 1:Ny, i in 1:Nx
-        values[i, j, m, n] = f.flat_data[i - Hx, j - Hy, iz, m, n]
-    end
-    return values
+    values = device_zeros(architecture(f), eltype(f), (Nx, Ny, Nxi, Neta))
+    Hx, Hy, iz = product_field_data_indices(f)
+    arch = architecture(f)
+    kernel = _copy_product_field_interior!(device(arch), (8, 8, 1, 1), (Nx, Ny, Nxi, Neta))
+    kernel(values, f.flat_data, Hx, Hy, iz)
+    KernelAbstractions.synchronize(device(arch))
+    return Array(values)
+end
+
+@kernel function _copy_product_field_interior!(values, data, Hx, Hy, iz)
+    i, j, m, n = @index(Global, NTuple)
+    @inbounds values[i, j, m, n] = data[i + Hx, j + Hy, iz, m, n]
 end

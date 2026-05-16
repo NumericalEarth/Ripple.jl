@@ -5,6 +5,11 @@ stores wave action on a product space of three-dimensional physical
 `RectilinearGrid` cells and two-dimensional spectral coordinates using exact
 finite-volume spectral cell measures.
 
+The model follows the wave-action conservation viewpoint of slowly varying
+wavetrains [BrethertonGarrett1968, Whitham1974](@citep), with wave-current
+coupling guided by the phase-averaged formulation of
+[VannesteYoung2026](@citet).
+
 Physical transport uses Oceananigans tracer advection schemes for each
 spectral bin (`horizontal_advection`), while kinematic refraction is enabled
 via `spectral_advection` for `CWCMPrescribedCurrentCoupling`. Either can be
@@ -12,7 +17,7 @@ disabled with `nothing`. Oceananigans is a hard dependency, and Ripple does
 not define private advection schemes, simulation drivers, or output writers.
 
 ```@contents
-Pages = ["model_api.md", "finite_volume_integration.md", "api_reference.md", "examples.md", "validation.md", "publication.md"]
+Pages = ["model_api.md", "finite_volume_integration.md", "api_reference.md", "examples.md", "validation.md", "publication.md", "references.md"]
 Depth = 2
 ```
 
@@ -23,6 +28,9 @@ through a barotropic Gaussian vortex. The vortex velocity is the
 Lagrangian-mean current `uᴸ`; Ripple's fused refraction kernel applies
 Doppler-shifted physical transport at `c_g + uᴸ` together with kinematic
 spectral refraction `∇_k·(c_k N)` in a single pass, advanced with SSP-RK3.
+The Lagrangian-mean and pseudomomentum language is inherited from GLM and
+Craik-Leibovich wave-current theory
+[AndrewsMcIntyre1978, CraikLeibovich1976](@citep).
 
 ```julia
 using Oceananigans, Ripple

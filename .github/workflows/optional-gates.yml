@@ -55,12 +55,14 @@ jobs:
           optional_env="${RUNNER_TEMP}/ripple-optional-runtime"
           julia --color=yes --startup-file=no --project="${optional_env}" -e '
             using Pkg
-            Pkg.add([
+            packages = [
               "Oceananigans",
               "GPUArraysCore",
               "KernelAbstractions",
               "CUDA",
-            ])
+            ]
+            Sys.isapple() && push!(packages, "Metal")
+            Pkg.add(packages)
           '
           julia --color=yes --startup-file=no --project=. \
             scripts/validation/patch_oceananigans_manifest_triggers.jl \

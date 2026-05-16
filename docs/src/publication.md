@@ -133,11 +133,11 @@ choices explicitly:
 
 The default suite does not require optional runtimes. Full cross-runtime
 completion still requires the optional gate runner in an environment with
-Oceananigans, CUDA, and external model executables installed:
+Oceananigans, CUDA, Metal, and external model executables installed:
 
 ```bash
 export RIPPLE_OPTIONAL_RUNTIME_ENV=/tmp/ripple-optional-runtime
-julia --startup-file=no --project="$RIPPLE_OPTIONAL_RUNTIME_ENV" -e 'using Pkg; Pkg.add(["Oceananigans", "GPUArraysCore", "KernelAbstractions", "CUDA"])'
+julia --startup-file=no --project="$RIPPLE_OPTIONAL_RUNTIME_ENV" -e 'using Pkg; packages = ["Oceananigans", "GPUArraysCore", "KernelAbstractions", "CUDA"]; Sys.isapple() && push!(packages, "Metal"); Pkg.add(packages)'
 julia --startup-file=no --project=. scripts/validation/patch_oceananigans_manifest_triggers.jl "$RIPPLE_OPTIONAL_RUNTIME_ENV"
 export JULIA_LOAD_PATH="@:$RIPPLE_OPTIONAL_RUNTIME_ENV:@stdlib"
 julia --startup-file=no --project=. scripts/validation/run_available_optional_gates.jl --require-all optional_gate_outputs

@@ -19,6 +19,7 @@ repo_root() = normpath(joinpath(@__DIR__, "..", ".."))
 const OPTIONAL_GATE_SCRIPTS = Dict(
     :oceananigans => ("scripts/oceananigans/run_oceananigans_smoke.jl", ()),
     :cuda => ("scripts/gpu/run_cuda_smoke.jl", ()),
+    :metal => ("scripts/gpu/run_metal_smoke.jl", ()),
     :swan => ("scripts/external_models/run_swan_fetch_limited.jl", ()),
     :wam => ("scripts/external_models/run_wam_fetch_limited.jl", ()),
     :ww3 => ("scripts/external_models/run_ww3_fetch_limited.jl", ()),
