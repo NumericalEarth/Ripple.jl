@@ -40,8 +40,9 @@ function validate_model_advection(advection::AbstractAdvectionScheme, grid, spec
         throw(ArgumentError("advection must be an Oceananigans tracer advection scheme for `N` (`Centered`, `UpwindBiased`, `WENO`, or `FluxFormAdvection` composed from those schemes and `nothing`); got $(summary(materialized))"))
 
     Hx, Hy, _ = halo_size(grid)
-    Hx_required = required_halo_size_x(materialized)
-    Hy_required = required_halo_size_y(materialized)
+    tx, ty, _ = Oceananigans.Grids.topology(grid)
+    Hx_required = tx === Oceananigans.Grids.Flat ? 0 : required_halo_size_x(materialized)
+    Hy_required = ty === Oceananigans.Grids.Flat ? 0 : required_halo_size_y(materialized)
 
     Hx >= Hx_required && Hy >= Hy_required ||
         throw(ArgumentError("grid horizontal halo $(halo_size(grid)) is too small for $(summary(materialized)); required at least ($Hx_required, $Hy_required, _)"))

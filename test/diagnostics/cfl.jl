@@ -8,10 +8,9 @@
     cgrid = FrequencyDirectionGrid(;
                                    frequency=[0.08, 0.16],
                                    φ=[0.0, pi])
-    model = SpectralWaveModel(; grid,
-                                spectral_grid=cgrid,
-                                horizontal_advection=nothing,
-                                clock=Clock(time=0.0, last_Δt=10.0))
+    model = SpectralWaveModel(grid, cgrid;
+                      horizontal_advection=nothing,
+                      clock=Clock(time=0.0, last_Δt=10.0))
     @test cfl(model) == 0
     @test horizontal_size(grid) == (4, 3)
     @test vertical_size(grid) == 2

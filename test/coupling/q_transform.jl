@@ -142,7 +142,7 @@ end
     @test coupling.Uy[2, 2, 2] ≈ 2 atol=1e-12
     @test maximum(abs.(coupling.dUxdkappa)) < 1e-10
 
-    model = SpectralWaveModel(; grid, spectral_grid=cgrid, coupling, horizontal_advection=nothing, spectral_advection=nothing)
+    model = SpectralWaveModel(grid, cgrid; coupling, horizontal_advection=nothing, spectral_advection=nothing)
     @test model.coupling === coupling
     time_step!(model, 0.001)
     @test all(interior(model.action) .>= 0)

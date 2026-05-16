@@ -148,16 +148,6 @@ mutable struct SpectralWaveModel{Arch, G, SG, Depth, A, HAdv, SAdv, Sources, Cou
     intrinsic_transport_workspace :: Any  # lazy cache for the fused source-free transport kernel
 end
 
-const _SPECTRAL_WAVE_MODEL_ADVECTION_DEPRECATION = Ref(false)
-
-function _maybe_warn_advection_deprecated()
-    if !_SPECTRAL_WAVE_MODEL_ADVECTION_DEPRECATION[]
-        _SPECTRAL_WAVE_MODEL_ADVECTION_DEPRECATION[] = true
-        @warn "SpectralWaveModel kwarg `advection` is deprecated; use `horizontal_advection` instead."
-    end
-    return nothing
-end
-
 # Marker sentinel so we can detect when the user did not pass `advection=...`.
 const _ADVECTION_UNSET = Base.RefValue{Any}(nothing)
 
@@ -178,8 +168,8 @@ function SpectralWaveModel(grid, spectral_grid;
     depth = validate_model_depth(depth, grid)
 
     if advection !== _ADVECTION_UNSET
-        _maybe_warn_advection_deprecated()
         horizontal_advection = advection
+        spectral_advection = advection
     end
 
     action = action === nothing ? WaveActionField(grid, spectral_grid) :
@@ -213,9 +203,6 @@ function SpectralWaveModel(grid, spectral_grid;
     update_coupling!(model)
     return model
 end
-
-SpectralWaveModel(grid; spectral_grid, kwargs...) = SpectralWaveModel(grid, spectral_grid; kwargs...)
-SpectralWaveModel(; grid, spectral_grid, kwargs...) = SpectralWaveModel(grid, spectral_grid; kwargs...)
 
 # Validate the spectral_advection kwarg. nothing disables kinematic refraction;
 # WENO() (or another AbstractAdvectionScheme) enables the fused kernel when the
