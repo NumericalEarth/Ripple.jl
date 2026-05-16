@@ -1,5 +1,6 @@
 include("spectral_wave_model.jl")
 include("transport.jl")
+include("intrinsic_transport.jl")
 include("tendencies.jl")
 include("propagation_smoothing.jl")
 include("time_step.jl")

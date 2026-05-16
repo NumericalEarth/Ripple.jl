@@ -1,19 +1,28 @@
 import Oceananigans.TimeSteppers: time_step!, update_state!, tick!
+import Oceananigans.Architectures: architecture, device
+import KernelAbstractions
+import KernelAbstractions: @kernel, @index
+
+function launch_product_field_update!(kernel!, reference::ProductField, args...)
+    Nx, Ny, Nxi, Neta = size(reference)
+    Hx, Hy, iz = product_field_data_indices(reference)
+    arch = architecture(reference)
+    kernel = kernel!(device(arch), (8, 8, 1, 1), (Nx, Ny, Nxi, Neta))
+    kernel(args..., Hx, Hy, iz)
+    KernelAbstractions.synchronize(device(arch))
+    return nothing
+end
 
 function add_scaled!(N::ProductField, G::ProductField, dt)
-    Nx, Ny, Nxi, Neta = size(N)
-    for n in 1:Neta, m in 1:Nxi, j in 1:Ny, i in 1:Nx
-        N[i, j, m, n] = max(zero(eltype(N)), N[i, j, m, n] + dt * G[i, j, m, n])
-    end
+    launch_product_field_update!(_add_scaled_kernel!, N,
+                                 flat_data(N), flat_data(G), convert(eltype(N), dt))
     return N
 end
 
 function add_scaled_adams_bashforth2!(N::ProductField, G::ProductField, Gprevious::ProductField, dt)
-    Nx, Ny, Nxi, Neta = size(N)
-    for n in 1:Neta, m in 1:Nxi, j in 1:Ny, i in 1:Nx
-        tendency = 1.5 * G[i, j, m, n] - 0.5 * Gprevious[i, j, m, n]
-        N[i, j, m, n] = max(zero(eltype(N)), N[i, j, m, n] + dt * tendency)
-    end
+    launch_product_field_update!(_add_scaled_adams_bashforth2_kernel!, N,
+                                 flat_data(N), flat_data(G), flat_data(Gprevious),
+                                 convert(eltype(N), dt))
     return N
 end
 
@@ -32,28 +41,76 @@ function add_scaled_semi_implicit!(N::ProductField, G::ProductField, dt, model)
         explicit_part[i, j, m, n] = G[i, j, m, n] + λ * N[i, j, m, n]
     end
 
-    for n in 1:Neta, m in 1:Nxi, j in 1:Ny, i in 1:Nx
-        λ = damping[i, j, m, n]
-        N[i, j, m, n] = max(zero(eltype(N)), (N[i, j, m, n] + dt * explicit_part[i, j, m, n]) / (1 + dt * λ))
-    end
+    launch_product_field_update!(_add_scaled_semi_implicit_finalize_kernel!, N,
+                                 flat_data(N), flat_data(explicit_part), flat_data(damping),
+                                 convert(eltype(N), dt))
     return N
 end
 
 function combine!(dest::ProductField, a, A::ProductField, b, B::ProductField)
-    Nx, Ny, Nxi, Neta = size(dest)
-    for n in 1:Neta, m in 1:Nxi, j in 1:Ny, i in 1:Nx
-        dest[i, j, m, n] = max(zero(eltype(dest)), a * A[i, j, m, n] + b * B[i, j, m, n])
-    end
+    FT = eltype(dest)
+    launch_product_field_update!(_combine_kernel!, dest,
+                                 flat_data(dest), convert(FT, a), flat_data(A),
+                                 convert(FT, b), flat_data(B))
     return dest
 end
 
 function combine_with_increment!(dest::ProductField, a, A::ProductField, b, dt, G::ProductField)
-    Nx, Ny, Nxi, Neta = size(dest)
-    for n in 1:Neta, m in 1:Nxi, j in 1:Ny, i in 1:Nx
-        stage_value = max(zero(eltype(dest)), dest[i, j, m, n] + dt * G[i, j, m, n])
-        dest[i, j, m, n] = max(zero(eltype(dest)), a * A[i, j, m, n] + b * stage_value)
-    end
+    FT = eltype(dest)
+    launch_product_field_update!(_combine_with_increment_kernel!, dest,
+                                 flat_data(dest), convert(FT, a), flat_data(A),
+                                 convert(FT, b), convert(FT, dt), flat_data(G))
     return dest
+end
+
+@kernel function _add_scaled_kernel!(N, G, dt, Hx, Hy, iz)
+    i, j, m, n = @index(Global, NTuple)
+    ix = i + Hx
+    jy = j + Hy
+    @inbounds begin
+        N[ix, jy, iz, m, n] = max(zero(eltype(N)), N[ix, jy, iz, m, n] + dt * G[ix, jy, iz, m, n])
+    end
+end
+
+@kernel function _add_scaled_adams_bashforth2_kernel!(N, G, Gprevious, dt, Hx, Hy, iz)
+    i, j, m, n = @index(Global, NTuple)
+    ix = i + Hx
+    jy = j + Hy
+    half = one(dt) / 2
+    @inbounds begin
+        tendency = 3 * half * G[ix, jy, iz, m, n] - half * Gprevious[ix, jy, iz, m, n]
+        N[ix, jy, iz, m, n] = max(zero(eltype(N)), N[ix, jy, iz, m, n] + dt * tendency)
+    end
+end
+
+@kernel function _add_scaled_semi_implicit_finalize_kernel!(N, explicit_part, damping, dt, Hx, Hy, iz)
+    i, j, m, n = @index(Global, NTuple)
+    ix = i + Hx
+    jy = j + Hy
+    @inbounds begin
+        λ = damping[ix, jy, iz, m, n]
+        numerator = N[ix, jy, iz, m, n] + dt * explicit_part[ix, jy, iz, m, n]
+        N[ix, jy, iz, m, n] = max(zero(eltype(N)), numerator / (one(dt) + dt * λ))
+    end
+end
+
+@kernel function _combine_kernel!(dest, a, A, b, B, Hx, Hy, iz)
+    i, j, m, n = @index(Global, NTuple)
+    ix = i + Hx
+    jy = j + Hy
+    @inbounds begin
+        dest[ix, jy, iz, m, n] = max(zero(eltype(dest)), a * A[ix, jy, iz, m, n] + b * B[ix, jy, iz, m, n])
+    end
+end
+
+@kernel function _combine_with_increment_kernel!(dest, a, A, b, dt, G, Hx, Hy, iz)
+    i, j, m, n = @index(Global, NTuple)
+    ix = i + Hx
+    jy = j + Hy
+    @inbounds begin
+        stage_value = max(zero(eltype(dest)), dest[ix, jy, iz, m, n] + dt * G[ix, jy, iz, m, n])
+        dest[ix, jy, iz, m, n] = max(zero(eltype(dest)), a * A[ix, jy, iz, m, n] + b * stage_value)
+    end
 end
 
 is_low_storage_rk3(timestepper) = timestepper === :LowStorageRK3 || timestepper === :LSRK3

@@ -1,4 +1,5 @@
 using Documenter
+using DocumenterCitations
 using Literate
 using CairoMakie
 using Ripple
@@ -11,6 +12,8 @@ const RIPPLE_REMOTE = Documenter.Remotes.GitHub("NumericalEarth", "Ripple.jl")
 include(joinpath(DOCS_ROOT, "generate.jl"))
 generate_documentation_sources!(DOCS_ROOT)
 
+bib = CitationBibliography(joinpath(DOCS_ROOT, "src", "refs.bib"), style=:authoryear)
+
 makedocs(;
     modules = [Ripple],
     sitename = "Ripple.jl",
@@ -20,6 +23,7 @@ makedocs(;
         canonical = "https://NumericalEarth.github.io/RippleDocumentation/stable/",
         edit_link = "main",
         prettyurls = get(ENV, "CI", "false") == "true",
+        assets = String["assets/citations.css"],
         # Literate-generated example pages inline base64 figures (and
         # produce multi-megabyte HTML for the vortex animation), so bump
         # the size threshold well above Documenter's default 200 KiB cap.
@@ -32,8 +36,10 @@ makedocs(;
         "Finite-Volume Integration" => "finite_volume_integration.md",
         "API Reference" => "api_reference.md",
         "Examples" => generated_example_pages(),
+        "References" => "references.md",
     ],
     checkdocs = :none,
+    plugins = [bib],
 )
 
 deploydocs(;

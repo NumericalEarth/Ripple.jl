@@ -39,6 +39,7 @@ end
         "quick_start.jl",
         "source_only_fetch_limited_growth.jl",
         "bounded_wave_packet_dispersion.jl",
+        "spectral_refraction_by_shear.jl",
         "vortex_refraction.jl",
     ]
 
@@ -72,6 +73,10 @@ end
             "bounded_wave_packet_dispersion.jl"    => ("# # Bounded Wave Packet Dispersion",
                                                        "topology = (Bounded, Periodic, Bounded)",
                                                        "horizontal_advection = WENO(order = 5)"),
+            "spectral_refraction_by_shear.jl"      => ("# # Spectral Refraction by a Sheared Current",
+                                                       "PolarWaveVectorGrid",
+                                                       "mean_direction",
+                                                       "−T A ω cos(ω y)"),
             "vortex_refraction.jl"                 => ("# # Wave Refraction Through A Barotropic Vortex",
                                                        "velocities",
                                                        "Simulation",

@@ -105,9 +105,9 @@ function goal_completion_items(root=repo_root(); default_suite_summary=nothing)
                     "The curated examples are literate, documented, and visualized.",
                     "restore literate example/docs smoke coverage"),
         status_item(:optional_gates_current,
-                    file_contains(root, "scripts/validation/check_optional_runtime_gates.jl", ("oceananigans", "cuda", "swan")) &&
+                    file_contains(root, "scripts/validation/check_optional_runtime_gates.jl", ("oceananigans", "cuda", "metal", "swan")) &&
                     !isfile(joinpath(root, "scripts", "output", "run_optional_dataset_backend_smoke.jl")),
-                    "Optional gates target Oceananigans, CUDA, and external models, not Ripple private output backends.",
+                    "Optional gates target Oceananigans, CUDA, Metal, and external models, not Ripple private output backends.",
                     "update optional gate scripts"),
     ]
 

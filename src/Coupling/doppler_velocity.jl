@@ -1,3 +1,7 @@
+import Oceananigans.Architectures: architecture, device, on_architecture
+import KernelAbstractions
+import KernelAbstractions: @kernel, @index
+
 function compute_doppler_velocity!(Ux, Uy, uL, vL, depth, kappa, qtransform::QTransform)
     Nx, Ny, Nz = size(uL)
     size(vL) == size(uL) || throw(ArgumentError("uL and vL must have matching size"))
@@ -7,18 +11,14 @@ function compute_doppler_velocity!(Ux, Uy, uL, vL, depth, kappa, qtransform::QTr
     faces = vertical_faces(qtransform)
     length(z) == Nz || throw(ArgumentError("RectilinearGrid vertical cells do not match velocity fields"))
 
-    for m in eachindex(kappa), j in 1:Ny, i in 1:Nx
-        d = depth isa Number ? depth : depth[i, j]
-        ax = zero(eltype(Ux))
-        ay = zero(eltype(Uy))
-        for k in 1:Nz
-            qΔz = q_cell_weight(qtransform, i, j, k, m, kappa[m], faces[k], faces[k+1], d)
-            ax += uL[i, j, k] * qΔz
-            ay += vL[i, j, k] * qΔz
-        end
-        Ux[i, j, m] = ax
-        Uy[i, j, m] = ay
-    end
+    arch = architecture(qtransform.grid)
+    faces_on_arch = on_architecture(arch, faces)
+    kappa_on_arch = on_architecture(arch, kappa)
+    depth_on_arch = q_depth_on_architecture(arch, depth)
+    kernel = _compute_doppler_velocity_kernel!(device(arch), (8, 8, 1), (Nx, Ny, length(kappa)))
+    kernel(Ux, Uy, uL, vL, depth_on_arch, kappa_on_arch, faces_on_arch,
+           qtransform.kernel, qtransform.cache_policy, Nz)
+    KernelAbstractions.synchronize(device(arch))
     return Ux, Uy
 end
 
@@ -31,17 +31,52 @@ function compute_doppler_velocity_derivative!(dUxdkappa, dUydkappa, uL, vL, dept
     faces = vertical_faces(qtransform)
     length(z) == Nz || throw(ArgumentError("RectilinearGrid vertical cells do not match velocity fields"))
 
-    for m in eachindex(kappa), j in 1:Ny, i in 1:Nx
-        d = depth isa Number ? depth : depth[i, j]
-        ax = zero(eltype(dUxdkappa))
-        ay = zero(eltype(dUydkappa))
-        for k in 1:Nz
-            dqΔz = q_cell_weight_kappa_derivative(qtransform, i, j, k, m, kappa[m], faces[k], faces[k+1], d)
-            ax += uL[i, j, k] * dqΔz
-            ay += vL[i, j, k] * dqΔz
-        end
+    arch = architecture(qtransform.grid)
+    faces_on_arch = on_architecture(arch, faces)
+    kappa_on_arch = on_architecture(arch, kappa)
+    depth_on_arch = q_depth_on_architecture(arch, depth)
+    kernel = _compute_doppler_velocity_derivative_kernel!(device(arch), (8, 8, 1), (Nx, Ny, length(kappa)))
+    kernel(dUxdkappa, dUydkappa, uL, vL, depth_on_arch, kappa_on_arch, faces_on_arch,
+           qtransform.kernel, qtransform.cache_policy, Nz)
+    KernelAbstractions.synchronize(device(arch))
+    return dUxdkappa, dUydkappa
+end
+
+@kernel function _compute_doppler_velocity_kernel!(Ux, Uy, uL, vL, depth, kappa, faces,
+                                                   qkernel, qpolicy, Nz)
+    i, j, m = @index(Global, NTuple)
+    d = q_depth_at(depth, i, j)
+    ax = zero(eltype(Ux))
+    ay = zero(eltype(Uy))
+
+    @inbounds for k in 1:Nz
+        qΔz = q_cell_weight_kernel(qpolicy, qkernel, i, j, k, m, kappa[m], faces[k], faces[k+1], d)
+        ax += uL[i, j, k] * qΔz
+        ay += vL[i, j, k] * qΔz
+    end
+
+    @inbounds begin
+        Ux[i, j, m] = ax
+        Uy[i, j, m] = ay
+    end
+end
+
+@kernel function _compute_doppler_velocity_derivative_kernel!(dUxdkappa, dUydkappa, uL, vL,
+                                                              depth, kappa, faces,
+                                                              qkernel, qpolicy, Nz)
+    i, j, m = @index(Global, NTuple)
+    d = q_depth_at(depth, i, j)
+    ax = zero(eltype(dUxdkappa))
+    ay = zero(eltype(dUydkappa))
+
+    @inbounds for k in 1:Nz
+        dqΔz = q_cell_weight_kappa_derivative_kernel(qpolicy, qkernel, i, j, k, m, kappa[m], faces[k], faces[k+1], d)
+        ax += uL[i, j, k] * dqΔz
+        ay += vL[i, j, k] * dqΔz
+    end
+
+    @inbounds begin
         dUxdkappa[i, j, m] = ax
         dUydkappa[i, j, m] = ay
     end
-    return dUxdkappa, dUydkappa
 end

@@ -78,6 +78,8 @@ m0_field   = m0(model.action)
 mean_dir   = mean_direction(model.action)
 ```
 
+https://github.com/user-attachments/assets/fe1716be-50c4-475b-8662-d736fb57301c
+
 See `examples/vortex_refraction.jl` (a literate tutorial that produces a
 multi-panel movie of `m₀`, `κᵣₘₛ`, and the mean direction) for the full
 visualization.
@@ -107,8 +109,9 @@ visualization.
 - `QTransform` takes the physical `RectilinearGrid` directly and uses its
   vertical faces for perfect finite-volume integration.
 - Oceananigans is a hard dependency. CairoMakie is used by the literate
-  examples for plots and MP4 movies, while CUDA-backed storage is exercised through
-  Oceananigans' native `GPU()` architecture in the optional runtime smoke path.
+  examples for plots and MP4 movies, while CUDA- and Metal-backed storage are
+  exercised through Oceananigans' native GPU architecture in optional runtime
+  smoke paths.
 
 ## Examples
 
@@ -180,13 +183,14 @@ scripts:
 ## Optional Runtime Smokes
 
 Optional gates cover Oceananigans hard-dependency grid/field integration, CUDA
-storage through Oceananigans' `GPU()` architecture, and external wave-model
-comparison harnesses:
+and Metal storage through Oceananigans' GPU architecture, and external
+wave-model comparison harnesses:
 
 - `scripts/validation/check_optional_runtime_gates.jl`
 - `scripts/validation/run_available_optional_gates.jl`
 - `scripts/oceananigans/run_oceananigans_smoke.jl`
 - `scripts/gpu/run_cuda_smoke.jl`
+- `scripts/gpu/run_metal_smoke.jl`
 - `scripts/external_models/run_swan_fetch_limited.jl`
 - `scripts/external_models/run_wam_fetch_limited.jl`
 - `scripts/external_models/run_ww3_fetch_limited.jl`

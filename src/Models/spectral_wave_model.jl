@@ -74,26 +74,30 @@ validate_model_action(action, grid, spectral_grid) =
 
 function validate_cwcm_coupling_cache_shape(coupling, name, cache, expected_size)
     size(cache) == expected_size ||
-        throw(ArgumentError("CWCMPrescribedCurrentCoupling $name cache has size $(size(cache)); expected $expected_size from the model grid and spectral grid"))
+        throw(ArgumentError("CWCM current coupling $name cache has size $(size(cache)); expected $expected_size from the model grid and spectral grid"))
     return nothing
 end
 
-resolve_coupling(::Nothing, coupling, grid, spectral_grid) = coupling
-function resolve_coupling(velocities, coupling, grid, spectral_grid)
+resolve_coupling(::Nothing, coupling, grid, spectral_grid, depth) = coupling
+function resolve_coupling(velocities, coupling, grid, spectral_grid, depth)
     coupling === nothing ||
         throw(ArgumentError("pass either `velocities` or `coupling`, not both"))
-    return build_coupling(velocities, grid, spectral_grid; FT=Float64)
+    FT = promote_type(grid_float_type(grid), coordinate_float_type(spectral_grid))
+    return build_coupling(velocities, grid, spectral_grid, depth; FT)
 end
 
 validate_model_coupling(::Nothing, grid, spectral_grid) = nothing
 
-function validate_model_coupling(coupling::CWCMPrescribedCurrentCoupling, grid, spectral_grid)
+function validate_model_coupling(coupling::AbstractCWCMCurrentCoupling, grid, spectral_grid)
     spectral_grid isa PolarWaveVectorGrid ||
-        throw(ArgumentError("CWCMPrescribedCurrentCoupling requires a PolarWaveVectorGrid"))
+        throw(ArgumentError("CWCM current coupling requires a PolarWaveVectorGrid"))
+
+    compatible_horizontal_grid(coupling.qtransform.grid, grid) ||
+        throw(ArgumentError("CWCM Q-transform grid must match the model grid horizontally"))
 
     spectral_kappa = collect(float.(spectral_grid.κ))
     coupling.kappa == spectral_kappa ||
-        throw(ArgumentError("CWCMPrescribedCurrentCoupling kappa does not match the model spectral grid"))
+        throw(ArgumentError("CWCM current coupling kappa does not match the model spectral grid"))
 
     Nx, Ny = horizontal_size(grid)
     expected_size = (Nx, Ny, length(spectral_kappa))
@@ -126,9 +130,10 @@ end
 canonical_model_timestepper(timestepper) =
     throw(ArgumentError("timestepper must be a Symbol; got $(typeof(timestepper))"))
 
-mutable struct SpectralWaveModel{Arch, G, SG, A, HAdv, SAdv, Sources, Coupling, GA, BCs, Tend, PrevTend, C} <: AbstractModel{Nothing, Arch}
+mutable struct SpectralWaveModel{Arch, G, SG, Depth, A, HAdv, SAdv, Sources, Coupling, GA, BCs, Tend, PrevTend, C} <: AbstractModel{Nothing, Arch}
     grid :: G
     spectral_grid :: SG
+    depth :: Depth
     action :: A
     horizontal_advection :: HAdv
     spectral_advection :: SAdv
@@ -141,6 +146,7 @@ mutable struct SpectralWaveModel{Arch, G, SG, A, HAdv, SAdv, Sources, Coupling, 
     previous_tendencies :: PrevTend
     previous_tendencies_ready :: Bool
     clock :: C
+    intrinsic_transport_workspace :: Any  # lazy cache for the fused source-free transport kernel
 end
 
 # Marker sentinel so we can detect when the user did not pass `advection=...`.
@@ -152,6 +158,7 @@ function SpectralWaveModel(grid, spectral_grid;
                            spectral_advection=WENO(),
                            advection=_ADVECTION_UNSET,
                            sources=nothing,
+                           depth=InfiniteDepth(),
                            velocities=nothing,
                            coupling=nothing,
                            propagation_smoothing=nothing,
@@ -160,6 +167,7 @@ function SpectralWaveModel(grid, spectral_grid;
                            clock=Clock(time=0.0))
     grid = validate_model_physical_grid(adapt_physical_grid(grid))
     spectral_grid = validate_model_spectral_grid(spectral_grid)
+    depth = validate_model_depth(depth, grid)
 
     if advection !== _ADVECTION_UNSET
         horizontal_advection = advection
@@ -171,7 +179,7 @@ function SpectralWaveModel(grid, spectral_grid;
     sources = validate_model_sources(canonical_model_sources(sources))
     horizontal_advection = validate_model_advection(canonical_model_advection(horizontal_advection), grid, spectral_grid)
     spectral_advection = validate_model_spectral_advection(spectral_advection)
-    coupling = resolve_coupling(velocities, coupling, grid, spectral_grid)
+    coupling = resolve_coupling(velocities, coupling, grid, spectral_grid, depth)
     coupling = canonical_model_coupling(coupling)
     coupling = validate_model_coupling(coupling, grid, spectral_grid)
     timestepper = canonical_model_timestepper(timestepper)
@@ -180,7 +188,7 @@ function SpectralWaveModel(grid, spectral_grid;
                           default_wave_action_bcs(grid, spectral_grid) :
                           validate_model_boundary_conditions(boundary_conditions, grid, spectral_grid)
 
-    if coupling isa CWCMPrescribedCurrentCoupling && spectral_advection !== nothing &&
+    if coupling isa AbstractCWCMCurrentCoupling && spectral_advection !== nothing &&
        horizontal_advection !== nothing
         @info "SpectralWaveModel: CWCM coupling with `spectral_advection` set; the fused refraction kernel handles physical transport, so `horizontal_advection` is ignored."
     end
@@ -188,15 +196,16 @@ function SpectralWaveModel(grid, spectral_grid;
     tendencies = similar(action)
     previous_tendencies = similar(action)
     Arch = typeof(architecture(grid))
-    model = SpectralWaveModel{Arch, typeof(grid), typeof(spectral_grid), typeof(action),
+    model = SpectralWaveModel{Arch, typeof(grid), typeof(spectral_grid), typeof(depth), typeof(action),
                               typeof(horizontal_advection), typeof(spectral_advection),
                               typeof(sources), typeof(coupling),
                               typeof(propagation_smoothing),
                               typeof(boundary_conditions),
                               typeof(tendencies), typeof(previous_tendencies), typeof(clock)}(
-        grid, spectral_grid, action, horizontal_advection, spectral_advection, sources, coupling,
+        grid, spectral_grid, depth, action, horizontal_advection, spectral_advection, sources, coupling,
         propagation_smoothing, boundary_conditions,
-        timestepper, tendencies, previous_tendencies, false, clock)
+        timestepper, tendencies, previous_tendencies, false, clock,
+        nothing)
     update_coupling!(model)
     return model
 end

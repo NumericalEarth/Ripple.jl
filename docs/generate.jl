@@ -5,6 +5,7 @@ const EXAMPLE_TUTORIALS = (
     ("quick_start.jl",                       "Quick Start"),
     ("source_only_fetch_limited_growth.jl",  "Source-Only Fetch-Limited Growth"),
     ("bounded_wave_packet_dispersion.jl",    "Bounded Wave Packet Dispersion"),
+    ("spectral_refraction_by_shear.jl",      "Spectral Refraction by a Sheared Current"),
     ("vortex_refraction.jl",                 "Wave Refraction Through A Barotropic Vortex"),
 )
 

@@ -119,6 +119,170 @@ end
     @test bundled.spectral_advection isa Centered
 end
 
+@testset "Flat wave grid with velocity-owned Q grid" begin
+    wave_grid = RectilinearGrid(CPU();
+                                size=(4, 3),
+                                halo=(3, 3),
+                                x=(0, 4),
+                                y=(0, 3),
+                                topology=(Periodic, Periodic, Flat))
+    q_grid = RectilinearGrid(CPU();
+                             size=(4, 3, 4),
+                             halo=(3, 3, 3),
+                             x=(0, 4),
+                             y=(0, 3),
+                             z=(-2, 0),
+                             topology=(Periodic, Periodic, Bounded))
+    cgrid = PolarWaveVectorGrid(; κ=[0.5, 1.0],
+                                  φ=[0.0, pi/2, pi, 3pi/2])
+
+    u = Oceananigans.Fields.CenterField(q_grid)
+    v = Oceananigans.Fields.CenterField(q_grid)
+    Oceananigans.set!(u, 1)
+    Oceananigans.set!(v, 2)
+
+    model = SpectralWaveModel(wave_grid, cgrid;
+                              velocities=(; u, v),
+                              horizontal_advection=nothing,
+                              timestepper=:ForwardEuler)
+
+    @test Oceananigans.Grids.topology(model.grid)[3] === Flat
+    @test model.depth isa InfiniteDepth
+    @test model.coupling.qtransform.grid === q_grid
+    @test model.coupling.current.depth ≈ 2
+    @test size(model.action) == (4, 3, 2, 4)
+    @test size(model.coupling.Ux) == (4, 3, 2)
+    @test model.coupling.Ux[1, 1, 1] ≈ 1 atol=1e-12
+    @test model.coupling.Uy[4, 3, 2] ≈ 2 atol=1e-12
+    @test maximum(abs.(model.coupling.dUxdkappa)) < 1e-10
+
+    array_model = SpectralWaveModel(wave_grid, cgrid;
+                                    velocities=(; u=ones(4, 3, vertical_size(q_grid)),
+                                                  v=zeros(4, 3, vertical_size(q_grid)),
+                                                  q_grid),
+                                    horizontal_advection=nothing,
+                                    timestepper=:ForwardEuler)
+
+    @test array_model.coupling.qtransform.grid === q_grid
+    @test array_model.coupling.Ux[1, 1, 1] ≈ 1 atol=1e-12
+    @test array_model.coupling.Uy[1, 1, 1] ≈ 0 atol=1e-12
+
+    bottom_height = [-(1 + 0.1i + 0.05j) for i in 1:4, j in 1:3]
+    ib_q_grid = Oceananigans.ImmersedBoundaryGrid(q_grid, Oceananigans.GridFittedBottom(bottom_height))
+    ib_u = Oceananigans.Fields.CenterField(ib_q_grid)
+    ib_v = Oceananigans.Fields.CenterField(ib_q_grid)
+    Oceananigans.set!(ib_u, 1)
+    Oceananigans.set!(ib_v, 0)
+    ib_model = SpectralWaveModel(wave_grid, cgrid;
+                                 velocities=(; u=ib_u, v=ib_v),
+                                 horizontal_advection=nothing,
+                                 timestepper=:ForwardEuler)
+
+    @test ib_model.depth isa InfiniteDepth
+    @test ib_model.coupling.qtransform.grid === ib_q_grid
+    @test ib_model.coupling.current.depth == Ripple.grid_depth(ib_q_grid)
+
+    auto_array_model = SpectralWaveModel(wave_grid, cgrid;
+                                         velocities=(; u=ones(4, 3, 5),
+                                                       v=zeros(4, 3, 5)),
+                                         depth=2.0,
+                                         horizontal_advection=nothing,
+                                         timestepper=:ForwardEuler)
+
+    @test horizontal_size(auto_array_model.coupling.qtransform.grid) == horizontal_size(wave_grid)
+    @test vertical_size(auto_array_model.coupling.qtransform.grid) == 5
+    @test zfaces(auto_array_model.coupling.qtransform.grid)[1] ≈ -2
+    @test auto_array_model.depth isa Oceananigans.Fields.ConstantField
+    @test auto_array_model.depth.constant == 2.0
+    @test auto_array_model.coupling.current.depth == 2.0
+    @test auto_array_model.coupling.Ux[1, 1, 1] ≈ 1 atol=1e-12
+    @test auto_array_model.coupling.Uy[1, 1, 1] ≈ 0 atol=1e-12
+
+    pseudomomentum_model = SpectralWaveModel(wave_grid, cgrid;
+                                             velocities=PseudomomentumVelocities(; q_grid),
+                                             horizontal_advection=nothing,
+                                             timestepper=:ForwardEuler)
+    set!(pseudomomentum_model.action, (x, y, kx, ky) -> 1 + 0.1kx + 0.02ky)
+    update_coupling!(pseudomomentum_model)
+
+    coupling = pseudomomentum_model.coupling
+    @test coupling isa CWCMPseudomomentumCoupling
+    @test coupling.qtransform.grid === q_grid
+    @test size(coupling.overlap) == (length(cgrid.κ), length(cgrid.κ))
+
+    px, py = compute_pseudomomentum_cell_averages(pseudomomentum_model.action,
+                                                  coupling.depth,
+                                                  coupling.qtransform)
+    expected_Ux = similar(coupling.Ux); fill!(expected_Ux, 0)
+    expected_Uy = similar(coupling.Uy); fill!(expected_Uy, 0)
+    expected_dUxdkappa = similar(coupling.dUxdkappa); fill!(expected_dUxdkappa, 0)
+    expected_dUydkappa = similar(coupling.dUydkappa); fill!(expected_dUydkappa, 0)
+    compute_doppler_velocity!(expected_Ux, expected_Uy,
+                              px, py, coupling.depth,
+                              coupling.kappa, coupling.qtransform)
+    compute_doppler_velocity_derivative!(expected_dUxdkappa, expected_dUydkappa,
+                                         px, py, coupling.depth,
+                                         coupling.kappa, coupling.qtransform)
+
+    @test coupling.Ux ≈ expected_Ux atol=1e-12
+    @test coupling.Uy ≈ expected_Uy atol=1e-12
+    @test coupling.dUxdkappa ≈ expected_dUxdkappa atol=1e-12
+    @test coupling.dUydkappa ≈ expected_dUydkappa atol=1e-12
+
+    previous_Ux = copy(coupling.Ux)
+    set!(pseudomomentum_model.action, 2 .* interior(pseudomomentum_model.action))
+    compute_tendencies!(pseudomomentum_model)
+    @test coupling.Ux ≈ 2 .* previous_Ux atol=1e-12
+
+    auto_pseudomomentum_model = SpectralWaveModel(wave_grid, cgrid;
+                                                  velocities=PseudomomentumVelocities(; Nz=7),
+                                                  depth=2.0,
+                                                  horizontal_advection=nothing,
+                                                  timestepper=:ForwardEuler)
+    auto_coupling = auto_pseudomomentum_model.coupling
+    @test auto_coupling isa CWCMPseudomomentumCoupling
+    @test horizontal_size(auto_coupling.qtransform.grid) == horizontal_size(wave_grid)
+    @test vertical_size(auto_coupling.qtransform.grid) == 7
+    @test zfaces(auto_coupling.qtransform.grid)[1] ≈ -2
+    @test auto_pseudomomentum_model.depth isa Oceananigans.Fields.ConstantField
+    @test auto_pseudomomentum_model.depth.constant == 2.0
+    @test size(auto_coupling.overlap) == (length(cgrid.κ), length(cgrid.κ))
+
+    depth = [1.0 + 0.1i + 0.05j for i in 1:4, j in 1:3]
+    depth_field = Oceananigans.Fields.CenterField(wave_grid)
+    Oceananigans.set!(depth_field, (x, y) -> 1.0 + 0.1x + 0.05y)
+    variable_depth_model = SpectralWaveModel(wave_grid, cgrid;
+                                             velocities=PseudomomentumVelocities(; Nz=6),
+                                             depth=depth_field,
+                                             horizontal_advection=nothing,
+                                             timestepper=:ForwardEuler)
+    variable_coupling = variable_depth_model.coupling
+    @test size(variable_coupling.overlap) == (4, 3, length(cgrid.κ), length(cgrid.κ))
+    @test zfaces(variable_coupling.qtransform.grid)[1] ≈ -maximum(interior(depth_field))
+
+    function_depth_model = SpectralWaveModel(wave_grid, cgrid;
+                                             velocities=PseudomomentumVelocities(; Nz=6),
+                                             depth=(x, y) -> 1.0 + 0.1x + 0.05y,
+                                             horizontal_advection=nothing,
+                                             timestepper=:ForwardEuler)
+    function_coupling = function_depth_model.coupling
+    @test function_depth_model.depth isa Oceananigans.Fields.Field
+    @test size(function_coupling.overlap) == (4, 3, length(cgrid.κ), length(cgrid.κ))
+    @test zfaces(function_coupling.qtransform.grid)[1] ≈ -maximum(interior(function_depth_model.depth))
+
+    @test_throws ArgumentError SpectralWaveModel(wave_grid, cgrid;
+                                                 velocities=(; u=ones(4, 3, 1),
+                                                               v=zeros(4, 3, 1)),
+                                                 horizontal_advection=nothing)
+    @test_throws ArgumentError SpectralWaveModel(wave_grid, cgrid;
+                                                 velocities=PseudomomentumVelocities(; Nz=6),
+                                                 depth,
+                                                 horizontal_advection=nothing)
+    @test_throws ArgumentError SpectralWaveModel(wave_grid, cgrid;
+                                                 velocities=PseudomomentumVelocities(; depth=2.0, Nz=6),
+                                                 horizontal_advection=nothing)
+end
+
 @testset "Source-only timestepper semantics" begin
     grid = RectilinearGrid(CPU(); size=(2, 1, 1), x=(0, 2), y=(0, 1), z=(0, 1))
     cgrid = FrequencyDirectionGrid(;

@@ -38,7 +38,7 @@ julia --startup-file=no --project=. scripts/validation/write_goal_completion_che
 
 ## Optional Gates
 
-Oceananigans, CUDA, and external model comparisons are validated by
+Oceananigans, CUDA, Metal, and external model comparisons are validated by
 optional gates on provisioned machines:
 
 ```bash
