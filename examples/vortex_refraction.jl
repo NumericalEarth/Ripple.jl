@@ -59,26 +59,28 @@ U0 = 0.4
 ψ_vortex(x, y) = U0 * a * sqrt(exp(1)) *
                  (1 - exp(-((x - xc)^2 + (y - yc)^2) / (2 * a^2)))
 
-ψ = CenterField(grid)
+ψ = Field{Face, Face, Center}(grid)
 set!(ψ, (x, y, z) -> ψ_vortex(x, y))
 fill_halo_regions!(ψ)
 
-u_field = Field(@at (Center, Center, Center) -∂y(ψ))
-v_field = Field(@at (Center, Center, Center) +∂x(ψ))
+u_field = Field(-∂y(ψ))   # (Face,   Center, Center)
+v_field = Field(+∂x(ψ))   # (Center, Face,   Center)
 compute!(u_field)
-compute!(v_field)
+compute!(v_field);
 
-# Static plot of the vortex speed field.
+# Static plot of the vortex speed field. The speed is an AbstractOperation
+# that Documenter/Makie can plot directly.
 
 xs = xnodes(grid)
 ys = ynodes(grid)
 
-let speed = hypot.(view(interior(u_field), :, :, 1),
-                   view(interior(v_field), :, :, 1))
+speed = Field(sqrt(u_field^2 + v_field^2); indices = (:, :, grid.Nz))
+
+let
     fig = Figure(size = (640, 540))
     ax  = Axis(fig[1, 1]; title  = "Barotropic vortex |U| (m/s)",
                            xlabel = "x (m)", ylabel = "y (m)", aspect = 1)
-    hm  = heatmap!(ax, xs, ys, speed; colormap = :viridis)
+    hm  = heatmap!(ax, speed; colormap = :viridis)
     Colorbar(fig[1, 2], hm)
     fig
 end

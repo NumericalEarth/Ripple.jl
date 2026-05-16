@@ -58,12 +58,12 @@ U0     = 0.4
 ψ_vortex(x, y) = U0 * a * sqrt(exp(1)) *
                  (1 - exp(-((x - xc)^2 + (y - yc)^2) / (2 * a^2)))
 
-ψ = CenterField(grid)
+ψ = Field{Face, Face, Center}(grid)
 set!(ψ, (x, y, z) -> ψ_vortex(x, y))
 fill_halo_regions!(ψ)
 
-u_field = Field(@at (Center, Center, Center) -∂y(ψ))
-v_field = Field(@at (Center, Center, Center) +∂x(ψ))
+u_field = Field(-∂y(ψ))   # (Face,   Center, Center)
+v_field = Field(+∂x(ψ))   # (Center, Face,   Center)
 compute!(u_field)
 compute!(v_field);
 
