@@ -17,20 +17,20 @@ const MOVIE_PATH  = joinpath(@__DIR__, "..", "translating_hurricane.mp4")
 
 # ## Configuration
 #
-# CPU is bottlenecked by the DIA atomic-add spread — cost scales linearly in
-# `Nκ × Nφ`. 32² × 12 freq × 8 dir × 2 days lands in ~4 min on a modern
-# laptop. Crank to 48² × 20 × 16 × 3 days for a paper-quality render
-# (~6–10 h on CPU, minutes on GPU).
-Nx = Ny = 32
-Lx = Ly = 2000kilometers
-T_FINAL = 2days
+# DIA is omitted in the bundle below; the remaining cost (wind input +
+# saturation dissipation + WENO transport) is cheap enough to push the
+# resolution and integration time considerably further than the smoke
+# example.
+Nx = Ny = 48
+Lx = Ly = 2400kilometers
+T_FINAL = 3days
 DT      = 5minutes
 FRAME_DT = 1hour
 
-NFREQ = 12
-NDIR  = 8
+NFREQ = 20
+NDIR  = 16
 f0    = 0.04118
-xfr   = 1.15
+xfr   = 1.10
 frequency_centers = [f0 * xfr^(k - 1) for k in 1:NFREQ]
 direction_centers = collect(range(0, 2π * (NDIR - 1) / NDIR; length = NDIR))
 
@@ -61,13 +61,14 @@ hurricane = HollandHurricaneWind(; center          = storm_track,
                                    rotation        = Counterclockwise())
 
 # ## Physics + model
+#
+# Forcing + dissipation only; no quadruplet nonlinear transfer.
 wind_input  = PressureCorrelationInput(; drag      = BulkWindDrag(:linear),
                                          wind      = hurricane,
                                          direction = 0.0)
 dissipation = LocalSaturationDissipation(; B_r     = 1.05e-2,
                                            σ_power = 1.0)
-nonlinear   = HasselmannDIA(; C = 1.5e7)
-sources     = MeanSpectrumPhysics(; wind_input, dissipation, nonlinear)
+sources     = MeanSpectrumPhysics(; wind_input, dissipation)
 
 model = SpectralWaveModel(grid, spectral_grid;
                           advection   = WENO(),

@@ -16,12 +16,14 @@
 # Features 1–2 develop within hours; the swell wake takes a day or more
 # to populate the far field. We integrate for two days to capture both.
 #
-# The state-of-the-art physics used here mirrors WAVEWATCH III's ST3/ST4
-# practice:
+# Physics used here is a wind-input + dissipation pair from WW3's ST3/ST4
+# family. We deliberately omit the quadruplet nonlinear transfer
+# (`HasselmannDIA`) because (a) it's the dominant CPU cost in the bundle
+# and (b) the storm-wake geometry of interest here is set by forcing and
+# whitecapping, not by spectral peak downshifting.
 #
 # - **Wind input** [Janssen1991](@cite): `PressureCorrelationInput`.
 # - **Dissipation** [Ardhuin2010](@cite): `LocalSaturationDissipation`.
-# - **Nonlinear interactions** [Hasselmann1985](@cite): `HasselmannDIA`.
 # - **Hurricane wind** [Holland1980](@cite): `HollandHurricaneWind` translated
 #   along a straight track.
 
@@ -79,18 +81,17 @@ hurricane = HollandHurricaneWind(; center          = storm_track,
 
 # ## Physics bundle
 #
-# `MeanSpectrumPhysics` co-optimizes the three terms via `prepare_sources`,
-# which runs three KernelAbstractions kernels once per tendency pass to
-# precompute the wave-supported-stress cap, bulk spectral moments, and the
-# DIA nonlinear transfer field.
+# `MeanSpectrumPhysics` co-optimizes the terms via `prepare_sources`, which
+# runs two KernelAbstractions kernels once per tendency pass to precompute
+# the wave-supported-stress cap (for wind input) and the bulk spectral
+# moments (used by mean-spectrum-based whitecapping diagnostics).
 
 wind_input  = PressureCorrelationInput(; drag      = BulkWindDrag(:linear),
                                          wind      = hurricane,
                                          direction = 0.0)
 dissipation = LocalSaturationDissipation(; B_r     = 1.05e-2,
                                            σ_power = 1.0)
-nonlinear   = HasselmannDIA(; C = 1.5e7)
-sources     = MeanSpectrumPhysics(; wind_input, dissipation, nonlinear)
+sources     = MeanSpectrumPhysics(; wind_input, dissipation)
 
 # ## Model + simulation
 #
