@@ -16,16 +16,21 @@ const OUTPUT_PATH = joinpath(@__DIR__, "..", "translating_hurricane.jld2")
 const MOVIE_PATH  = joinpath(@__DIR__, "..", "translating_hurricane.mp4")
 
 # ## Configuration
-Nx = Ny = 48
-Lx = Ly = 2400kilometers
-T_FINAL = 3days
+#
+# CPU is bottlenecked by the DIA atomic-add spread — cost scales linearly in
+# `Nκ × Nφ`. 32² × 12 freq × 8 dir × 2 days lands in ~4 min on a modern
+# laptop. Crank to 48² × 20 × 16 × 3 days for a paper-quality render
+# (~6–10 h on CPU, minutes on GPU).
+Nx = Ny = 32
+Lx = Ly = 2000kilometers
+T_FINAL = 2days
 DT      = 5minutes
 FRAME_DT = 1hour
 
-NFREQ = 20
-NDIR  = 16
+NFREQ = 12
+NDIR  = 8
 f0    = 0.04118
-xfr   = 1.10
+xfr   = 1.15
 frequency_centers = [f0 * xfr^(k - 1) for k in 1:NFREQ]
 direction_centers = collect(range(0, 2π * (NDIR - 1) / NDIR; length = NDIR))
 
