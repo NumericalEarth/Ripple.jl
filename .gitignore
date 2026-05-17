@@ -16,4 +16,6 @@ vortex_refraction_output/
 garden_sprinkler_output/
 validation/duration_limited_ww3/output/
 translating_hurricane.mp4
+translating_hurricane.jld2
+translating_hurricane_swell.jld2
 .claude/
