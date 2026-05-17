@@ -13,40 +13,30 @@
 #    radiate forward and to the right of the storm and persist long after
 #    the storm has passed [Young2003](@cite), [Young2006](@cite).
 #
-# These features show up in operational hindcasts of Bonnie
-# [Wright2001](@cite), Ivan [Moon2003](@cite), and other major hurricanes;
-# the fetch-growth scaling is reviewed in [Hwang2016](@cite).
+# Features 1–2 develop within hours; the swell wake takes a day or more
+# to populate the far field. We integrate for two days to capture both.
 #
 # The state-of-the-art physics used here mirrors WAVEWATCH III's ST3/ST4
 # practice:
 #
-# - **Wind input** [Janssen1991](@cite): `PressureCorrelationInput` — Janssen
-#   quasi-linear pressure correlation with a per-grid-point wave-supported
-#   stress cap.
-# - **Dissipation** [Ardhuin2010](@cite): `LocalSaturationDissipation` —
-#   saturation-based whitecapping, ``\propto (B/B_r - 1)^p``.
-# - **Nonlinear interactions** [Hasselmann1985](@cite): `HasselmannDIA` —
-#   discrete interaction approximation with bilinear receiver spread.
-# - **Hurricane wind** [Holland1980](@cite): `HollandHurricaneWind`, advected
-#   along a straight track at constant ``U_t``.
+# - **Wind input** [Janssen1991](@cite): `PressureCorrelationInput`.
+# - **Dissipation** [Ardhuin2010](@cite): `LocalSaturationDissipation`.
+# - **Nonlinear interactions** [Hasselmann1985](@cite): `HasselmannDIA`.
+# - **Hurricane wind** [Holland1980](@cite): `HollandHurricaneWind` translated
+#   along a straight track.
 
 using Oceananigans, Ripple
+using Oceananigans.Units
 using CairoMakie
 using Printf
 CairoMakie.activate!(type = "png")
 
 # ## Domain
 #
-# 1200 × 1200 km periodic basin, single vertical level (deep water). The
-# resolution here is intentionally light so this example runs in a few
-# seconds as part of the smoke suite; production-scale runs would push the
-# horizontal grid to 60²–120² with 25 frequencies and 24 directions.
+# 1500 × 1500 km periodic basin, single vertical level (deep water).
 
 Nx = Ny = 24
-Lx = Ly = 1.2e6
-T_FINAL  = 6 * 3600.0
-DT       = 120.0
-SNAPSHOT = 1 * 3600.0
+Lx = Ly = 1500kilometers
 
 grid = RectilinearGrid(CPU();
                        size     = (Nx, Ny, 1),
@@ -55,6 +45,8 @@ grid = RectilinearGrid(CPU();
                        y        = (0, Ly),
                        z        = (-1.0, 0.0),
                        topology = (Periodic, Periodic, Bounded))
+
+# Spectral grid: 12 logarithmically spaced frequencies × 8 directions.
 
 NFREQ = 12
 NDIR  = 8
@@ -66,31 +58,30 @@ spectral_grid = FrequencyDirectionGrid(;
 
 # ## Translating Holland hurricane
 #
-# `LinearStormTrack` interpolates the storm center linearly between
-# waypoints. The track is purely zonal at ``U_t = 7\,\mathrm{m/s}`` — close
-# to the deep-water group speed for ``f \approx 0.1\,\mathrm{Hz}``, putting
-# us near the Bowyer–MacAfee extended-fetch resonance.
+# Track is purely zonal at ``U_t = 7\,\mathrm{m/s}`` — close to the
+# deep-water group speed for ``f \approx 0.1\,\mathrm{Hz}``, placing us
+# near the Bowyer–MacAfee extended-fetch resonance.
 
+T_FINAL       = 2days
 U_translation = 7.0
 y_track       = 0.40 * Ly
-track_start   = (0.15 * Lx,                                  y_track)
-track_end     = (0.15 * Lx + U_translation * T_FINAL,        y_track)
+track_start   = (0.15 * Lx,                          y_track)
+track_end     = (0.15 * Lx + U_translation * T_FINAL, y_track)
 storm_track   = LinearStormTrack([0.0, T_FINAL], [track_start, track_end])
 
 hurricane = HollandHurricaneWind(; center          = storm_track,
                                    vmax            = 50.0,
-                                   rmax            = 40.0e3,
-                                   radius          = 500.0e3,
+                                   rmax            = 40kilometers,
+                                   radius          = 500kilometers,
                                    shape_parameter = 1.5,
                                    inflow_angle    = deg2rad(20),
                                    rotation        = Counterclockwise())
 
 # ## Physics bundle
 #
-# `MeanSpectrumPhysics` co-optimizes the three terms via `prepare_sources!`,
-# which runs three KernelAbstractions kernels once per time step to
-# precompute (i) the wave-supported-stress cap for the wind input, (ii)
-# bulk spectral moments needed by mean-spectrum-based terms, and (iii) the
+# `MeanSpectrumPhysics` co-optimizes the three terms via `prepare_sources`,
+# which runs three KernelAbstractions kernels once per tendency pass to
+# precompute the wave-supported-stress cap, bulk spectral moments, and the
 # DIA nonlinear transfer field.
 
 wind_input  = PressureCorrelationInput(; drag      = BulkWindDrag(:linear),
@@ -101,90 +92,95 @@ dissipation = LocalSaturationDissipation(; B_r     = 1.05e-2,
 nonlinear   = HasselmannDIA(; C = 1.5e7)
 sources     = MeanSpectrumPhysics(; wind_input, dissipation, nonlinear)
 
-# ## Model
+# ## Model + simulation
 #
-# `advection = WENO()` is a shortcut that sets both horizontal and spectral
-# advection; here we only need horizontal transport, but WENO is essential
-# — swell wakes propagate hundreds of kilometres beyond the storm, and
-# numerical diffusion would smear them.
+# `advection = WENO()` sets both horizontal and spectral advection;
+# horizontal transport is essential here — swell wakes propagate hundreds
+# of kilometres beyond the storm, and numerical diffusion would smear them.
 
 model = SpectralWaveModel(grid, spectral_grid;
                           advection   = WENO(),
                           sources,
                           timestepper = :SemiImplicitEuler)
 
-# Spin-up seed: a small uniform action density.
 total_weight = sum(spectral_weight(spectral_grid, m, n) for m in 1:NFREQ, n in 1:NDIR)
 set!(model, N = 1.0e-3 / total_weight)
 
-# ## Time integration
+simulation = Simulation(model; Δt = 5minutes, stop_time = T_FINAL, verbose = false)
+
+# ## Output writer
 #
-# 24-hour run, sampling Hs and the storm location every 3 h.
+# 2-D diagnostic fields snapshotted every two hours. Saving the full 4-D
+# action would be ~5 MB per snapshot at this resolution; saving the three
+# 2-D bulk moments is ~20 KB and is what visualisations actually want.
 
-times    = Float64[model.clock.time]
-hs_snaps = Matrix{Float64}[Array(interior(significant_wave_height(model.action)))[:, :, 1]]
-storm_xy = Tuple{Float64, Float64}[hurricane.center(model.clock.time)]
+output_path = "translating_hurricane_swell.jld2"
 
-let next_output = SNAPSHOT
-    while model.clock.time < T_FINAL
-        time_step!(model, DT)
-        if model.clock.time >= next_output - DT / 2
-            push!(times,    model.clock.time)
-            push!(hs_snaps, Array(interior(significant_wave_height(model.action)))[:, :, 1])
-            push!(storm_xy, hurricane.center(model.clock.time))
-            next_output += SNAPSHOT
-        end
-    end
-end
+Hs       = significant_wave_height(model.action)
+fpeak    = peak_frequency(model.action)
+mean_dir = mean_direction(model.action)
 
-# ## Snapshot mosaic
+simulation.output_writers[:diagnostics] =
+    JLD2Writer(model, (; Hs, fpeak, mean_dir);
+               filename          = output_path,
+               schedule          = TimeInterval(2hours),
+               overwrite_existing = true)
+
+run!(simulation)
+
+# ## Load snapshots back as `FieldTimeSeries`
 #
-# Hs at six times. The right-front quadrant develops noticeably higher Hs
-# than the left side (extended-fetch resonance), and a long swell wake
-# trails the storm.
+# Each `FieldTimeSeries` is a 4-D array indexed `(i, j, k, t_index)` with
+# `.times` carrying the snapshot times.
 
-xs = collect(xnodes(grid)) ./ 1e3
-ys = collect(ynodes(grid)) ./ 1e3
-hs_max = maximum(maximum, hs_snaps)
+Hs_ts       = FieldTimeSeries(output_path, "Hs")
+fpeak_ts    = FieldTimeSeries(output_path, "fpeak")
+mean_dir_ts = FieldTimeSeries(output_path, "mean_dir")
+times       = Hs_ts.times
+nframes     = length(times)
 
-mosaic = Figure(size = (1200, 800))
-ntiles = min(length(hs_snaps), 6)
-idxs   = round.(Int, range(1, length(hs_snaps); length = ntiles))
+xs = collect(xnodes(grid)) ./ 1kilometer
+ys = collect(ynodes(grid)) ./ 1kilometer
+storm_xy = [hurricane.center(t) for t in times]
+
+# ## Mosaic of ``H_s`` at six times across the integration
+
+hs_max  = maximum(maximum.(interior.(Hs_ts[t] for t in 1:nframes)))
+mosaic  = Figure(size = (1200, 800))
+ntiles  = min(nframes, 6)
+idxs    = round.(Int, range(1, nframes; length = ntiles))
 for (ti, idx) in enumerate(idxs)
     r = (ti - 1) ÷ 3 + 1
     c = (ti - 1) % 3 + 1
     ax = Axis(mosaic[r, c];
-              title  = @sprintf("t = %.1f h", times[idx] / 3600),
+              title  = @sprintf("t = %.1f h", times[idx] / 1hour),
               xlabel = "x (km)",
               ylabel = "y (km)",
               aspect = DataAspect())
-    heatmap!(ax, xs, ys, hs_snaps[idx];
+    heatmap!(ax, xs, ys, Array(interior(Hs_ts[idx]))[:, :, 1];
              colormap = :viridis, colorrange = (0, hs_max))
     sx, sy = storm_xy[idx]
-    scatter!(ax, [sx / 1e3], [sy / 1e3];
+    scatter!(ax, [sx / 1kilometer], [sy / 1kilometer];
              color = :red, marker = :star5, markersize = 18)
 end
 Colorbar(mosaic[:, 4];
-         colormap = :viridis,
+         colormap   = :viridis,
          colorrange = (0, hs_max),
-         label = "Hs (m)")
+         label      = "Hs (m)")
 mosaic
 
-# ## Final-time Hs with storm track overlay
-#
-# The white line traces the storm history; the red star marks its current
-# location at ``t = 24\,\mathrm{h}``.
+# ## Final-time ``H_s`` with storm-track overlay
 
 fig = Figure(size = (900, 700))
 ax  = Axis(fig[1, 1];
            xlabel = "x (km)", ylabel = "y (km)", aspect = DataAspect(),
-           title  = @sprintf("Hs at t = %.1f h, Holland TC, U_t = %.1f m/s",
-                              times[end] / 3600, U_translation))
-hm  = heatmap!(ax, xs, ys, hs_snaps[end];
+           title  = @sprintf("Hs at t = %.1f d, Holland TC, U_t = %.1f m/s",
+                              times[end] / 1day, U_translation))
+hm  = heatmap!(ax, xs, ys, Array(interior(Hs_ts[nframes]))[:, :, 1];
                colormap = :viridis, colorrange = (0, hs_max))
 Colorbar(fig[1, 2], hm; label = "Hs (m)")
-track_xs = [pt[1] / 1e3 for pt in storm_xy]
-track_ys = [pt[2] / 1e3 for pt in storm_xy]
+track_xs = [pt[1] / 1kilometer for pt in storm_xy]
+track_ys = [pt[2] / 1kilometer for pt in storm_xy]
 lines!(ax, track_xs, track_ys; color = :white, linewidth = 2)
 scatter!(ax, [track_xs[end]], [track_ys[end]];
          color = :red, marker = :star5, markersize = 25)

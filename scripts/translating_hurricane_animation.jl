@@ -1,26 +1,29 @@
 # Generate a publication-quality MP4 of the translating-hurricane example.
-# Heavier than the smoke-test version: 60×60 grid, 24 freq × 16 dir, 36 h.
+# Heavier than the smoke-test version: bigger grid, fuller spectrum, longer
+# integration. Output is streamed to JLD2 via an Oceananigans `Simulation`
+# and animated by loading back through `FieldTimeSeries`.
 #
 # Run from the repo root:
 #   julia --project=. scripts/translating_hurricane_animation.jl
 
 using Oceananigans, Ripple
+using Oceananigans.Units
 using CairoMakie
 using Printf
 CairoMakie.activate!(type = "png")
 
-const OUTPUT_PATH = joinpath(@__DIR__, "..", "translating_hurricane.mp4")
+const OUTPUT_PATH = joinpath(@__DIR__, "..", "translating_hurricane.jld2")
+const MOVIE_PATH  = joinpath(@__DIR__, "..", "translating_hurricane.mp4")
 
 # ## Configuration
-Nx = Ny   = 36
-Lx = Ly   = 1.5e6                            # 1500 km basin
-T_FINAL   = 18 * 3600.0                      # 18 hours
-DT        = 120.0
-FRAME_DT  = 30 * 60.0                        # 30-min frames → 36 frames
+Nx = Ny = 48
+Lx = Ly = 2400kilometers
+T_FINAL = 3days
+DT      = 5minutes
+FRAME_DT = 1hour
 
-# Spectral grid: 16 frequencies × 12 directions.
-NFREQ = 16
-NDIR  = 12
+NFREQ = 20
+NDIR  = 16
 f0    = 0.04118
 xfr   = 1.10
 frequency_centers = [f0 * xfr^(k - 1) for k in 1:NFREQ]
@@ -37,17 +40,17 @@ grid = RectilinearGrid(CPU();
 spectral_grid = FrequencyDirectionGrid(; frequency = frequency_centers,
                                          φ         = direction_centers)
 
-# ## Translating Holland hurricane
+# ## Translating Holland hurricane (diagonal track)
 U_translation = 7.0
-y_track       = 0.40 * Ly
-track_start   = (0.15 * Lx,                          y_track)
-track_end     = (0.15 * Lx + U_translation * T_FINAL, y_track)
+track_start   = (0.15Lx, 0.20Ly)
+track_end     = (0.15Lx + U_translation * T_FINAL / sqrt(2),
+                 0.20Ly + U_translation * T_FINAL / sqrt(2))
 storm_track   = LinearStormTrack([0.0, T_FINAL], [track_start, track_end])
 
 hurricane = HollandHurricaneWind(; center          = storm_track,
                                    vmax            = 50.0,
-                                   rmax            = 40.0e3,
-                                   radius          = 500.0e3,
+                                   rmax            = 40kilometers,
+                                   radius          = 500kilometers,
                                    shape_parameter = 1.5,
                                    inflow_angle    = deg2rad(20),
                                    rotation        = Counterclockwise())
@@ -69,9 +72,29 @@ model = SpectralWaveModel(grid, spectral_grid;
 total_weight = sum(spectral_weight(spectral_grid, m, n) for m in 1:NFREQ, n in 1:NDIR)
 set!(model, N = 1.0e-3 / total_weight)
 
-# ## Pre-compute wind speed snapshots
-xs = collect(xnodes(grid)) ./ 1e3
-ys = collect(ynodes(grid)) ./ 1e3
+simulation = Simulation(model; Δt = DT, stop_time = T_FINAL, verbose = true)
+
+# Hourly diagnostic snapshots of `Hs` and `mean_direction`.
+Hs       = significant_wave_height(model.action)
+mean_dir = mean_direction(model.action)
+
+simulation.output_writers[:diagnostics] =
+    JLD2Writer(model, (; Hs, mean_dir);
+               filename          = OUTPUT_PATH,
+               schedule          = TimeInterval(FRAME_DT),
+               overwrite_existing = true)
+
+run!(simulation)
+
+# ## Load snapshots back
+Hs_ts    = FieldTimeSeries(OUTPUT_PATH, "Hs")
+times    = Hs_ts.times
+nframes  = length(times)
+
+# Wind speed evaluated from the storm struct at each saved time (cheap; no
+# need to write it to disk).
+xs = collect(xnodes(grid)) ./ 1kilometer
+ys = collect(ynodes(grid)) ./ 1kilometer
 
 function wind_speed_field(t)
     field = Matrix{Float64}(undef, Nx, Ny)
@@ -83,33 +106,16 @@ function wind_speed_field(t)
     return field
 end
 
-# ## Time integration with frame capture
-times      = Float64[model.clock.time]
-hs_frames  = Matrix{Float64}[Array(interior(significant_wave_height(model.action)))[:, :, 1]]
-wnd_frames = Matrix{Float64}[wind_speed_field(model.clock.time)]
-track_xs   = Float64[hurricane.center(model.clock.time)[1] / 1e3]
-track_ys   = Float64[hurricane.center(model.clock.time)[2] / 1e3]
+storm_xy   = [hurricane.center(t) for t in times]
+track_xs   = [pt[1] / 1kilometer for pt in storm_xy]
+track_ys   = [pt[2] / 1kilometer for pt in storm_xy]
 
-let next_output = FRAME_DT
-    while model.clock.time < T_FINAL
-        time_step!(model, DT)
-        if model.clock.time >= next_output - DT / 2
-            push!(times,      model.clock.time)
-            push!(hs_frames,  Array(interior(significant_wave_height(model.action)))[:, :, 1])
-            push!(wnd_frames, wind_speed_field(model.clock.time))
-            sx, sy = hurricane.center(model.clock.time)
-            push!(track_xs, sx / 1e3)
-            push!(track_ys, sy / 1e3)
-            next_output += FRAME_DT
-            @info "frame" t_hours = model.clock.time / 3600 Hs_max = maximum(hs_frames[end]) U10_max = maximum(wnd_frames[end])
-        end
-    end
-end
+hs_frames  = [Array(interior(Hs_ts[i]))[:, :, 1] for i in 1:nframes]
+wnd_frames = [wind_speed_field(t)                for t in times]
+hs_max     = maximum(maximum, hs_frames)
+wnd_max    = maximum(maximum, wnd_frames)
 
 # ## Animation
-hs_max  = maximum(maximum, hs_frames)
-wnd_max = maximum(maximum, wnd_frames)
-
 hs_obs    = Observable(hs_frames[1])
 wnd_obs   = Observable(wnd_frames[1])
 track_obs = Observable((track_xs[1:1], track_ys[1:1]))
@@ -145,13 +151,13 @@ scatter!(ax2, lift(t -> t[1], storm_obs), lift(t -> t[2], storm_obs);
          strokecolor = :black)
 Colorbar(fig[1, 4], hm2; label = "Hs (m)")
 
-record(fig, OUTPUT_PATH, eachindex(hs_frames); framerate = 12) do idx
+record(fig, MOVIE_PATH, eachindex(hs_frames); framerate = 12) do idx
     hs_obs[]    = hs_frames[idx]
     wnd_obs[]   = wnd_frames[idx]
     track_obs[] = (track_xs[1:idx], track_ys[1:idx])
     storm_obs[] = ([track_xs[idx]], [track_ys[idx]])
     title_obs[] = @sprintf("Translating Holland hurricane (U_t = %.0f m/s) — t = %5.1f h",
-                            U_translation, times[idx] / 3600)
+                            U_translation, times[idx] / 1hour)
 end
 
-@info "Animation written" path = OUTPUT_PATH frames = length(hs_frames) hs_max wnd_max
+@info "Animation written" path = MOVIE_PATH frames = nframes hs_max wnd_max
