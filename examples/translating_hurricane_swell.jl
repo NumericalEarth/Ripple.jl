@@ -16,11 +16,10 @@
 # Features 1–2 develop within hours; the swell wake takes a day or more
 # to populate the far field. We integrate for two days to capture both.
 #
-# Physics used here is a wind-input + dissipation pair from WW3's ST3/ST4
-# family. We deliberately omit the quadruplet nonlinear transfer
-# (`HasselmannDIA`) because (a) it's the dominant CPU cost in the bundle
-# and (b) the storm-wake geometry of interest here is set by forcing and
-# whitecapping, not by spectral peak downshifting.
+# Physics here is a wind-input + dissipation pair. We deliberately omit the
+# quadruplet nonlinear transfer because (a) it's the dominant CPU cost when
+# included and (b) the storm-wake geometry of interest here is set by
+# forcing and whitecapping, not by spectral peak downshifting.
 #
 # - **Wind input** [Janssen1991](@cite): `PressureCorrelationInput`.
 # - **Dissipation** [Ardhuin2010](@cite): `LocalSaturationDissipation`.
@@ -81,7 +80,7 @@ hurricane = HollandHurricaneWind(; center          = storm_track,
 
 # ## Physics bundle
 #
-# `MeanSpectrumPhysics` co-optimizes the terms via `prepare_sources`, which
+# `PrecomputedSources` co-optimizes the terms via `prepare_sources`, which
 # runs two KernelAbstractions kernels once per tendency pass to precompute
 # the wave-supported-stress cap (for wind input) and the bulk spectral
 # moments (used by mean-spectrum-based whitecapping diagnostics).
@@ -91,7 +90,7 @@ wind_input  = PressureCorrelationInput(; drag      = BulkWindDrag(:linear),
                                          direction = 0.0)
 dissipation = LocalSaturationDissipation(; B_r     = 1.05e-2,
                                            σ_power = 1.0)
-sources     = MeanSpectrumPhysics(; wind_input, dissipation)
+sources     = PrecomputedSources(; wind_input, dissipation)
 
 # ## Model + simulation
 #

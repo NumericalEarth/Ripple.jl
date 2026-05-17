@@ -6,7 +6,7 @@ significant wave height `Hs(t)` approaches a fully-developed equilibrium.
 
 ## What we test
 
-- Ripple `MeanSpectrumPhysics` (ST3-equivalent: pressure-correlation input +
+- Ripple `PrecomputedSources` (ST3-equivalent: pressure-correlation input +
   mean-spectrum whitecapping) without nonlinear interactions.
 - Compared against:
   1. Analytic PM equilibrium (`Hs_PM = 0.0246 · U10² / g`, ≈ 6.6 m at 17 m/s).

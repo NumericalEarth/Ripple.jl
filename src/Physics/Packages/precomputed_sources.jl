@@ -1,15 +1,17 @@
 #####
-##### MeanSpectrumPhysics — ST3-equivalent bundle, GPU-compatible.
+##### PrecomputedSources — bundle of source terms whose evaluation shares
+##### precomputed per-grid-point state. GPU-compatible.
 #####
-##### Composes pressure-correlation wind input (Janssen), mean-spectrum or
-##### local-saturation whitecapping, nonlinear quadruplet transfer (DIA), and
-##### any extra terms.
+##### Holds (`wind_input`, `dissipation`, `nonlinear`, `extras`). The
+##### state precomputed by `prepare_sources(::PrecomputedSources, model)` and
+##### passed back into the per-cell `source_split(..., state, model, …)`
+##### calls is, depending on which members are present:
 #####
-##### `prepare_physics(::MeanSpectrumPhysics, model)` precomputes per-grid-point
-##### state via KernelAbstractions kernels:
-#####   - (m₀, k̄, σ̄) bulk moments for `MeanSpectrumWhitecapping`
 #####   - `stress_factor` cap for `PressureCorrelationInput`
-#####   - 4D DIA `transfer` field for `HasselmannDIA`
+#####     (wave-supported stress approximation),
+#####   - `(m₀, k̄, σ̄)` bulk moments for `MeanSpectrumWhitecapping`,
+#####   - a 4-D quadruplet `transfer` field for
+#####     `DiscreteInteractionApproximation{<:SymmetricQuadruplet}`.
 #####
 ##### All kernels are scalar/inline and run on whatever backend Oceananigans
 ##### picked for the action field (`KernelAbstractions.get_backend(N_data)`).
@@ -18,18 +20,18 @@ import KernelAbstractions
 import KernelAbstractions: @kernel, @index
 import Oceananigans.Architectures: architecture, device
 
-struct MeanSpectrumPhysics{I, D, NL, Ex} <: AbstractSourceTerm
+struct PrecomputedSources{I, D, NL, Ex} <: AbstractSourceTerm
     wind_input  :: I
     dissipation :: D
     nonlinear   :: NL
     extras      :: Ex
 end
 
-function MeanSpectrumPhysics(; wind_input=nothing,
+function PrecomputedSources(; wind_input=nothing,
                                dissipation=nothing,
                                nonlinear=nothing,
                                extras=())
-    MeanSpectrumPhysics(wind_input, dissipation, nonlinear, tuple(extras...))
+    PrecomputedSources(wind_input, dissipation, nonlinear, tuple(extras...))
 end
 
 #####
@@ -219,13 +221,13 @@ _compute_wind_input_state(::Any, ::Any) = nothing
 _compute_wind_input_state(::Nothing, ::Any) = nothing
 
 # Per-nonlinear-term state precompute. Defaults to `nothing`; concrete bundle
-# members override (e.g. `HasselmannDIA`).
+# members override (e.g. `DiscreteInteractionApproximation{<:SymmetricQuadruplet}`).
 _prepare_nonlinear_state(::Nothing, model) = nothing
 _prepare_nonlinear_state(t, model) = nothing
-_prepare_nonlinear_state(s::HasselmannDIA, model) =
-    (transfer = _compute_dia_transfer(s, model),)
+_prepare_nonlinear_state(s::DiscreteInteractionApproximation{<:SymmetricQuadruplet}, model) =
+    (transfer = _compute_symmetric_quadruplet_transfer(s.method, model),)
 
-function prepare_sources(b::MeanSpectrumPhysics, model)
+function prepare_sources(b::PrecomputedSources, model)
     wind_state = _compute_wind_input_state(b.wind_input, model)
     diss_state = _compute_mean_spectrum_state(b.dissipation, model)
     nl_state   = _prepare_nonlinear_state(b.nonlinear, model)
@@ -235,7 +237,7 @@ function prepare_sources(b::MeanSpectrumPhysics, model)
             extras      = map(t -> _prepare_nonlinear_state(t, model), b.extras))
 end
 
-function source_split(b::MeanSpectrumPhysics, state::NamedTuple, model, i, j, m, n)
+function source_split(b::PrecomputedSources, state::NamedTuple, model, i, j, m, n)
     FT = eltype(model.action)
     positive = zero(FT)
     damping  = zero(FT)
@@ -258,7 +260,7 @@ function source_split(b::MeanSpectrumPhysics, state::NamedTuple, model, i, j, m,
     return positive, damping
 end
 
-function source_split(b::MeanSpectrumPhysics, model, i, j, m, n)
+function source_split(b::PrecomputedSources, model, i, j, m, n)
     FT = eltype(model.action)
     positive = zero(FT)
     damping  = zero(FT)
@@ -270,12 +272,12 @@ function source_split(b::MeanSpectrumPhysics, model, i, j, m, n)
     return positive, damping
 end
 
-function source_tendency(b::MeanSpectrumPhysics, model, i, j, m, n)
+function source_tendency(b::PrecomputedSources, model, i, j, m, n)
     positive, damping = source_split(b, model, i, j, m, n)
     return positive - damping * model.action[i, j, m, n]
 end
 
-function source_tendency(b::MeanSpectrumPhysics, state::NamedTuple, model, i, j, m, n)
+function source_tendency(b::PrecomputedSources, state::NamedTuple, model, i, j, m, n)
     positive, damping = source_split(b, state, model, i, j, m, n)
     return positive - damping * model.action[i, j, m, n]
 end

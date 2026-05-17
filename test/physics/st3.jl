@@ -70,13 +70,13 @@ end
     @test maximum(interior(model.action)) < initial_action
 end
 
-@testset "MeanSpectrumPhysics bundle" begin
+@testset "PrecomputedSources bundle" begin
     grid = RectilinearGrid(CPU(); size=(1, 1, 1), x=(0, 1), y=(0, 1), z=(0, 1))
     cgrid = FrequencyDirectionGrid(; frequency=range(0.1, 0.3; length=4), φ=collect(range(0, 2π * 7/8; length=8)))
 
     inp = PressureCorrelationInput(; drag=BulkWindDrag(:linear), wind=15.0)
     diss = MeanSpectrumWhitecapping()
-    bundle = MeanSpectrumPhysics(; wind_input=inp, dissipation=diss)
+    bundle = PrecomputedSources(; wind_input=inp, dissipation=diss)
 
     @test bundle isa Ripple.AbstractSourceTerm
     @test bundle.wind_input === inp

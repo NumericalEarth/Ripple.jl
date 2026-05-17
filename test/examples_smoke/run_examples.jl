@@ -84,7 +84,7 @@ end
                                                        ":RK3"),
             "translating_hurricane_swell.jl"       => ("# # Swell Generation by a Translating Idealized Hurricane",
                                                        "HollandHurricaneWind",
-                                                       "MeanSpectrumPhysics",
+                                                       "PrecomputedSources",
                                                        "PressureCorrelationInput"),
         )
 

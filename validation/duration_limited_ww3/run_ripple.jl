@@ -2,7 +2,7 @@
 ##### Duration-limited growth (Ripple side).
 #####
 ##### Spatially homogeneous single point, U10 = 17 m/s, deep water, ST3-equivalent
-##### physics (MeanSpectrumPhysics: PressureCorrelationInput + MeanSpectrumWhitecapping).
+##### physics (PrecomputedSources: PressureCorrelationInput + MeanSpectrumWhitecapping).
 ##### Integrate to t = 24 h; record Hs(t) and the 1D spectrum F(f, t_final).
 
 using Ripple
@@ -40,7 +40,7 @@ nonlinear   = HasselmannDIA(; C=1.5e7)
 # to a too-high equilibrium (Hs ≈ 9 m at U10=17 m/s, vs WW3's 5.9 m).
 # Resolving this requires τ_w iterative drag — see TODO in
 # `src/Physics/WindInput/pressure_correlation.jl`.
-physics     = MeanSpectrumPhysics(; wind_input, dissipation, nonlinear)
+physics     = PrecomputedSources(; wind_input, dissipation, nonlinear)
 
 model = SpectralWaveModel(; grid,
                             spectral_grid=cgrid,

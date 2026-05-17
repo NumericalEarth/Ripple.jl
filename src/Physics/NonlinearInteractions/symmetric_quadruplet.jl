@@ -1,66 +1,57 @@
 #####
-##### Hasselmann discrete interaction approximation (Snl1) — GPU-compatible.
+##### Symmetric-quadruplet method for `DiscreteInteractionApproximation`.
 #####
-##### Single-λ quadruplet truncation of the 4-wave Boltzmann integral
-##### (Hasselmann et al. 1985, WW3 `w3snl1md.F90`). For a donor at (k_a, θ_a):
+##### Single-`λ` discretisation of the 4-wave Boltzmann integral. For a donor
+##### at `(σ_a, θ_a)` the model uses two resonant pairs of receivers:
 #####
 #####     σ_± = (1 ± λ) σ_a,   |k_±| = (1 ± λ)² |k_a|
 #####     θ_+ = θ_a ± Δθ_+,    θ_- = θ_a ∓ Δθ_-
 #####
-##### **Unit convention (matches WW3 W3SNL1):** energy density E(f,θ) per direction,
-##### `E = (2π σ / c_g) · N` = `4π σ²/g · N` for deep water. Kernel:
+##### with energy density `E(f, θ) = (2π σ / c_g) N = (4π σ²/g) N` (deep water).
+##### The kernel is
 #####
-#####     T_E(k_a) = C/g⁴ · f_a^11 · E_a · [E_a·(E_+·DAL1 + E_-·DAL2) − E_+·E_-·DAL3]
+#####     T_E(k_a) = C/g⁴ · f_a^11 · E_a · [E_a (E_+ DAL1 + E_- DAL2) − E_+ E_- DAL3]
 #####
-##### with DAL1 = (1+λ)⁻⁴, DAL2 = (1-λ)⁻⁴, DAL3 = 2·DAL1·DAL2, f = σ/(2π).
-##### Bilinear 4-corner spread of receivers matching WW3's IP/IM index pattern.
+##### with DAL1 = (1+λ)⁻⁴, DAL2 = (1-λ)⁻⁴, DAL3 = 2·DAL1·DAL2. This is the
+##### single-quadruplet model used by WAVEWATCH III's `w3snl1md.F90`.
 #####
-##### Implementation notes:
-#####   - Frequency lookup is analytical (log-XFR formula) — no `argmin`/allocation.
-#####   - Direction lookup is analytical (uniform Δφ).
-#####   - Donor depletion uses an atomic add (multiple `(m_a, n_a, orientation)`
-#####     threads can target the same receiver cell), via `Atomix.@atomic`.
-#####   - Receiver gains use atomic adds too.
+##### Receiver positions in (σ, θ) do not coincide with grid cell centres;
+##### receivers are spread to the four nearest cells via a bilinear weight.
 #####
-##### Partial-quadruplet edge handling: if σ_+ falls off the top of the grid but
-##### σ_- is in range (or vice versa), the donor still depletes at half rate and
-##### the in-range receiver gains. Lets energy flow down off the diagnostic
-##### tail without pooling at f_max.
+##### Edge handling: if `σ_+` falls off the top of the frequency grid but
+##### `σ_-` is in range (or vice versa), the donor still depletes at half
+##### the full rate so energy can flow into the diagnostic tail.
 
 import KernelAbstractions
 import KernelAbstractions: @kernel, @index
 import Oceananigans.Architectures: architecture, device
 using Atomix: @atomic
 
-struct HasselmannDIA{FT} <: AbstractSourceTerm
-    C        :: FT
-    λ        :: FT
-    Δθ_plus  :: FT
-    Δθ_minus :: FT
-    gravity  :: FT
+struct SymmetricQuadruplet{FT}
+    coefficient            :: FT   # proportionality constant `C`
+    frequency_offset       :: FT   # `λ` in σ_± = (1 ± λ) σ
+    direction_offset_plus  :: FT   # `Δθ_+`
+    direction_offset_minus :: FT   # `Δθ_-`
+    gravity                :: FT
 end
 
-function HasselmannDIA(; C=2.78e7, λ=0.25, gravity=9.81)
-    a = (1 + λ)^2
-    b = (1 - λ)^2
-    cosp = (a^2 - b^2 + 4) / (4a)
-    cosm = (b^2 - a^2 + 4) / (4b)
+function SymmetricQuadruplet(; coefficient=2.78e7, frequency_offset=0.25, gravity=9.81)
+    λ        = frequency_offset
+    a        = (1 + λ)^2
+    b        = (1 - λ)^2
+    cosp     = (a^2 - b^2 + 4) / (4a)
+    cosm     = (b^2 - a^2 + 4) / (4b)
     Δθ_plus  = acos(clamp(cosp, -1.0, 1.0))
     Δθ_minus = acos(clamp(cosm, -1.0, 1.0))
-    HasselmannDIA(float(C), float(λ), float(Δθ_plus), float(Δθ_minus), float(gravity))
+    return SymmetricQuadruplet(float(coefficient), float(frequency_offset),
+                                float(Δθ_plus), float(Δθ_minus), float(gravity))
 end
 
 # Energy ↔ action conversion at angular frequency σ (deep water): E = (4πσ²/g)·N.
 @inline _energy_factor(σ, g) = 4 * Float64(pi) * σ^2 / g
 
-#####
-##### Analytical bilinear-interpolation index lookup on a geometric f-grid +
-##### uniform-Δφ periodic direction grid.
-#####
-##### Returns the 4 bilinear-corner indices/weights (m_lo, n_lo, w00, etc.) and
-##### a flag `in_range` (true if σ_target ∈ [σ_min, σ_max]). All scalar, no
-##### allocations — GPU-callable.
-#####
+# Analytical bilinear-lookup helper: returns (in_range, 4 corner indices, 4
+# weights) on a geometric f-grid + uniform-Δφ periodic direction grid.
 @inline function _bilinear_lookup(σ_target, θ_target, σ_min, σ_max,
                                    log_xfr, φ_min, Δφ, Nκ, Nφ)
     if σ_target < σ_min || σ_target > σ_max
@@ -84,14 +75,10 @@ end
     return true, m_lo, m_hi, n_lo, n_hi, w00, w10, w01, w11
 end
 
-#####
-##### Per-cell donor kernel.
-#####
-##### Each thread visits one (i, j, m_a, n_a) donor cell, computes the DIA
-##### transfer T_E for both quadruplet orientations, and atomically updates
-##### the donor cell and the 4 bilinear-corner cells of each receiver.
-#####
-@kernel function _dia_transfer_kernel!(
+# Per-donor-cell kernel. Each thread visits one (i, j, m_a, n_a), computes the
+# transfer for both orientations of the symmetric quadruplet, and atomically
+# updates the donor cell and the four bilinear corners of each receiver.
+@kernel function _symmetric_quadruplet_transfer_kernel!(
         transfer, N_data,
         @Const(σ_centers), @Const(k_centers), @Const(φ_centers),
         σ_min, σ_max, log_xfr, φ_min, Δφ,
@@ -175,7 +162,7 @@ end
     end
 end
 
-function _compute_dia_transfer(s::HasselmannDIA, model)
+function _compute_symmetric_quadruplet_transfer(method::SymmetricQuadruplet, model)
     cgrid = model.spectral_grid
     cgrid isa FrequencyDirectionGrid || return zeros(eltype(model.action), 0, 0, 0, 0)
     grid  = model.grid
@@ -185,18 +172,16 @@ function _compute_dia_transfer(s::HasselmannDIA, model)
     Nx, Ny, Nκ, Nφ = size(N)
     FT = eltype(N)
 
-    # 4D transfer field in *logical* (no-halo) layout. Source_split reads it
-    # with logical (i, j, m, n) indices straight through.
     transfer = KernelAbstractions.zeros(KernelAbstractions.get_backend(N_data), FT, Nx, Ny, Nκ, Nφ)
 
-    g       = FT(s.gravity)
-    DAL1    = FT(1 / (1 + s.λ)^4)
-    DAL2    = FT(1 / (1 - s.λ)^4)
+    g       = FT(method.gravity)
+    λ_FT    = FT(method.frequency_offset)
+    DAL1    = FT(1 / (1 + λ_FT)^4)
+    DAL2    = FT(1 / (1 - λ_FT)^4)
     DAL3    = FT(2 * DAL1 * DAL2)
-    C_eff   = FT(s.C / g^4)
-    λ_FT    = FT(s.λ)
-    Δθ_p    = FT(s.Δθ_plus)
-    Δθ_m    = FT(s.Δθ_minus)
+    C_eff   = FT(method.coefficient / g^4)
+    Δθ_p    = FT(method.direction_offset_plus)
+    Δθ_m    = FT(method.direction_offset_minus)
 
     σ_centers = sqrt.(g .* cgrid.κ)
     k_centers = cgrid.κ
@@ -211,7 +196,7 @@ function _compute_dia_transfer(s::HasselmannDIA, model)
     iz        = data_z_index(N)
 
     workgroup = (1, 1, min(Nκ, 8), min(Nφ, 8))
-    kernel = _dia_transfer_kernel!(device(arch), workgroup, (Nx, Ny, Nκ, Nφ))
+    kernel = _symmetric_quadruplet_transfer_kernel!(device(arch), workgroup, (Nx, Ny, Nκ, Nφ))
     kernel(transfer, N_data,
            σ_centers, k_centers, φ_centers,
            σ_min, σ_max, log_xfr, φ_min, Δφ,
@@ -222,7 +207,8 @@ function _compute_dia_transfer(s::HasselmannDIA, model)
     return transfer
 end
 
-function source_split(s::HasselmannDIA, state::NamedTuple, model, i, j, m, n)
+function source_split(s::DiscreteInteractionApproximation{<:SymmetricQuadruplet},
+                       state::NamedTuple, model, i, j, m, n)
     FT = eltype(model.action)
     @inbounds T = state.transfer[i, j, m, n]
     @inbounds N_a = model.action[i, j, m, n]
@@ -235,17 +221,18 @@ function source_split(s::HasselmannDIA, state::NamedTuple, model, i, j, m, n)
     end
 end
 
-function source_tendency(s::HasselmannDIA, state::NamedTuple, model, i, j, m, n)
+function source_tendency(s::DiscreteInteractionApproximation{<:SymmetricQuadruplet},
+                          state::NamedTuple, model, i, j, m, n)
     positive, damping = source_split(s, state, model, i, j, m, n)
     return positive - damping * model.action[i, j, m, n]
 end
 
-function source_split(s::HasselmannDIA, model, i, j, m, n)
-    state = (transfer = _compute_dia_transfer(s, model),)
+function source_split(s::DiscreteInteractionApproximation{<:SymmetricQuadruplet}, model, i, j, m, n)
+    state = (transfer = _compute_symmetric_quadruplet_transfer(s.method, model),)
     return source_split(s, state, model, i, j, m, n)
 end
 
-function source_tendency(s::HasselmannDIA, model, i, j, m, n)
+function source_tendency(s::DiscreteInteractionApproximation{<:SymmetricQuadruplet}, model, i, j, m, n)
     positive, damping = source_split(s, model, i, j, m, n)
     return positive - damping * model.action[i, j, m, n]
 end

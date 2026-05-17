@@ -1,14 +1,20 @@
 #####
-##### Source-term physics bundles in the WW3 ST3/ST4 family.
+##### Source-term physics for the spectral wave model.
 #####
-##### Adds three new source terms — `PressureCorrelationInput` (Janssen wind
-##### input), `LocalSaturationDissipation` (Ardhuin ST4-style whitecapping),
-##### `HasselmannDIA` (discrete-interaction quadruplet transfer) — and a
-##### `MeanSpectrumPhysics` bundle that co-optimizes their evaluation by
-##### precomputing per-grid-point state (stress cap, bulk moments, DIA
-##### transfer field) via KernelAbstractions kernels once per tendency call.
+##### Adds:
 #####
-##### Every term is `<: AbstractSourceTerm` (from `src/Sources/Sources.jl`),
+#####   - `PressureCorrelationInput` (Janssen-style wind input),
+#####   - `LocalSaturationDissipation` (saturation-overshoot whitecapping),
+#####   - `MeanSpectrumWhitecapping` (bulk-moments whitecapping),
+#####   - `SymmetricQuadruplet`, a `method` for the existing
+#####     `DiscreteInteractionApproximation` umbrella source term, computing
+#####     the nonlinear quadruplet transfer via the single-λ symmetric model,
+#####   - `PrecomputedSources`, a bundle that co-optimises evaluation of the
+#####     above by precomputing per-grid-point state (stress cap, bulk
+#####     moments, nonlinear-transfer field) via KernelAbstractions kernels
+#####     once per tendency call.
+#####
+##### Every term is `<: AbstractSourceTerm` (defined in `src/Sources/Sources.jl`),
 ##### so the bundle integrates with the existing `sources=` machinery on
 ##### `SpectralWaveModel`.
 
@@ -23,5 +29,5 @@ include("bundle_interface.jl")
 include("WindInput/pressure_correlation.jl")
 include("Dissipation/local_saturation.jl")
 include("Dissipation/mean_spectrum.jl")
-include("NonlinearInteractions/hasselmann_dia.jl")
-include("Packages/mean_spectrum_physics.jl")
+include("NonlinearInteractions/symmetric_quadruplet.jl")
+include("Packages/precomputed_sources.jl")

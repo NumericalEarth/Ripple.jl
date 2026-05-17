@@ -37,7 +37,7 @@ end
 #####
 ##### Per-cell bulk-moment helpers. These recompute the (i,j) integrals on every
 ##### source_split call — O(Nκ Nφ) work per spectral cell, so O((NκNφ)²) per (i,j).
-##### Bundle path (MeanSpectrumPhysics) will precompute these once per (i,j) into
+##### Bundle path (PrecomputedSources) will precompute these once per (i,j) into
 ##### state fields.
 #####
 function local_pth_mean_wavenumber(model, i, j, p)

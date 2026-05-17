@@ -72,14 +72,14 @@ export SpectralTransferStencil, NonlinearInvariantTransfer
 export TriadTransferInteraction, TriadSpectralTransfer
 export QuadrupletTransferInteraction, DiscreteInteractionApproximation
 export source_tendency, source_split, implicit_source_rate
-# ST3/ST4/DIA source-term family (src/Physics/)
+# Source-term physics from src/Physics/
 export BulkWindDrag, WaveSupportedDrag, drag_coefficient, friction_velocity
 export DiagnosticTail, action_tail_factor
 export DynamicSubstepLimiter, parametric_action_bound
 export PressureCorrelationInput
 export LocalSaturationDissipation, MeanSpectrumWhitecapping
-export HasselmannDIA
-export MeanSpectrumPhysics
+export ListedQuadruplets, SymmetricQuadruplet
+export PrecomputedSources
 export SpectralWaveModel, Clock, fields, prognostic_fields, compute_tendencies!, time_step!, cfl
 export Centered, UpwindBiased, WENO, FluxFormAdvection
 export AbstractPropagationSmoothing, SpatialAveraging, apply_propagation_smoothing!

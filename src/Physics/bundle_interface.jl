@@ -1,7 +1,7 @@
 #####
 ##### Bundle interface — minimal extension to the source-term framework.
 #####
-##### A bundle (e.g. `MeanSpectrumPhysics`) groups wind input, dissipation,
+##### A bundle (e.g. `PrecomputedSources`) groups wind input, dissipation,
 ##### and nonlinear-interaction terms whose evaluation can share precomputed
 ##### per-grid-point state (bulk moments, wave-supported stress cap, the
 ##### DIA transfer field). Two-level evaluation:

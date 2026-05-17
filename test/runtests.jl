@@ -33,7 +33,7 @@ ripple_testset = @testset "Ripple.jl" begin
     include("sources/source_terms.jl")
     include("physics/shared.jl")
     include("physics/st3.jl")
-    include("physics/dia.jl")
+    include("physics/symmetric_quadruplet.jl")
     include("integration/model_api.jl")
     include("integration/transport.jl")
     include("validation/validation_suite.jl")

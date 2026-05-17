@@ -3,7 +3,7 @@ import Oceananigans
 # Hooks for source-term bundles that precompute per-grid-point state (e.g. a
 # wave-supported-stress cap or a 4-D nonlinear-transfer field) once per
 # tendency pass and read it back per spectral cell. See
-# `src/Physics/Packages/mean_spectrum_physics.jl` for the bundle that uses
+# `src/Physics/Packages/precomputed_sources.jl` for the bundle that uses
 # these. Defaults are no-ops; only bundle types override.
 prepare_sources(::Any, model) = nothing
 source_tendency(s, ::Nothing, model, i, j, m, n) =

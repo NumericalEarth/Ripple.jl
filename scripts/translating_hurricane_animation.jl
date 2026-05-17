@@ -68,7 +68,7 @@ wind_input  = PressureCorrelationInput(; drag      = BulkWindDrag(:linear),
                                          direction = 0.0)
 dissipation = LocalSaturationDissipation(; B_r     = 1.05e-2,
                                            σ_power = 1.0)
-sources     = MeanSpectrumPhysics(; wind_input, dissipation)
+sources     = PrecomputedSources(; wind_input, dissipation)
 
 model = SpectralWaveModel(grid, spectral_grid;
                           advection   = WENO(),
