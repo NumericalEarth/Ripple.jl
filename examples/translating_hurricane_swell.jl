@@ -54,7 +54,7 @@ grid = RectilinearGrid(CPU();
                        x        = (0, Lx),
                        y        = (-Ly/2, Ly/2),
                        z        = (-1.0, 0.0),
-                       topology = (Periodic, Periodic, Bounded))
+                       topology = (Periodic, Periodic, Bounded));
 
 # Spectral grid: 12 logarithmically spaced frequencies × 12 directions.
 # 12 directions (30° bins) keeps the transverse-spreading fan visible
@@ -66,7 +66,7 @@ f0    = 0.04118
 xfr   = 1.15
 spectral_grid = FrequencyDirectionGrid(;
     frequency = [f0 * xfr^(k - 1) for k in 1:NFREQ],
-    φ         = collect(range(0, 2π * (NDIR - 1) / NDIR; length = NDIR)))
+    φ         = collect(range(0, 2π * (NDIR - 1) / NDIR; length = NDIR)));
 
 # ## Translating Holland hurricane
 #
@@ -88,7 +88,7 @@ hurricane = HollandHurricaneWind(; center          = storm_track,
                                    radius          = 500kilometers,
                                    shape_parameter = 1.5,
                                    inflow_angle    = deg2rad(20),
-                                   rotation        = Counterclockwise())
+                                   rotation        = Counterclockwise());
 
 # ## Physics bundle
 #
@@ -114,15 +114,15 @@ sources     = PrecomputedSources(; wind_input, dissipation)
 model = SpectralWaveModel(grid, spectral_grid;
                           advection   = WENO(),
                           sources,
-                          timestepper = :SemiImplicitEuler)
+                          timestepper = :SemiImplicitEuler);
 
 total_weight = sum(spectral_weight(spectral_grid, m, n) for m in 1:NFREQ, n in 1:NDIR)
-set!(model, N = 1.0e-3 / total_weight)
+set!(model, N = 1.0e-3 / total_weight);
 
 # Δt = 30 min is well under the CFL bound (~130 min for these cell sizes
 # and peak group velocities) and avoids spending most of the wall clock
 # inside the per-step kernels.
-simulation = Simulation(model; Δt = 30minutes, stop_time = T_FINAL, verbose = false)
+simulation = Simulation(model; Δt = 30minutes, stop_time = T_FINAL, verbose = false);
 
 # ## Output writer
 #
@@ -142,9 +142,9 @@ simulation.output_writers[:diagnostics] =
     JLD2Writer(model, (; Hs, fpeak, mean_dir);
                filename          = output_path,
                schedule          = TimeInterval(12hours),
-               overwrite_existing = true)
+               overwrite_existing = true);
 
-run!(simulation)
+run!(simulation);
 
 # ## Load snapshots back as `FieldTimeSeries`
 #
