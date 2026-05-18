@@ -56,13 +56,13 @@ grid = RectilinearGrid(CPU();
                        z        = (-1.0, 0.0),
                        topology = (Periodic, Periodic, Bounded));
 
-# Spectral grid: 12 logarithmically spaced frequencies × 24 directions.
-# Twenty-four direction bins (15° spacing) are needed to keep the
-# transverse swell wings smooth; with only 12 bins the garden-sprinkler
-# spokes are visible even with `SpatialAveraging` smoothing on.
+# Spectral grid: 12 logarithmically spaced frequencies × 16 directions.
+# Sixteen direction bins (22.5° spacing) suppresses most of the
+# garden-sprinkler structure that would dominate the transverse swell
+# wings at 12 bins, without paying the 2× per-step cost of 24 bins.
 
 NFREQ = 12
-NDIR  = 24
+NDIR  = 16
 f0    = 0.04118
 xfr   = 1.15
 spectral_grid = FrequencyDirectionGrid(;
