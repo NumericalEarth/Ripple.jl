@@ -110,11 +110,23 @@ sources     = PrecomputedSources(; wind_input, dissipation)
 # horizontal transport is essential here — the transverse swell wings
 # propagate over thousands of kilometres and numerical diffusion would
 # smear them out.
+#
+# `propagation_smoothing = SpatialAveraging()` enables the Tolman (2002)
+# garden-sprinkler-effect alleviation. Coarse direction bins ``Δφ``
+# combined with long propagation times produce visible "spokes" radiating
+# from the storm because nearby directional cells advect at nearly the
+# same speed along slightly different angles. The Tolman scheme replaces
+# each spectral cell's physical field at the end of each step by a local
+# average over a rectangle whose half-widths are
+# ``L_s = α_s |Δc_g| Δt`` along the bin's propagation axis and
+# ``L_n = α_n c_g Δφ Δt`` perpendicular — exactly the scales over which
+# the spokes would otherwise grow.
 
 model = SpectralWaveModel(grid, spectral_grid;
-                          advection   = WENO(),
+                          advection             = WENO(),
                           sources,
-                          timestepper = :SemiImplicitEuler);
+                          propagation_smoothing = SpatialAveraging(),
+                          timestepper           = :SemiImplicitEuler);
 
 total_weight = sum(spectral_weight(spectral_grid, m, n) for m in 1:NFREQ, n in 1:NDIR)
 set!(model, N = 1.0e-3 / total_weight);
