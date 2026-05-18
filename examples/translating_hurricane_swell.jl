@@ -56,12 +56,13 @@ grid = RectilinearGrid(CPU();
                        z        = (-1.0, 0.0),
                        topology = (Periodic, Periodic, Bounded));
 
-# Spectral grid: 12 logarithmically spaced frequencies × 12 directions.
-# 12 directions (30° bins) keeps the transverse-spreading fan visible
-# without making the per-step source-term loop too expensive.
+# Spectral grid: 12 logarithmically spaced frequencies × 24 directions.
+# Twenty-four direction bins (15° spacing) are needed to keep the
+# transverse swell wings smooth; with only 12 bins the garden-sprinkler
+# spokes are visible even with `SpatialAveraging` smoothing on.
 
 NFREQ = 12
-NDIR  = 12
+NDIR  = 24
 f0    = 0.04118
 xfr   = 1.15
 spectral_grid = FrequencyDirectionGrid(;
@@ -189,7 +190,7 @@ title    = @lift @sprintf("Translating Holland TC (U_t = %.0f m/s) — t = %4.1f
                           U_translation, times[$n] / 1day)
 
 fig = Figure(size = (1000, 540))
-Label(fig[0, :], title; fontsize = 18, halign = :center, font = :bold)
+Label(fig[0, :], title; fontsize = 18, halign = :center, font = :bold, tellwidth = false)
 ax  = Axis(fig[1, 1]; xlabel = "x (km)", ylabel = "y (km)", aspect = DataAspect())
 hm  = heatmap!(ax, Hs_n; colormap = :viridis, colorrange = (0, hs_max))
 lines!(ax, trail_xn, trail_yn; color = :white, linewidth = 2)
