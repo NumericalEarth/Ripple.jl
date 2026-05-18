@@ -56,18 +56,21 @@ grid = RectilinearGrid(CPU();
                        z        = (-1.0, 0.0),
                        topology = (Periodic, Periodic, Bounded));
 
-# Spectral grid: 12 logarithmically spaced frequencies × 16 directions.
-# Sixteen direction bins (22.5° spacing) suppresses most of the
-# garden-sprinkler structure that would dominate the transverse swell
-# wings at 12 bins, without paying the 2× per-step cost of 24 bins.
+# Spectral grid: 12 frequencies geometrically spaced from
+# ``f_\mathrm{min}`` upward by a constant adjacent-bin ratio (the WW3
+# ST3/ST4 default convention), crossed with 24 evenly spaced directions
+# (15° bins). 24 bins are needed to keep the transverse swell wings
+# smooth — at 12 bins the garden-sprinkler effect dominates the
+# off-track field even with `SpatialAveraging` smoothing on.
 
-NFREQ = 12
-NDIR  = 16
-f0    = 0.04118
-xfr   = 1.15
+Nκ              = 12
+Nφ              = 24
+f_min           = 0.04118     # lowest discrete frequency [Hz]
+frequency_ratio = 1.15        # adjacent-bin ratio in the geometric f-grid
+
 spectral_grid = FrequencyDirectionGrid(;
-    frequency = [f0 * xfr^(k - 1) for k in 1:NFREQ],
-    φ         = collect(range(0, 2π * (NDIR - 1) / NDIR; length = NDIR)));
+    frequency = [f_min * frequency_ratio^(k - 1) for k in 1:Nκ],
+    φ         = collect(range(0, 2π * (Nφ - 1) / Nφ; length = Nφ)));
 
 # ## Translating Holland hurricane
 #
@@ -129,7 +132,7 @@ model = SpectralWaveModel(grid, spectral_grid;
                           propagation_smoothing = SpatialAveraging(),
                           timestepper           = :SemiImplicitEuler);
 
-total_weight = sum(spectral_weight(spectral_grid, m, n) for m in 1:NFREQ, n in 1:NDIR)
+total_weight = sum(spectral_weight(spectral_grid, m, n) for m in 1:Nκ, n in 1:Nφ)
 set!(model, N = 1.0e-3 / total_weight);
 
 # Δt = 30 min is well under the CFL bound (~130 min for these cell sizes
