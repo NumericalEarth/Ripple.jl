@@ -19,7 +19,10 @@ function load_oceananigans!()
         error("Oceananigans.jl must be available because Ripple depends on it. Original error: $err")
     end
 
-    return Oceananigans
+    # Resolve the binding in the latest world. `@eval using` opens a new
+    # world; on Julia 1.12 a bare `Oceananigans` here is compiled against
+    # the caller's older world and raises `UndefVarError`.
+    return Base.invokelatest(getfield, @__MODULE__, :Oceananigans)
 end
 
 field_storage_latest(field) =
