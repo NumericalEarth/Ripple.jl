@@ -151,73 +151,43 @@ Hs_ts   = FieldTimeSeries(output_path, "Hs")
 times   = Hs_ts.times
 nframes = length(times)
 
-xs = collect(xnodes(grid)) ./ 1kilometer
-ys = collect(ynodes(grid)) ./ 1kilometer
-storm_xy = [hurricane.center(t) for t in times]
-
 # ## Animation
 #
-# Wind speed left, ``H_s`` right; 145 hourly frames at 12 fps. The
-# transverse fan of swell on either side of the track is the headline
-# visual feature — wave energy radiated from the storm at large oblique
-# angles propagates meridionally for thousands of kilometres on both
-# sides.
+# 145 hourly frames at 12 fps. The transverse fan of swell on either side
+# of the track is the headline visual feature — wave energy radiated from
+# the storm at large oblique angles propagates meridionally for thousands
+# of kilometres on both sides. Plot the `Field` directly via the
+# Oceananigans plotting extension; only the frame index `n` is animated.
 
-hs_max  = maximum(maximum.(interior.(Hs_ts[t] for t in 1:nframes)))
-wnd_max = 0.0
-wnd_frames = Matrix{Float64}[]
-for t in times
-    field = Matrix{Float64}(undef, Nx, Ny)
-    @inbounds for j in 1:Ny, i in 1:Nx
-        x = (i - 0.5) * Lx / Nx
-        y = -Ly/2 + (j - 0.5) * Ly / Ny
-        field[i, j] = wind_speed(hurricane, x, y, t)
-    end
-    push!(wnd_frames, field)
-    global wnd_max = max(wnd_max, maximum(field))
-end
-
+storm_xy = [hurricane.center(t) for t in times]
+nothing #hide
 track_xs = [pt[1] / 1kilometer for pt in storm_xy]
 track_ys = [pt[2] / 1kilometer for pt in storm_xy]
 
-hs_obs    = Observable(Array(interior(Hs_ts[1]))[:, :, 1])
-wnd_obs   = Observable(wnd_frames[1])
-storm_obs = Observable(([track_xs[1]], [track_ys[1]]))
-trail_obs = Observable((track_xs[1:1], track_ys[1:1]))
-title_obs = Observable("t = 0.0 d")
+hs_max = maximum(maximum, interior(Hs_ts))
 
-fig = Figure(size = (1280, 500), backgroundcolor = :white)
-Label(fig[0, :], title_obs; fontsize = 20, halign = :center, font = :bold)
+n = Observable(1)
 
-ax1 = Axis(fig[1, 1];
-           title  = "Wind speed |U₁₀| (m/s)",
-           xlabel = "x (km)", ylabel = "y (km)", aspect = DataAspect())
-hm1 = heatmap!(ax1, xs, ys, wnd_obs; colormap = :magma, colorrange = (0, wnd_max))
-lines!(ax1, lift(t -> t[1], trail_obs), lift(t -> t[2], trail_obs);
-       color = :white, linewidth = 2)
-scatter!(ax1, lift(t -> t[1], storm_obs), lift(t -> t[2], storm_obs);
-         color = :white, marker = :star5, markersize = 18,
+Hs_n     = @lift Hs_ts[$n]
+trail_xn = @lift track_xs[1:$n]
+trail_yn = @lift track_ys[1:$n]
+storm_xn = @lift [track_xs[$n]]
+storm_yn = @lift [track_ys[$n]]
+title    = @lift @sprintf("Translating Holland TC (U_t = %.0f m/s) — t = %4.1f d",
+                          U_translation, times[$n] / 1day)
+
+fig = Figure(size = (1000, 540))
+Label(fig[0, :], title; fontsize = 18, halign = :center, font = :bold)
+ax  = Axis(fig[1, 1]; xlabel = "x (km)", ylabel = "y (km)", aspect = DataAspect())
+hm  = heatmap!(ax, Hs_n; colormap = :viridis, colorrange = (0, hs_max))
+lines!(ax, trail_xn, trail_yn; color = :white, linewidth = 2)
+scatter!(ax, storm_xn, storm_yn;
+         color = :red, marker = :star5, markersize = 22,
          strokewidth = 1.0, strokecolor = :black)
-Colorbar(fig[1, 2], hm1; label = "U₁₀ (m/s)")
+Colorbar(fig[1, 2], hm; label = "Hs (m)")
 
-ax2 = Axis(fig[1, 3];
-           title  = "Significant wave height Hs (m)",
-           xlabel = "x (km)", ylabel = "y (km)", aspect = DataAspect())
-hm2 = heatmap!(ax2, xs, ys, hs_obs; colormap = :viridis, colorrange = (0, hs_max))
-lines!(ax2, lift(t -> t[1], trail_obs), lift(t -> t[2], trail_obs);
-       color = :white, linewidth = 2)
-scatter!(ax2, lift(t -> t[1], storm_obs), lift(t -> t[2], storm_obs);
-         color = :red, marker = :star5, markersize = 18,
-         strokewidth = 1.0, strokecolor = :black)
-Colorbar(fig[1, 4], hm2; label = "Hs (m)")
-
-record(fig, "translating_hurricane_swell.mp4", 1:nframes; framerate = 12) do idx
-    hs_obs[]    = Array(interior(Hs_ts[idx]))[:, :, 1]
-    wnd_obs[]   = wnd_frames[idx]
-    trail_obs[] = (track_xs[1:idx], track_ys[1:idx])
-    storm_obs[] = ([track_xs[idx]], [track_ys[idx]])
-    title_obs[] = @sprintf("Translating Holland TC (U_t = %.0f m/s) — t = %4.1f d",
-                            U_translation, times[idx] / 1day)
+record(fig, "translating_hurricane_swell.mp4", 1:nframes; framerate = 12) do nn
+    n[] = nn
 end
 nothing #hide
 
