@@ -126,9 +126,11 @@ simulation = Simulation(model; Δt = 30minutes, stop_time = T_FINAL, verbose = f
 
 # ## Output writer
 #
-# 2-D diagnostic fields snapshotted every six hours (25 frames). Saving
-# the full 4-D action would be ~28 MB per snapshot at this resolution;
-# the bulk moments are ~75 KB and are what the visualisations want.
+# 2-D diagnostic fields snapshotted every twelve hours (13 frames over six
+# days). Saving the full 4-D action would be ~28 MB per snapshot at this
+# resolution; the bulk moments are ~75 KB. Keep the snapshot interval
+# coarse so the resulting documentation page stays under the rendered-HTML
+# size threshold.
 
 output_path = "translating_hurricane_swell.jld2"
 
@@ -139,7 +141,7 @@ mean_dir = mean_direction(model.action)
 simulation.output_writers[:diagnostics] =
     JLD2Writer(model, (; Hs, fpeak, mean_dir);
                filename          = output_path,
-               schedule          = TimeInterval(6hours),
+               schedule          = TimeInterval(12hours),
                overwrite_existing = true)
 
 run!(simulation)
@@ -159,50 +161,70 @@ xs = collect(xnodes(grid)) ./ 1kilometer
 ys = collect(ynodes(grid)) ./ 1kilometer
 storm_xy = [hurricane.center(t) for t in times]
 
-# ## Mosaic of ``H_s`` at six times across the integration
+# ## Animation
+#
+# Wave-speed left, ``H_s`` right. Hourly frames over the six-day run;
+# embedded directly in the rendered documentation page. The transverse
+# fan of swell on either side of the track is the headline visual
+# feature — wave energy radiated from the storm at large oblique angles
+# propagates meridionally for thousands of kilometres on both sides.
 
 hs_max  = maximum(maximum.(interior.(Hs_ts[t] for t in 1:nframes)))
-mosaic  = Figure(size = (1500, 900))
-ntiles  = min(nframes, 6)
-idxs    = round.(Int, range(1, nframes; length = ntiles))
-for (ti, idx) in enumerate(idxs)
-    r = (ti - 1) ÷ 2 + 1
-    c = (ti - 1) % 2 + 1
-    ax = Axis(mosaic[r, c];
-              title  = @sprintf("t = %.1f d", times[idx] / 1day),
-              xlabel = "x (km)",
-              ylabel = "y (km)",
-              aspect = DataAspect())
-    heatmap!(ax, xs, ys, Array(interior(Hs_ts[idx]))[:, :, 1];
-             colormap = :viridis, colorrange = (0, hs_max))
-    sx, sy = storm_xy[idx]
-    scatter!(ax, [sx / 1kilometer], [sy / 1kilometer];
-             color = :red, marker = :star5, markersize = 18)
+wnd_max = 0.0
+wnd_frames = Matrix{Float64}[]
+for t in times
+    field = Matrix{Float64}(undef, Nx, Ny)
+    @inbounds for j in 1:Ny, i in 1:Nx
+        x = (i - 0.5) * Lx / Nx
+        y = -Ly/2 + (j - 0.5) * Ly / Ny
+        field[i, j] = wind_speed(hurricane, x, y, t)
+    end
+    push!(wnd_frames, field)
+    global wnd_max = max(wnd_max, maximum(field))
 end
-Colorbar(mosaic[:, 3];
-         colormap   = :viridis,
-         colorrange = (0, hs_max),
-         label      = "Hs (m)")
-mosaic
 
-# ## Final-time ``H_s`` with storm-track overlay
-#
-# The transverse fan of low-Hs swell either side of the eastward-pointing
-# track is the directional-spreading feature — wave energy radiated from
-# the storm at large oblique angles propagates meridionally for thousands
-# of kilometres on both sides.
-
-fig = Figure(size = (1400, 700))
-ax  = Axis(fig[1, 1];
-           xlabel = "x (km)", ylabel = "y (km)", aspect = DataAspect(),
-           title  = @sprintf("Hs at t = %.1f d, Holland TC, U_t = %.1f m/s",
-                              times[end] / 1day, U_translation))
-hm  = heatmap!(ax, xs, ys, Array(interior(Hs_ts[nframes]))[:, :, 1];
-               colormap = :viridis, colorrange = (0, hs_max))
-Colorbar(fig[1, 2], hm; label = "Hs (m)")
 track_xs = [pt[1] / 1kilometer for pt in storm_xy]
 track_ys = [pt[2] / 1kilometer for pt in storm_xy]
-lines!(ax, track_xs, track_ys; color = :white, linewidth = 2)
-scatter!(ax, [track_xs[end]], [track_ys[end]];
-         color = :red, marker = :star5, markersize = 25)
-fig
+
+hs_obs    = Observable(Array(interior(Hs_ts[1]))[:, :, 1])
+wnd_obs   = Observable(wnd_frames[1])
+storm_obs = Observable(([track_xs[1]], [track_ys[1]]))
+trail_obs = Observable((track_xs[1:1], track_ys[1:1]))
+title_obs = Observable("t = 0.0 d")
+
+fig = Figure(size = (1280, 500), backgroundcolor = :white)
+Label(fig[0, :], title_obs; fontsize = 20, halign = :center, font = :bold)
+
+ax1 = Axis(fig[1, 1];
+           title  = "Wind speed |U₁₀| (m/s)",
+           xlabel = "x (km)", ylabel = "y (km)", aspect = DataAspect())
+hm1 = heatmap!(ax1, xs, ys, wnd_obs; colormap = :magma, colorrange = (0, wnd_max))
+lines!(ax1, lift(t -> t[1], trail_obs), lift(t -> t[2], trail_obs);
+       color = :white, linewidth = 2)
+scatter!(ax1, lift(t -> t[1], storm_obs), lift(t -> t[2], storm_obs);
+         color = :white, marker = :star5, markersize = 18,
+         strokewidth = 1.0, strokecolor = :black)
+Colorbar(fig[1, 2], hm1; label = "U₁₀ (m/s)")
+
+ax2 = Axis(fig[1, 3];
+           title  = "Significant wave height Hs (m)",
+           xlabel = "x (km)", ylabel = "y (km)", aspect = DataAspect())
+hm2 = heatmap!(ax2, xs, ys, hs_obs; colormap = :viridis, colorrange = (0, hs_max))
+lines!(ax2, lift(t -> t[1], trail_obs), lift(t -> t[2], trail_obs);
+       color = :white, linewidth = 2)
+scatter!(ax2, lift(t -> t[1], storm_obs), lift(t -> t[2], storm_obs);
+         color = :red, marker = :star5, markersize = 18,
+         strokewidth = 1.0, strokecolor = :black)
+Colorbar(fig[1, 4], hm2; label = "Hs (m)")
+
+record(fig, "translating_hurricane_swell.mp4", 1:nframes; framerate = 6) do idx
+    hs_obs[]    = Array(interior(Hs_ts[idx]))[:, :, 1]
+    wnd_obs[]   = wnd_frames[idx]
+    trail_obs[] = (track_xs[1:idx], track_ys[1:idx])
+    storm_obs[] = ([track_xs[idx]], [track_ys[idx]])
+    title_obs[] = @sprintf("Translating Holland TC (U_t = %.0f m/s) — t = %4.1f d",
+                            U_translation, times[idx] / 1day)
+end
+nothing #hide
+
+# ![](translating_hurricane_swell.mp4)
