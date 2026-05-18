@@ -126,22 +126,18 @@ simulation = Simulation(model; Δt = 30minutes, stop_time = T_FINAL, verbose = f
 
 # ## Output writer
 #
-# 2-D diagnostic fields snapshotted every twelve hours (13 frames over six
-# days). Saving the full 4-D action would be ~28 MB per snapshot at this
-# resolution; the bulk moments are ~75 KB. Keep the snapshot interval
-# coarse so the resulting documentation page stays under the rendered-HTML
-# size threshold.
+# Hourly snapshots of the surface ``H_s`` field — 145 frames over six
+# days, enough for a smooth animation at 12 fps. Saving the full 4-D
+# action would be ~28 MB per snapshot at this resolution, but a single 2-D
+# `Field` is ~16 KB, so 145 frames lands around ~2 MB on disk.
 
 output_path = "translating_hurricane_swell.jld2"
-
-Hs       = significant_wave_height(model.action)
-fpeak    = peak_frequency(model.action)
-mean_dir = mean_direction(model.action)
+Hs = significant_wave_height(model.action)
 
 simulation.output_writers[:diagnostics] =
-    JLD2Writer(model, (; Hs, fpeak, mean_dir);
+    JLD2Writer(model, (; Hs);
                filename          = output_path,
-               schedule          = TimeInterval(12hours),
+               schedule          = TimeInterval(1hour),
                overwrite_existing = true);
 
 run!(simulation);
@@ -151,11 +147,9 @@ run!(simulation);
 # Each `FieldTimeSeries` is a 4-D array indexed `(i, j, k, t_index)` with
 # `.times` carrying the snapshot times.
 
-Hs_ts       = FieldTimeSeries(output_path, "Hs")
-fpeak_ts    = FieldTimeSeries(output_path, "fpeak")
-mean_dir_ts = FieldTimeSeries(output_path, "mean_dir")
-times       = Hs_ts.times
-nframes     = length(times)
+Hs_ts   = FieldTimeSeries(output_path, "Hs")
+times   = Hs_ts.times
+nframes = length(times)
 
 xs = collect(xnodes(grid)) ./ 1kilometer
 ys = collect(ynodes(grid)) ./ 1kilometer
@@ -163,11 +157,11 @@ storm_xy = [hurricane.center(t) for t in times]
 
 # ## Animation
 #
-# Wave-speed left, ``H_s`` right. Hourly frames over the six-day run;
-# embedded directly in the rendered documentation page. The transverse
-# fan of swell on either side of the track is the headline visual
-# feature — wave energy radiated from the storm at large oblique angles
-# propagates meridionally for thousands of kilometres on both sides.
+# Wind speed left, ``H_s`` right; 145 hourly frames at 12 fps. The
+# transverse fan of swell on either side of the track is the headline
+# visual feature — wave energy radiated from the storm at large oblique
+# angles propagates meridionally for thousands of kilometres on both
+# sides.
 
 hs_max  = maximum(maximum.(interior.(Hs_ts[t] for t in 1:nframes)))
 wnd_max = 0.0
@@ -217,7 +211,7 @@ scatter!(ax2, lift(t -> t[1], storm_obs), lift(t -> t[2], storm_obs);
          strokewidth = 1.0, strokecolor = :black)
 Colorbar(fig[1, 4], hm2; label = "Hs (m)")
 
-record(fig, "translating_hurricane_swell.mp4", 1:nframes; framerate = 6) do idx
+record(fig, "translating_hurricane_swell.mp4", 1:nframes; framerate = 12) do idx
     hs_obs[]    = Array(interior(Hs_ts[idx]))[:, :, 1]
     wnd_obs[]   = wnd_frames[idx]
     trail_obs[] = (track_xs[1:idx], track_ys[1:idx])
