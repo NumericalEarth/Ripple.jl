@@ -22,7 +22,7 @@ jobs:
       fail-fast: false
       matrix:
         version:
-          - '1.10'
+          - '1.12'
         os:
           - ubuntu-latest
           - macos-latest
@@ -52,7 +52,7 @@ jobs:
           path: default_suite.tsv
 
   package-test:
-    name: Package project suite Julia 1.10
+    name: Package project suite Julia 1.12
     runs-on: ubuntu-latest
 
     steps:
@@ -60,7 +60,7 @@ jobs:
 
       - uses: julia-actions/setup-julia@v2
         with:
-          version: '1.10'
+          version: '1.12'
 
       - uses: julia-actions/cache@v2
 
@@ -81,7 +81,7 @@ jobs:
 
       - uses: julia-actions/setup-julia@v2
         with:
-          version: '1.10'
+          version: '1.12'
 
       - uses: julia-actions/cache@v2
 

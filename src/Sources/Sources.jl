@@ -395,14 +395,36 @@ function QuadrupletTransferInteraction(donor1::Tuple{Int, Int},
                                          source_parameter(rate))
 end
 
-struct DiscreteInteractionApproximation{Interactions, FT} <: AbstractSourceTerm
+#####
+##### Discrete interaction approximation of the quadruplet (4-wave Boltzmann)
+##### transfer. The `method` field selects how quadruplets are discretised:
+#####
+#####   - `ListedQuadruplets`: a user-supplied tuple of explicit
+#####     `QuadrupletTransferInteraction`s with cell-indexed donors and
+#####     receivers — the simplest model, useful for unit tests and for
+#####     small bespoke parameterisations.
+#####
+#####   - `SymmetricQuadruplet`: the single-λ symmetric pair used by WAM-style
+#####     spectral wave models (Hasselmann et al. 1985). One donor at
+#####     `(σ_a, θ_a)`, two receivers at `σ_± = (1 ± λ) σ_a` and angles
+#####     `θ_a ± Δθ_±`. Defined in
+#####     `src/Physics/NonlinearInteractions/symmetric_quadruplet.jl`.
+
+struct ListedQuadruplets{Interactions, FT}
     interactions :: Interactions
     power :: FT
     resonance_tolerance :: FT
 end
 
-function DiscreteInteractionApproximation(interactions=(); power=1.0, resonance_tolerance=1e-12)
-    return DiscreteInteractionApproximation(tuple(interactions...), float(power), float(resonance_tolerance))
+struct DiscreteInteractionApproximation{Method} <: AbstractSourceTerm
+    method :: Method
+end
+
+# Backward-compatible primary constructor: positional tuple of
+# `QuadrupletTransferInteraction`s with `power`/`resonance_tolerance` kwargs.
+function DiscreteInteractionApproximation(interactions::Tuple=(); power=1.0, resonance_tolerance=1e-12)
+    method = ListedQuadruplets(tuple(interactions...), float(power), float(resonance_tolerance))
+    return DiscreteInteractionApproximation(method)
 end
 
 split_growth_rate(rate, action_value) =
@@ -1307,8 +1329,9 @@ end
 
 quadruplet_bin_matches(m, n, bin_m, bin_n) = m == bin_m && n == bin_n
 
-function source_split(s::DiscreteInteractionApproximation, model, i, j, m, n)
-    s.power > 0 || throw(ArgumentError("DIA transfer power must be positive"))
+function source_split(s::DiscreteInteractionApproximation{<:ListedQuadruplets}, model, i, j, m, n)
+    method = s.method
+    method.power > 0 || throw(ArgumentError("DIA transfer power must be positive"))
 
     cgrid = model.spectral_grid
     cgrid isa FrequencyDirectionGrid ||
@@ -1320,9 +1343,9 @@ function source_split(s::DiscreteInteractionApproximation, model, i, j, m, n)
     positive = zero(eltype(model.action))
     damping = zero(eltype(model.action))
 
-    for interaction in s.interactions
+    for interaction in method.interactions
         check_quadruplet_transfer_indices(interaction, cgrid)
-        check_quadruplet_resonance(interaction, cgrid, s.resonance_tolerance)
+        check_quadruplet_resonance(interaction, cgrid, method.resonance_tolerance)
 
         rate = source_value(interaction.rate, model, i, j)
         rate >= 0 || throw(ArgumentError("DIA transfer rates must be nonnegative"))
@@ -1331,7 +1354,7 @@ function source_split(s::DiscreteInteractionApproximation, model, i, j, m, n)
                             zero(eltype(model.action)))
         donor2_action = max(model.action[i, j, interaction.donor2_m, interaction.donor2_n],
                             zero(eltype(model.action)))
-        action_flux = rate * donor1_action^s.power * donor2_action^s.power
+        action_flux = rate * donor1_action^method.power * donor2_action^method.power
         action_flux == 0 && continue
 
         if quadruplet_bin_matches(m, n, interaction.receiver1_m, interaction.receiver1_n)
@@ -1356,7 +1379,7 @@ function source_split(s::DiscreteInteractionApproximation, model, i, j, m, n)
     return positive, damping
 end
 
-function source_tendency(s::DiscreteInteractionApproximation, model, i, j, m, n)
+function source_tendency(s::DiscreteInteractionApproximation{<:ListedQuadruplets}, model, i, j, m, n)
     positive, damping = source_split(s, model, i, j, m, n)
     return positive - damping * model.action[i, j, m, n]
 end

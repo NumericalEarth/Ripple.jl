@@ -2,8 +2,19 @@ using Test
 using Ripple
 
 function write_ripple_test_summary(path, testset)
-    passes, fails, errors, broken, child_passes, child_fails, child_errors, child_broken, duration =
-        Test.get_test_counts(testset)
+    # Julia 1.10 returns a 9-tuple; 1.12+ returns a `Test.TestCounts` struct
+    # with named fields. Handle both by reading the fields off whatever
+    # `get_test_counts` returns.
+    counts = Test.get_test_counts(testset)
+    passes       = counts.passes
+    fails        = counts.fails
+    errors       = counts.errors
+    broken       = counts.broken
+    child_passes = counts.cumulative_passes
+    child_fails  = counts.cumulative_fails
+    child_errors = counts.cumulative_errors
+    child_broken = counts.cumulative_broken
+    duration     = counts.duration
 
     total_passes = passes + child_passes
     total_fails = fails + child_fails
@@ -31,6 +42,9 @@ ripple_testset = @testset "Ripple.jl" begin
     include("forcing/winds.jl")
     include("coupling/q_transform.jl")
     include("sources/source_terms.jl")
+    include("physics/shared.jl")
+    include("physics/st3.jl")
+    include("physics/symmetric_quadruplet.jl")
     include("integration/model_api.jl")
     include("integration/transport.jl")
     include("validation/validation_suite.jl")

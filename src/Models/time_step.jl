@@ -34,9 +34,10 @@ function add_scaled_semi_implicit!(N::ProductField, G::ProductField, dt, model)
     Nx, Ny, Nxi, Neta = size(N)
     damping = similar(N)
     explicit_part = similar(N)
+    state = prepare_sources(model.sources, model)
 
     for n in 1:Neta, m in 1:Nxi, j in 1:Ny, i in 1:Nx
-        _, λ = source_split(model.sources, model, i, j, m, n)
+        _, λ = source_split(model.sources, state, model, i, j, m, n)
         damping[i, j, m, n] = λ
         explicit_part[i, j, m, n] = G[i, j, m, n] + λ * N[i, j, m, n]
     end

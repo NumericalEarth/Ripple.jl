@@ -7,6 +7,7 @@ const EXAMPLE_TUTORIALS = (
     ("bounded_wave_packet_dispersion.jl",    "Bounded Wave Packet Dispersion"),
     ("spectral_refraction_by_shear.jl",      "Spectral Refraction by a Sheared Current"),
     ("vortex_refraction.jl",                 "Wave Refraction Through A Barotropic Vortex"),
+    ("translating_hurricane_swell.jl",       "Swell Generation by a Translating Idealized Hurricane"),
 )
 
 example_slug(filename) = first(splitext(filename)) * ".md"

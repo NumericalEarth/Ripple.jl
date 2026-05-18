@@ -41,6 +41,7 @@ end
         "bounded_wave_packet_dispersion.jl",
         "spectral_refraction_by_shear.jl",
         "vortex_refraction.jl",
+        "translating_hurricane_swell.jl",
     ]
 
     discovered_examples = sort([basename(path) for path in readdir(example_dir; join=true)
@@ -81,6 +82,10 @@ end
                                                        "velocities",
                                                        "Simulation",
                                                        ":RK3"),
+            "translating_hurricane_swell.jl"       => ("# # Swell Generation by a Translating Idealized Hurricane",
+                                                       "HollandHurricaneWind",
+                                                       "PrecomputedSources",
+                                                       "PressureCorrelationInput"),
         )
 
         for (file, required_patterns) in semantic_examples
