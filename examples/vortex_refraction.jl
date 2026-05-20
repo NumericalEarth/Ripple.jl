@@ -3,13 +3,13 @@
 # This example refracts an initially uniform, narrow-banded wave-action
 # field through a barotropic Gaussian vortex. The vortex velocity is the
 # Lagrangian-mean current ``u^L``. Two physical effects act on the action:
-# Doppler-shifted physical transport at ``c_g + u^L``, and kinematic
-# refraction ``\nabla_k \cdot (c_k N)`` driven by gradients of ``u^L``.
+# Doppler-shifted physical transport at ``c_g + u^D``, and kinematic
+# refraction ``\nabla_k \cdot (c_k N)`` driven by gradients of ``u^D``.
 # Both are applied in a single fused KA kernel that uses 5th-order WENO in
-# all four directions, and the model is advanced with RK3 via an
-# `Oceananigans.Simulation`. The resulting movie shows the spectrum
-# evolving spatially through ``m_0``, ``\kappa_\mathrm{rms}``, and the
-# mean direction.
+# all four directions, and the model is advanced with
+# `RungeKutta3TimeStepper` via an `Oceananigans.Simulation`. The resulting
+# movie shows the spectrum evolving spatially through ``m_0``,
+# ``\kappa_\mathrm{rms}``, and the mean direction.
 
 using Oceananigans, Ripple
 using CairoMakie
@@ -78,7 +78,7 @@ speed = Field(sqrt(u_field^2 + v_field^2); indices = (:, :, grid.Nz))
 
 let
     fig = Figure(size = (640, 540))
-    ax  = Axis(fig[1, 1]; title  = "Barotropic vortex |U| (m/s)",
+    ax  = Axis(fig[1, 1]; title  = "Barotropic vortex |uᴰ| (m/s)",
                            xlabel = "x (m)", ylabel = "y (m)", aspect = 1)
     hm  = heatmap!(ax, speed; colormap = :viridis)
     Colorbar(fig[1, 2], hm)
@@ -95,7 +95,7 @@ end
 model = SpectralWaveModel(grid, spectral_grid;
                           velocities  = (; u = u_field, v = v_field),
                           sources     = nothing,
-                          timestepper = :RK3);
+                          timestepper = :RungeKutta3);
 
 # Narrow-banded Gaussian initial condition, uniform in ``(x, y)``, peaking
 # at ``\kappa \approx 0.4`` and direction ``\varphi \approx 0`` (waves
@@ -112,8 +112,8 @@ end);
 
 # ## Time loop
 #
-# 400 RK3 steps of ``\Delta t = 0.05\,\mathrm{s}`` for a total of 20 s, run
-# via an `Oceananigans.Simulation`. Snapshots are captured between
+# 400 Runge-Kutta steps of ``\Delta t = 0.05\,\mathrm{s}`` for a total of
+# 20 s, run via an `Oceananigans.Simulation`. Snapshots are captured between
 # segments for the animation.
 
 dt           = 0.05

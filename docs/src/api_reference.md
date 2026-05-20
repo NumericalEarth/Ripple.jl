@@ -33,8 +33,8 @@ This page groups the main exported names by workflow.
 
 ## Models And Sources
 
-- Model state: `SpectralWaveModel`, `Clock`, `fields`, `prognostic_fields`,
-  `compute_tendencies!`, `time_step!`, `cfl`
+- Model state: `SpectralWaveModel`, `MonobandedWaveModel`, `Clock`, `fields`,
+  `prognostic_fields`, `compute_tendencies!`, `time_step!`, `cfl`
 - Physical transport: `Centered`, `UpwindBiased`, `WENO`, `FluxFormAdvection`
 - Propagation smoothing: `AbstractPropagationSmoothing`, `SpatialAveraging`,
   `apply_propagation_smoothing!`
@@ -55,13 +55,16 @@ This page groups the main exported names by workflow.
 - Current coupling: `PrescribedLagrangianMeanCurrent`,
   `NoCurrentCoupling`, `AbstractCWCMCurrentCoupling`,
   `CWCMPrescribedCurrentCoupling`, `CWCMPseudomomentumCoupling`,
+  `MonobandedPrescribedCurrentCoupling`, `MonobandedPseudomomentumCoupling`,
   `ZeroVelocities`, `PrescribedVelocities`, `PseudomomentumVelocities`,
   `q_cell_integral`, `q_cell_integral_kappa_derivative`,
   `compute_doppler_velocity!`, `compute_doppler_velocity_derivative!`,
   `update_coupling!`
 - Pseudomomentum: `pseudomomentum_field`, `pseudomomentum_fields`,
   `compute_pseudomomentum`, `compute_pseudomomentum_cell_integrals`,
-  `compute_pseudomomentum_cell_averages`,
+  `compute_pseudomomentum_cell_averages`; `pseudomomentum_fields` also
+  accepts `MonobandedWaveModel` and projects `AKx`, `AKy` through the model's
+  Q geometry,
   `compute_pseudomomentum_tendency_cell_averages!`,
   `cwcm_momentum_tendency_fields!`
 

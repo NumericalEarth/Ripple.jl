@@ -42,7 +42,10 @@ coordinates. Ripple often discretizes the same spectrum on polar
 | ``\kappa`` | `κ` | Radial wavenumber, ``\lVert \boldsymbol{k} \rVert`` |
 | ``\phi`` | `φ` | Wave direction |
 | ``N`` | `model.action`, `N` | Wave action density / finite-volume cell average |
-| ``G`` | `model.tendencies`, `G` | Tendency of `N`, including transport and sources |
+| ``A`` | `model.action` for `MonobandedWaveModel` | Monobanded action, ``\int N\,d^2\boldsymbol{k}`` |
+| ``\boldsymbol{M}=A\boldsymbol{K}`` | `AKx`, `AKy` | Monobanded first moment / wavevector moment |
+| ``\boldsymbol{K}`` | `Kx`, `Ky` diagnostics | Diagnosed monobanded wavevector, ``\boldsymbol{M}/A`` |
+| ``G`` | `model.tendencies`, `model.timestepper.Gⁿ`, `G` | Tendency of prognostic wave variables, including transport and sources |
 | ``S_N`` | `sources` | Source contribution to the action equation |
 | ``\sigma`` | `σ` in text | Intrinsic wave frequency |
 | ``\Omega`` | `Ω` in text | Absolute frequency, including Doppler shift |
@@ -50,7 +53,9 @@ coordinates. Ripple often discretizes the same spectrum on polar
 | ``\dot{\boldsymbol{x}}`` | transport velocity | Ray velocity in physical space |
 | ``\dot{\boldsymbol{k}}`` | refraction velocity | Ray velocity in wavevector space |
 | ``\boldsymbol{u}^{L}`` | `u`, `v` velocity fields | Lagrangian-mean horizontal velocity |
-| ``\boldsymbol{U}`` | `Ux`, `Uy` caches | Q-projected Doppler velocity for each ``\kappa`` |
+| ``\boldsymbol{u}^{D}`` | `uᴰx`, `uᴰy`; Doppler caches | Q-projected Doppler velocity |
+| ``\boldsymbol{H}`` | `Hx`, `Hy` diagnostics | ``\partial \boldsymbol{u}^{D} / \partial \kappa`` evaluated at local ``\kappa`` |
+| ``\Gamma_{\beta\alpha}`` | `Γxx`, `Γyx`, `Γxy`, `Γyy` | Fixed-``\kappa`` horizontal gradient of ``\boldsymbol{u}^{D}`` used in monobanded refraction |
 | ``Q`` | `QKernel`, `QTransform` | Vertical weighting kernel for wave-current coupling |
 | ``\boldsymbol{p}`` | `pseudomomentum_fields` | Wave pseudomomentum |
 | ``m_0`` | `m0` | Zeroth spectral moment, total action over the spectrum |
@@ -75,5 +80,8 @@ grids, ``|C_{mn}|`` includes the ``\kappa`` Jacobian.
 
 The Q transform is also finite-volume in ``z``: Ripple integrates ``Q`` across
 vertical cells rather than sampling it at cell centers. This keeps Doppler
-velocity, ``\partial \boldsymbol{U} / \partial \kappa``, and pseudomomentum on
-the same vertical geometry.
+velocity ``\boldsymbol{u}^{D}``,
+``\partial \boldsymbol{u}^{D} / \partial \kappa``, and pseudomomentum on the
+same vertical geometry. The monobanded model exposes this velocity directly as
+`uᴰx` and `uᴰy`; the spectral CWCM coupling stores the same quantity in
+internal Doppler-velocity caches.

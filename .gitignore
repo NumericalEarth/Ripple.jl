@@ -2,6 +2,7 @@
 *.jl.cov
 *.jl.*.cov
 *.mem
+*.mp4
 Manifest.toml
 !docs/Manifest.toml
 docs/build/

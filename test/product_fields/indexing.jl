@@ -93,6 +93,19 @@ end
     @test yfaces(grid) == [-1.0, 0.0, 3.0]
     @test zfaces(grid) == [0.0, 1.0]
     @test xnodes(grid) == [0.125, 0.625, 1.5]
-    @test xspacings(grid) == [0.25, 0.75, 1.0]
+    @test Ripple.xspacings(grid) == [0.25, 0.75, 1.0]
     @test Oceananigans.Grids.topology(grid) == (Bounded, Periodic, Bounded)
+
+    flat_x_grid = RectilinearGrid(CPU();
+                                  size=(2, 1),
+                                  y=(0, 1),
+                                  z=(0, 1),
+                                  topology=(Flat, Periodic, Bounded))
+
+    @test horizontal_size(flat_x_grid) == (1, 2)
+    @test xnodes(flat_x_grid) == Float64[]
+    @test xfaces(flat_x_grid) == Float64[]
+    @test Ripple.xspacings(flat_x_grid) == [Inf]
+    @test ynodes(flat_x_grid) == [0.25, 0.75]
+    @test yfaces(flat_x_grid) == [0.0, 0.5, 1.0]
 end

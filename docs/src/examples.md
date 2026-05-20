@@ -7,7 +7,7 @@ documentation by [Literate.jl](https://github.com/fredrikekre/Literate.jl)
 with `execute=true`, so every figure and animation on the example pages
 is the actual output of running that script during the docs build.
 
-The four example pages walk a deliberate arc:
+The example pages walk a deliberate arc:
 
 1. **[Quick Start](@ref)** — a small barotropic-vortex refraction
    simulation that touches the major Ripple constructs (`RectilinearGrid`,
@@ -28,6 +28,14 @@ The four example pages walk a deliberate arc:
    production-resolution version of the quick start, with a three-panel
    animation showing `m₀`, `κᵣₘₛ`, and the mean direction evolving under
    the fused Doppler + refraction kernel.
+6. **[Monobanded Linear-Shear Refraction](@ref)** — a quasi-analytic
+   `MonobandedWaveModel` validation in a barotropic linear shear, comparing
+   packet contours, action conservation, centroid motion, and the predicted
+   ``K_y(t) = K_{y0} - S K_{x0} t`` refraction law.
+7. **[Coupled Wind-Drift Instability](@ref)** — a compact Oceananigans
+   wind-drift-layer instability with a `MonobandedWaveModel` advanced from
+   an Oceananigans callback that copies the current and refreshes the
+   Stokes-drift shear every step.
 
 Run any example from the repository root:
 
@@ -48,6 +56,8 @@ Pages = [
     "generated/examples/bounded_wave_packet_dispersion.md",
     "generated/examples/spectral_refraction_by_shear.md",
     "generated/examples/vortex_refraction.md",
+    "generated/examples/monobanded_linear_shear_refraction.md",
+    "generated/examples/coupled_wind_drift_instability.md",
 ]
 Depth = 1
 ```

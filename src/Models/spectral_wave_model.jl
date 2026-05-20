@@ -2,7 +2,7 @@ import Oceananigans
 import Oceananigans: AbstractModel, fields, prognostic_fields
 import Oceananigans.Architectures: architecture
 import Oceananigans.Advection: WENO
-import Oceananigans.TimeSteppers: Clock
+import Oceananigans.TimeSteppers: Clock, RungeKutta3TimeStepper
 
 validate_model_clock(clock::Clock) = clock
 validate_model_clock(clock) =
@@ -101,10 +101,10 @@ function validate_model_coupling(coupling::AbstractCWCMCurrentCoupling, grid, sp
 
     Nx, Ny = horizontal_size(grid)
     expected_size = (Nx, Ny, length(spectral_kappa))
-    validate_cwcm_coupling_cache_shape(coupling, "Ux", coupling.Ux, expected_size)
-    validate_cwcm_coupling_cache_shape(coupling, "Uy", coupling.Uy, expected_size)
-    validate_cwcm_coupling_cache_shape(coupling, "dUxdkappa", coupling.dUxdkappa, expected_size)
-    validate_cwcm_coupling_cache_shape(coupling, "dUydkappa", coupling.dUydkappa, expected_size)
+    validate_cwcm_coupling_cache_shape(coupling, "uᴰx", coupling.uᴰx, expected_size)
+    validate_cwcm_coupling_cache_shape(coupling, "uᴰy", coupling.uᴰy, expected_size)
+    validate_cwcm_coupling_cache_shape(coupling, "duᴰxdκ", coupling.duᴰxdκ, expected_size)
+    validate_cwcm_coupling_cache_shape(coupling, "duᴰydκ", coupling.duᴰydκ, expected_size)
     return coupling
 end
 
@@ -118,19 +118,28 @@ supported_model_timestepper(timestepper::Symbol) =
     timestepper === :ForwardEuler ||
     timestepper === :SemiImplicitEuler ||
     timestepper === :AB2 ||
+    timestepper === :RungeKutta3 ||
     timestepper === :RK3 ||
     is_low_storage_rk3(timestepper)
 
 function canonical_model_timestepper(timestepper::Symbol)
     supported_model_timestepper(timestepper) ||
         throw(ArgumentError("unsupported timestepper $timestepper"))
+    timestepper === :RK3 && return :RungeKutta3
+    is_low_storage_rk3(timestepper) && return :RungeKutta3
     return timestepper
 end
 
 canonical_model_timestepper(timestepper) =
     throw(ArgumentError("timestepper must be a Symbol; got $(typeof(timestepper))"))
 
-mutable struct SpectralWaveModel{Arch, G, SG, Depth, A, HAdv, SAdv, Sources, Coupling, GA, BCs, Tend, PrevTend, C} <: AbstractModel{Nothing, Arch}
+function materialize_model_timestepper(timestepper::Symbol, grid, action, tendencies, previous_tendencies)
+    timestepper === :RungeKutta3 &&
+        return RungeKutta3TimeStepper(grid, action; Gⁿ=tendencies, G⁻=previous_tendencies)
+    return timestepper
+end
+
+mutable struct SpectralWaveModel{Arch, G, SG, Depth, A, HAdv, SAdv, Sources, Coupling, GA, BCs, TS, Tend, PrevTend, C} <: AbstractModel{Nothing, Arch}
     grid :: G
     spectral_grid :: SG
     depth :: Depth
@@ -141,7 +150,7 @@ mutable struct SpectralWaveModel{Arch, G, SG, Depth, A, HAdv, SAdv, Sources, Cou
     coupling :: Coupling
     propagation_smoothing :: GA
     boundary_conditions :: BCs
-    timestepper :: Symbol
+    timestepper :: TS
     tendencies :: Tend
     previous_tendencies :: PrevTend
     previous_tendencies_ready :: Bool
@@ -195,12 +204,14 @@ function SpectralWaveModel(grid, spectral_grid;
 
     tendencies = similar(action)
     previous_tendencies = similar(action)
+    timestepper = materialize_model_timestepper(timestepper, grid, action, tendencies, previous_tendencies)
     Arch = typeof(architecture(grid))
     model = SpectralWaveModel{Arch, typeof(grid), typeof(spectral_grid), typeof(depth), typeof(action),
                               typeof(horizontal_advection), typeof(spectral_advection),
                               typeof(sources), typeof(coupling),
                               typeof(propagation_smoothing),
                               typeof(boundary_conditions),
+                              typeof(timestepper),
                               typeof(tendencies), typeof(previous_tendencies), typeof(clock)}(
         grid, spectral_grid, depth, action, horizontal_advection, spectral_advection, sources, coupling,
         propagation_smoothing, boundary_conditions,

@@ -4,36 +4,36 @@ import Oceananigans.Architectures: architecture, device, on_architecture
 
 # Compute spatial gradients of the Doppler velocity caches with a KA kernel
 # so the path is GPU-compatible. Run once per coupling update.
-@kernel function _current_gradients!(Ux_x, Ux_y, Uy_x, Uy_y, Ux, Uy, Δx_inv, Δy_inv, Nx, Ny)
+@kernel function _current_gradients!(uᴰx_x, uᴰx_y, uᴰy_x, uᴰy_y, uᴰx, uᴰy, Δx_inv, Δy_inv, Nx, Ny)
     i, j, k = @index(Global, NTuple)
     @inbounds begin
         ip = ifelse(i == Nx, 1, i + 1)
         im = ifelse(i == 1, Nx, i - 1)
         jp = ifelse(j == Ny, 1, j + 1)
         jm = ifelse(j == 1, Ny, j - 1)
-        Ux_x[i, j, k] = (Ux[ip, j, k] - Ux[im, j, k]) * (Δx_inv / 2)
-        Ux_y[i, j, k] = (Ux[i, jp, k] - Ux[i, jm, k]) * (Δy_inv / 2)
-        Uy_x[i, j, k] = (Uy[ip, j, k] - Uy[im, j, k]) * (Δx_inv / 2)
-        Uy_y[i, j, k] = (Uy[i, jp, k] - Uy[i, jm, k]) * (Δy_inv / 2)
+        uᴰx_x[i, j, k] = (uᴰx[ip, j, k] - uᴰx[im, j, k]) * (Δx_inv / 2)
+        uᴰx_y[i, j, k] = (uᴰx[i, jp, k] - uᴰx[i, jm, k]) * (Δy_inv / 2)
+        uᴰy_x[i, j, k] = (uᴰy[ip, j, k] - uᴰy[im, j, k]) * (Δx_inv / 2)
+        uᴰy_y[i, j, k] = (uᴰy[i, jp, k] - uᴰy[i, jm, k]) * (Δy_inv / 2)
     end
 end
 
 function ensure_current_gradients!(coupling::AbstractCWCMCurrentCoupling, grid)
-    Ux = coupling.Ux
-    Uy = coupling.Uy
-    if coupling.Ux_x === nothing || size(coupling.Ux_x) != size(Ux)
-        coupling.Ux_x = similar(Ux)
-        coupling.Ux_y = similar(Ux)
-        coupling.Uy_x = similar(Uy)
-        coupling.Uy_y = similar(Uy)
+    uᴰx = coupling.uᴰx
+    uᴰy = coupling.uᴰy
+    if coupling.uᴰx_x === nothing || size(coupling.uᴰx_x) != size(uᴰx)
+        coupling.uᴰx_x = similar(uᴰx)
+        coupling.uᴰx_y = similar(uᴰx)
+        coupling.uᴰy_x = similar(uᴰy)
+        coupling.uᴰy_y = similar(uᴰy)
     end
-    Nx, Ny, Nκ = size(Ux)
+    Nx, Ny, Nκ = size(uᴰx)
     Δx = first(xspacings(grid))
     Δy = first(yspacings(grid))
     arch = architecture(grid)
     kernel = _current_gradients!(device(arch), (8, 8, 1), (Nx, Ny, Nκ))
-    kernel(coupling.Ux_x, coupling.Ux_y, coupling.Uy_x, coupling.Uy_y,
-           Ux, Uy, 1 / Δx, 1 / Δy, Nx, Ny)
+    kernel(coupling.uᴰx_x, coupling.uᴰx_y, coupling.uᴰy_x, coupling.uᴰy_y,
+           uᴰx, uᴰy, 1 / Δx, 1 / Δy, Nx, Ny)
     KernelAbstractions.synchronize(device(arch))
     return coupling
 end
@@ -73,7 +73,7 @@ end
 # spectral cell (m, n).
 @kernel function _wave_current_refraction_tendency!(
     G_data, N_data,
-    Ux, Uy, Ux_x, Ux_y, Uy_x, Uy_y,
+    uᴰx, uᴰy, uᴰx_x, uᴰx_y, uᴰy_x, uᴰy_y,
     κ_centers, cg_x_table, cg_y_table,
     cos_table, sin_table,
     Δx_inv, Δy_inv, Δκ_inv, Δφ_inv,
@@ -84,18 +84,18 @@ end
     cφ_val = cos_table[n]
     sφ_val = sin_table[n]
 
-    @inbounds Uxc = Ux[i, j, m]
-    @inbounds Uyc = Uy[i, j, m]
-    @inbounds Uxx = Ux_x[i, j, m]
-    @inbounds Uxy = Ux_y[i, j, m]
-    @inbounds Uyx = Uy_x[i, j, m]
-    @inbounds Uyy = Uy_y[i, j, m]
+    @inbounds uᴰxᵢ = uᴰx[i, j, m]
+    @inbounds uᴰyᵢ = uᴰy[i, j, m]
+    @inbounds ∂x_uᴰx = uᴰx_x[i, j, m]
+    @inbounds ∂y_uᴰx = uᴰx_y[i, j, m]
+    @inbounds ∂x_uᴰy = uᴰy_x[i, j, m]
+    @inbounds ∂y_uᴰy = uᴰy_y[i, j, m]
 
-    cκ = -κ * (cφ_val^2 * Uxx + cφ_val * sφ_val * (Uyx + Uxy) + sφ_val^2 * Uyy)
-    cφ =  cφ_val * sφ_val * (Uxx - Uyy) + sφ_val^2 * Uyx - cφ_val^2 * Uxy
+    cκ = -κ * (cφ_val^2 * ∂x_uᴰx + cφ_val * sφ_val * (∂x_uᴰy + ∂y_uᴰx) + sφ_val^2 * ∂y_uᴰy)
+    cφ =  cφ_val * sφ_val * (∂x_uᴰx - ∂y_uᴰy) + sφ_val^2 * ∂x_uᴰy - cφ_val^2 * ∂y_uᴰx
 
-    ux = intrinsic_velocity_component(cg_x_table, i, j, m, n) + Uxc
-    uy = intrinsic_velocity_component(cg_y_table, i, j, m, n) + Uyc
+    ux = intrinsic_velocity_component(cg_x_table, i, j, m, n) + uᴰxᵢ
+    uy = intrinsic_velocity_component(cg_y_table, i, j, m, n) + uᴰyᵢ
 
     @inbounds begin
         # x faces (periodic): use 7-cell stencil. Halo cells already filled by
@@ -206,8 +206,8 @@ function compute_wave_current_refraction_tendency!(G, N,
     arch = architecture(grid)
     kernel = _wave_current_refraction_tendency!(device(arch), (8, 8, 1, 1), (Nx, Ny, Nκ, Nφ))
     kernel(flat_data(G), flat_data(N),
-           coupling.Ux, coupling.Uy,
-           coupling.Ux_x, coupling.Ux_y, coupling.Uy_x, coupling.Uy_y,
+           coupling.uᴰx, coupling.uᴰy,
+           coupling.uᴰx_x, coupling.uᴰx_y, coupling.uᴰy_x, coupling.uᴰy_y,
            cgrid.κ, coupling.cg_x_table, coupling.cg_y_table,
            coupling.cos_table, coupling.sin_table,
            1 / Δx, 1 / Δy, 1 / Δκ, 1 / Δφ,

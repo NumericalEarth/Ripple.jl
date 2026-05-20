@@ -190,16 +190,16 @@ function q_precomputed_weights_validation()
 
     u = [0.1i - 0.2j + 0.05znodes(grid)[k] for i in 1:2, j in 1:1, k in 1:vertical_size(grid)]
     v = [-0.3i + 0.1j - 0.02znodes(grid)[k] for i in 1:2, j in 1:1, k in 1:vertical_size(grid)]
-    Ux = zeros(2, 1, length(kappa))
-    Uy = zeros(2, 1, length(kappa))
-    cached_Ux = similar(Ux)
-    cached_Uy = similar(Uy)
-    compute_doppler_velocity!(Ux, Uy, u, v, depth, kappa, qtransform)
-    compute_doppler_velocity!(cached_Ux, cached_Uy, u, v, depth, kappa, cached)
+    uᴰx = zeros(2, 1, length(kappa))
+    uᴰy = zeros(2, 1, length(kappa))
+    cached_uᴰx = similar(uᴰx)
+    cached_uᴰy = similar(uᴰy)
+    compute_doppler_velocity!(uᴰx, uᴰy, u, v, depth, kappa, qtransform)
+    compute_doppler_velocity!(cached_uᴰx, cached_uᴰy, u, v, depth, kappa, cached)
 
-    metrics = Dict(:Ux_error => maximum(abs.(cached_Ux .- Ux)),
-                   :Uy_error => maximum(abs.(cached_Uy .- Uy)))
-    tolerances = Dict(:Ux_error => 1e-14, :Uy_error => 1e-14)
+    metrics = Dict(:uᴰx_error => maximum(abs.(cached_uᴰx .- uᴰx)),
+                   :uᴰy_error => maximum(abs.(cached_uᴰy .- uᴰy)))
+    tolerances = Dict(:uᴰx_error => 1e-14, :uᴰy_error => 1e-14)
     return ValidationResult(:q_precomputed_weights, "cached Q weights match exact integration", metrics, tolerances)
 end
 

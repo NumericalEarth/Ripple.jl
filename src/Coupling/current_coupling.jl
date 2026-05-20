@@ -16,20 +16,20 @@ function PrescribedLagrangianMeanCurrent(; u, v, depth)
     return PrescribedLagrangianMeanCurrent(u, v, depth)
 end
 
-mutable struct CWCMPrescribedCurrentCoupling{Current, QT, K, UxCache, UyCache, DUx, DUy} <: AbstractCWCMCurrentCoupling
+mutable struct CWCMPrescribedCurrentCoupling{Current, QT, K, UᴰxCache, UᴰyCache, DκUᴰx, DκUᴰy} <: AbstractCWCMCurrentCoupling
     current :: Current
     qtransform :: QT
     kappa :: K
-    Ux :: UxCache
-    Uy :: UyCache
-    dUxdkappa :: DUx
-    dUydkappa :: DUy
+    uᴰx :: UᴰxCache
+    uᴰy :: UᴰyCache
+    duᴰxdκ :: DκUᴰx
+    duᴰydκ :: DκUᴰy
     u_transport_scratch :: Any  # lazily allocated CenterField, reused across transport_velocity_fields calls
     v_transport_scratch :: Any
-    Ux_x :: Any                 # spatial gradients of Doppler velocity caches, lazily allocated
-    Ux_y :: Any
-    Uy_x :: Any
-    Uy_y :: Any
+    uᴰx_x :: Any                 # spatial gradients of Doppler velocity caches, lazily allocated
+    uᴰx_y :: Any
+    uᴰy_x :: Any
+    uᴰy_y :: Any
     cg_x_table :: Any           # intrinsic group velocity table per (κ, φ), lazily filled
     cg_y_table :: Any
     cos_table :: Any            # cos(φ), sin(φ) per direction index
@@ -38,24 +38,24 @@ mutable struct CWCMPrescribedCurrentCoupling{Current, QT, K, UxCache, UyCache, D
     G_flat :: Any
 end
 
-mutable struct CWCMPseudomomentumCoupling{QT, D, K, UxCache, UyCache, DUx, DUy, KM, YM, O, DO} <: AbstractCWCMCurrentCoupling
+mutable struct CWCMPseudomomentumCoupling{QT, D, K, UᴰxCache, UᴰyCache, DκUᴰx, DκUᴰy, KM, YM, O, DO} <: AbstractCWCMCurrentCoupling
     qtransform :: QT
     depth :: D
     kappa :: K
-    Ux :: UxCache
-    Uy :: UyCache
-    dUxdkappa :: DUx
-    dUydkappa :: DUy
+    uᴰx :: UᴰxCache
+    uᴰy :: UᴰyCache
+    duᴰxdκ :: DκUᴰx
+    duᴰydκ :: DκUᴰy
     kx_measure :: KM
     ky_measure :: YM
     overlap :: O
     derivative_overlap :: DO
     u_transport_scratch :: Any
     v_transport_scratch :: Any
-    Ux_x :: Any
-    Ux_y :: Any
-    Uy_x :: Any
-    Uy_y :: Any
+    uᴰx_x :: Any
+    uᴰx_y :: Any
+    uᴰy_x :: Any
+    uᴰy_y :: Any
     cg_x_table :: Any
     cg_y_table :: Any
     cos_table :: Any
@@ -77,11 +77,11 @@ function CWCMPrescribedCurrentCoupling(current::PrescribedLagrangianMeanCurrent,
     v = current_data(current.v)
     Nx, Ny, _ = size(u)
     kc = collect(float.(kappa))
-    Ux = current_cache_like(u, eltype(u), (Nx, Ny, length(kc)))
-    Uy = current_cache_like(v, eltype(v), (Nx, Ny, length(kc)))
-    dUxdkappa = similar(Ux)
-    dUydkappa = similar(Uy)
-    coupling = CWCMPrescribedCurrentCoupling(current, qtransform, kc, Ux, Uy, dUxdkappa, dUydkappa,
+    uᴰx = current_cache_like(u, eltype(u), (Nx, Ny, length(kc)))
+    uᴰy = current_cache_like(v, eltype(v), (Nx, Ny, length(kc)))
+    duᴰxdκ = similar(uᴰx)
+    duᴰydκ = similar(uᴰy)
+    coupling = CWCMPrescribedCurrentCoupling(current, qtransform, kc, uᴰx, uᴰy, duᴰxdκ, duᴰydκ,
                                               nothing, nothing,
                                               nothing, nothing, nothing, nothing,
                                               nothing, nothing, nothing, nothing,
@@ -101,17 +101,17 @@ function CWCMPseudomomentumCoupling(model_grid,
     kappa = collect(FT, Array(spectral_grid.κ))
     Nκ, Nφ = coordinate_size(spectral_grid)
 
-    Ux = device_zeros(arch, FT, (Nx, Ny, Nκ))
-    Uy = device_zeros(arch, FT, (Nx, Ny, Nκ))
-    dUxdkappa = similar(Ux)
-    dUydkappa = similar(Uy)
-    fill!(dUxdkappa, zero(FT))
-    fill!(dUydkappa, zero(FT))
+    uᴰx = device_zeros(arch, FT, (Nx, Ny, Nκ))
+    uᴰy = device_zeros(arch, FT, (Nx, Ny, Nκ))
+    duᴰxdκ = similar(uᴰx)
+    duᴰydκ = similar(uᴰy)
+    fill!(duᴰxdκ, zero(FT))
+    fill!(duᴰydκ, zero(FT))
     kx_measure, ky_measure = pseudomomentum_moment_measure_tables(spectral_grid, FT, arch)
     overlap, derivative_overlap = pseudomomentum_overlap_tables(qtransform, kappa, depth, FT, arch)
 
     return CWCMPseudomomentumCoupling(qtransform, depth, kappa,
-                                      Ux, Uy, dUxdkappa, dUydkappa,
+                                      uᴰx, uᴰy, duᴰxdκ, duᴰydκ,
                                       kx_measure, ky_measure,
                                       overlap, derivative_overlap,
                                       nothing, nothing,
@@ -128,10 +128,10 @@ function update_coupling!(coupling::CWCMPrescribedCurrentCoupling)
     current = coupling.current
     u = current_data(current.u)
     v = current_data(current.v)
-    compute_doppler_velocity!(coupling.Ux, coupling.Uy,
+    compute_doppler_velocity!(coupling.uᴰx, coupling.uᴰy,
                               u, v, current.depth,
                               coupling.kappa, coupling.qtransform)
-    compute_doppler_velocity_derivative!(coupling.dUxdkappa, coupling.dUydkappa,
+    compute_doppler_velocity_derivative!(coupling.duᴰxdκ, coupling.duᴰydκ,
                                          u, v, current.depth,
                                          coupling.kappa, coupling.qtransform)
     return coupling

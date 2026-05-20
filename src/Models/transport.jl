@@ -167,10 +167,10 @@ function transport_velocity_fields(::Any, model, m, n)
             w=ZeroField(FT))
 end
 
-@kernel function _doppler_shift_velocity_fields!(u, v, cg_x, cg_y, Ux, Uy, m)
+@kernel function _doppler_shift_velocity_fields!(u, v, cg_x, cg_y, uᴰx, uᴰy, m)
     i, j, k = @index(Global, NTuple)
-    @inbounds u[i, j, k] = cg_x + Ux[i, j, m]
-    @inbounds v[i, j, k] = cg_y + Uy[i, j, m]
+    @inbounds u[i, j, k] = cg_x + uᴰx[i, j, m]
+    @inbounds v[i, j, k] = cg_y + uᴰy[i, j, m]
 end
 
 function transport_velocity_fields(coupling::CWCMPrescribedCurrentCoupling, model, m, n)
@@ -186,7 +186,7 @@ function transport_velocity_fields(coupling::CWCMPrescribedCurrentCoupling, mode
     arch = architecture(grid)
     launch!(arch, grid, :xyz, _doppler_shift_velocity_fields!,
             u_field, v_field, convert(FT, cg_x), convert(FT, cg_y),
-            coupling.Ux, coupling.Uy, m)
+            coupling.uᴰx, coupling.uᴰy, m)
     fill_halo_regions!(u_field)
     fill_halo_regions!(v_field)
     return (u=u_field, v=v_field, w=ZeroField(FT))

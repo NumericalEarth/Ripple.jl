@@ -1,4 +1,5 @@
 import Oceananigans.TimeSteppers: time_step!, update_state!, tick!
+import Oceananigans.TimeSteppers: RungeKutta3TimeStepper
 import Oceananigans.Architectures: architecture, device
 import KernelAbstractions
 import KernelAbstractions: @kernel, @index
@@ -26,6 +27,22 @@ function add_scaled_adams_bashforth2!(N::ProductField, G::ProductField, Gpreviou
     return N
 end
 
+function add_scaled_runge_kutta_3!(N::ProductField, G::ProductField, Gprevious::ProductField, dt, γ, ζ)
+    FT = eltype(N)
+    launch_product_field_update!(_add_scaled_runge_kutta_3_kernel!, N,
+                                 flat_data(N), flat_data(G), flat_data(Gprevious),
+                                 convert(FT, dt), convert(FT, γ), convert(FT, ζ))
+    return N
+end
+
+function add_scaled_runge_kutta_3!(N::ProductField, G::ProductField, Gprevious::ProductField, dt, γ, ::Nothing)
+    FT = eltype(N)
+    launch_product_field_update!(_add_scaled_runge_kutta_3_first_stage_kernel!, N,
+                                 flat_data(N), flat_data(G),
+                                 convert(FT, dt), convert(FT, γ))
+    return N
+end
+
 function copy_field!(dest::ProductField, src::ProductField)
     return copy_product_field!(dest, src)
 end
@@ -45,22 +62,6 @@ function add_scaled_semi_implicit!(N::ProductField, G::ProductField, dt, model)
                                  flat_data(N), flat_data(explicit_part), flat_data(damping),
                                  convert(eltype(N), dt))
     return N
-end
-
-function combine!(dest::ProductField, a, A::ProductField, b, B::ProductField)
-    FT = eltype(dest)
-    launch_product_field_update!(_combine_kernel!, dest,
-                                 flat_data(dest), convert(FT, a), flat_data(A),
-                                 convert(FT, b), flat_data(B))
-    return dest
-end
-
-function combine_with_increment!(dest::ProductField, a, A::ProductField, b, dt, G::ProductField)
-    FT = eltype(dest)
-    launch_product_field_update!(_combine_with_increment_kernel!, dest,
-                                 flat_data(dest), convert(FT, a), flat_data(A),
-                                 convert(FT, b), convert(FT, dt), flat_data(G))
-    return dest
 end
 
 @kernel function _add_scaled_kernel!(N, G, dt, Hx, Hy, iz)
@@ -83,6 +84,27 @@ end
     end
 end
 
+@kernel function _add_scaled_runge_kutta_3_kernel!(N, G, Gprevious, dt, γ, ζ, Hx, Hy, iz)
+    i, j, m, n = @index(Global, NTuple)
+    ix = i + Hx
+    jy = j + Hy
+    @inbounds begin
+        N[ix, jy, iz, m, n] = max(zero(eltype(N)),
+                                  N[ix, jy, iz, m, n] +
+                                  dt * (γ * G[ix, jy, iz, m, n] + ζ * Gprevious[ix, jy, iz, m, n]))
+    end
+end
+
+@kernel function _add_scaled_runge_kutta_3_first_stage_kernel!(N, G, dt, γ, Hx, Hy, iz)
+    i, j, m, n = @index(Global, NTuple)
+    ix = i + Hx
+    jy = j + Hy
+    @inbounds begin
+        N[ix, jy, iz, m, n] = max(zero(eltype(N)),
+                                  N[ix, jy, iz, m, n] + dt * γ * G[ix, jy, iz, m, n])
+    end
+end
+
 @kernel function _add_scaled_semi_implicit_finalize_kernel!(N, explicit_part, damping, dt, Hx, Hy, iz)
     i, j, m, n = @index(Global, NTuple)
     ix = i + Hx
@@ -91,25 +113,6 @@ end
         λ = damping[ix, jy, iz, m, n]
         numerator = N[ix, jy, iz, m, n] + dt * explicit_part[ix, jy, iz, m, n]
         N[ix, jy, iz, m, n] = max(zero(eltype(N)), numerator / (one(dt) + dt * λ))
-    end
-end
-
-@kernel function _combine_kernel!(dest, a, A, b, B, Hx, Hy, iz)
-    i, j, m, n = @index(Global, NTuple)
-    ix = i + Hx
-    jy = j + Hy
-    @inbounds begin
-        dest[ix, jy, iz, m, n] = max(zero(eltype(dest)), a * A[ix, jy, iz, m, n] + b * B[ix, jy, iz, m, n])
-    end
-end
-
-@kernel function _combine_with_increment_kernel!(dest, a, A, b, dt, G, Hx, Hy, iz)
-    i, j, m, n = @index(Global, NTuple)
-    ix = i + Hx
-    jy = j + Hy
-    @inbounds begin
-        stage_value = max(zero(eltype(dest)), dest[ix, jy, iz, m, n] + dt * G[ix, jy, iz, m, n])
-        dest[ix, jy, iz, m, n] = max(zero(eltype(dest)), a * A[ix, jy, iz, m, n] + b * stage_value)
     end
 end
 
@@ -134,32 +137,24 @@ function time_step!(model::SpectralWaveModel, dt; callbacks=[])
         end
         copy_field!(model.previous_tendencies, model.tendencies)
         model.previous_tendencies_ready = true
-    elseif model.timestepper === :RK3
+    elseif model.timestepper isa RungeKutta3TimeStepper
         model.previous_tendencies_ready = false
-        N0 = copy(model.action)
-        compute_tendencies!(model)
-        add_scaled!(model.action, model.tendencies, dt)
+        timestepper = model.timestepper
 
         compute_tendencies!(model)
-        stage = copy(model.action)
-        add_scaled!(stage, model.tendencies, dt)
-        combine!(model.action, 0.75, N0, 0.25, stage)
+        add_scaled_runge_kutta_3!(model.action, model.tendencies, model.previous_tendencies,
+                                  dt, timestepper.γ¹, nothing)
+        copy_field!(model.previous_tendencies, model.tendencies)
 
         compute_tendencies!(model)
-        stage = copy(model.action)
-        add_scaled!(stage, model.tendencies, dt)
-        combine!(model.action, 1/3, N0, 2/3, stage)
-    elseif is_low_storage_rk3(model.timestepper)
-        model.previous_tendencies_ready = false
-        N0 = copy(model.action)
-        compute_tendencies!(model)
-        add_scaled!(model.action, model.tendencies, dt)
+        add_scaled_runge_kutta_3!(model.action, model.tendencies, model.previous_tendencies,
+                                  dt, timestepper.γ², timestepper.ζ²)
+        copy_field!(model.previous_tendencies, model.tendencies)
 
         compute_tendencies!(model)
-        combine_with_increment!(model.action, 0.75, N0, 0.25, dt, model.tendencies)
-
-        compute_tendencies!(model)
-        combine_with_increment!(model.action, 1/3, N0, 2/3, dt, model.tendencies)
+        add_scaled_runge_kutta_3!(model.action, model.tendencies, model.previous_tendencies,
+                                  dt, timestepper.γ³, timestepper.ζ³)
+        copy_field!(model.previous_tendencies, model.tendencies)
     else
         throw(ArgumentError("unsupported timestepper $(model.timestepper)"))
     end

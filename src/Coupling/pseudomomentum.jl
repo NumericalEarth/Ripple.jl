@@ -123,14 +123,14 @@ end
 
 function compute_pseudomomentum_doppler_velocity!(coupling, N::ProductField)
     Nx, Ny, Nκ, Nφ = size(N)
-    size(coupling.Ux) == (Nx, Ny, Nκ) ||
+    size(coupling.uᴰx) == (Nx, Ny, Nκ) ||
         throw(ArgumentError("pseudomomentum coupling caches do not match the wave-action field"))
 
     Hx, Hy, iz = product_field_data_indices(N)
     arch = architecture(N)
     kernel = _compute_pseudomomentum_doppler_velocity_kernel!(device(arch), (8, 8, 1), (Nx, Ny, Nκ))
-    kernel(coupling.Ux, coupling.Uy,
-           coupling.dUxdkappa, coupling.dUydkappa,
+    kernel(coupling.uᴰx, coupling.uᴰy,
+           coupling.duᴰxdκ, coupling.duᴰydκ,
            flat_data(N),
            coupling.overlap, coupling.derivative_overlap,
            coupling.kx_measure, coupling.ky_measure,
@@ -313,17 +313,17 @@ end
     @inbounds out[i, j] = total
 end
 
-@kernel function _compute_pseudomomentum_doppler_velocity_kernel!(Ux, Uy, dUxdkappa, dUydkappa,
+@kernel function _compute_pseudomomentum_doppler_velocity_kernel!(uᴰx, uᴰy, duᴰxdκ, duᴰydκ,
                                                                   N_data, overlap, derivative_overlap,
                                                                   kx_measure, ky_measure,
                                                                   Hx, Hy, iz, Nκ, Nφ)
     i, j, target_m = @index(Global, NTuple)
     ix = i + Hx
     jy = j + Hy
-    ax = zero(eltype(Ux))
-    ay = zero(eltype(Uy))
-    dax = zero(eltype(dUxdkappa))
-    day = zero(eltype(dUydkappa))
+    ax = zero(eltype(uᴰx))
+    ay = zero(eltype(uᴰy))
+    dax = zero(eltype(duᴰxdκ))
+    day = zero(eltype(duᴰydκ))
 
     @inbounds for n in 1:Nφ, source_m in 1:Nκ
         action = N_data[ix, jy, iz, source_m, n]
@@ -336,10 +336,10 @@ end
     end
 
     @inbounds begin
-        Ux[i, j, target_m] = ax
-        Uy[i, j, target_m] = ay
-        dUxdkappa[i, j, target_m] = dax
-        dUydkappa[i, j, target_m] = day
+        uᴰx[i, j, target_m] = ax
+        uᴰy[i, j, target_m] = ay
+        duᴰxdκ[i, j, target_m] = dax
+        duᴰydκ[i, j, target_m] = day
     end
 end
 

@@ -71,7 +71,9 @@ export SpectralTransferStencil, NonlinearInvariantTransfer
 export TriadTransferInteraction, TriadSpectralTransfer
 export QuadrupletTransferInteraction, DiscreteInteractionApproximation
 export source_tendency, source_split, implicit_source_rate
-export SpectralWaveModel, Clock, fields, prognostic_fields, compute_tendencies!, time_step!, cfl
+export SpectralWaveModel, MonobandedWaveModel
+export MonobandedPrescribedCurrentCoupling, MonobandedPseudomomentumCoupling
+export Clock, RungeKutta3TimeStepper, fields, prognostic_fields, compute_tendencies!, time_step!, cfl
 export Centered, UpwindBiased, WENO, FluxFormAdvection
 export AbstractPropagationSmoothing, SpatialAveraging, apply_propagation_smoothing!
 export ValidationCase, ValidationResult, default_validation_cases, run_validation

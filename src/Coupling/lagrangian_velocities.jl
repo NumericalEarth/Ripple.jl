@@ -57,8 +57,8 @@ end
 
 `uᴸ = p`, where `p(x, y, z)` is the wave pseudomomentum derived from the
 current action `N`. This is a self-coupled mode — there is no ocean model;
-the waves drive their own Doppler shift. The coupling refreshes once per RK3
-stage. If `q_grid` is omitted for a Flat wave grid, `SpectralWaveModel` must
+the waves drive their own Doppler shift. The coupling refreshes once per
+Runge-Kutta stage. If `q_grid` is omitted for a Flat wave grid, `SpectralWaveModel` must
 be constructed with finite `depth` so Ripple can build a stretched vertical Q
 grid from the depth and spectral wavenumber range.
 """

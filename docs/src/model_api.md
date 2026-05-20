@@ -40,6 +40,34 @@ Ripple no longer provides `HamiltonianFiniteVolume`, Hamiltonian velocity
 operators, a `Simulation` type, or diagnostic/output writer types. Transport
 is routed through Oceananigans advection machinery.
 
+## Monobanded Model
+
+`MonobandedWaveModel(grid; ...)` implements the single-wave-train reduction
+with prognostic fields `A`, `AKx`, and `AKy` on the physical grid's top
+surface. The diagnosed wavevector is `K = AK / A`, and the diagnostic fields
+include `κ`, the Q-projected Doppler velocity `uᴰ`, its `κ` derivative `H`,
+the ray velocity `C`, absolute frequency `Ω`, and the refraction tensor `Γ`.
+
+The constructor follows Oceananigans and Breeze model conventions: boundary
+conditions are consumed while constructing the prognostic `Field`s and are not
+stored as a model-level slot. `velocities=PrescribedVelocities(...)` or a
+bare `velocities=(; u, v)` builds the monobanded prescribed-current coupling;
+`velocities=PseudomomentumVelocities()` uses the monobanded pseudomomentum as
+the Lagrangian velocity; and `velocities=nothing` gives intrinsic deep-water
+propagation. A Flat monobanded grid requires an explicit Q grid for
+`PseudomomentumVelocities`.
+`pseudomomentum_fields(model)` Q-projects the monobanded moments `AKx` and
+`AKy` onto the model grid or the prescribed-current Q grid, and its vertical
+integral recovers the horizontal pseudomomentum. `MonobandedWaveModel`
+currently supports scalar action-only `LinearWindInput`, scalar action-only
+`BottomFriction`, and `SourceTermSet` combinations of those. These sources add
+`S_A` to `A` and `K S_A` to the moments, preserving local `K` under pure
+growth or decay.
+`advection=nothing` disables transport. The default `advection=WENO()` uses
+Ripple's monobanded conservative transport kernel with WENO5 face
+reconstruction, while other accepted Oceananigans advection schemes currently
+fall back to conservative upwind reconstruction.
+
 ## Product Fields
 
 `ProductField` stores data over horizontal physical space and coordinate space
@@ -121,6 +149,8 @@ wave grid, finite model `depth` is required and Ripple chooses a stretched
 vertical grid whose top-cell spacing is set by the largest spectral wavenumber.
 Ripple precomputes the finite-volume vertical overlap between source and
 target wavenumber rings and refreshes the Doppler velocity caches from
-`model.action` before each tendency evaluation. Use `depth=InfiniteDepth()` to
-keep deep-water intrinsic dispersion while deriving Q-projection depth from a
+`model.action` before each tendency evaluation. In the equations this
+Q-projected Doppler velocity is denoted ``\boldsymbol{u}^{D}``; internal cache
+names are implementation details. Use `depth=InfiniteDepth()` to keep
+deep-water intrinsic dispersion while deriving Q-projection depth from a
 finite-depth velocity grid.

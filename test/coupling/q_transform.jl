@@ -50,34 +50,34 @@ Base.similar(::MockBackendArray, ::Type{T}, dims::Dims) where T = MockBackendArr
 
     u = reshape([0.1, -0.4, 0.8, 1.6], 1, 1, 4)
     v = reshape([1.2, 0.7, -0.5, 0.3], 1, 1, 4)
-    Ux = zeros(1, 1, 2)
-    Uy = zeros(1, 1, 2)
-    dUxdkappa = zeros(1, 1, 2)
-    dUydkappa = zeros(1, 1, 2)
-    compute_doppler_velocity!(Ux, Uy, u, v, 1.0, [0.2, 1.0], qt)
-    compute_doppler_velocity_derivative!(dUxdkappa, dUydkappa, u, v, 1.0, [0.2, 1.0], qt)
-    expected_Ux = sum(u[1, 1, k] * q_cell_integral(q, 0.2, faces[k], faces[k+1], 1.0)
+    uᴰx = zeros(1, 1, 2)
+    uᴰy = zeros(1, 1, 2)
+    duᴰxdκ = zeros(1, 1, 2)
+    duᴰydκ = zeros(1, 1, 2)
+    compute_doppler_velocity!(uᴰx, uᴰy, u, v, 1.0, [0.2, 1.0], qt)
+    compute_doppler_velocity_derivative!(duᴰxdκ, duᴰydκ, u, v, 1.0, [0.2, 1.0], qt)
+    expected_uᴰx = sum(u[1, 1, k] * q_cell_integral(q, 0.2, faces[k], faces[k+1], 1.0)
                       for k in axes(u, 3))
-    expected_Uy = sum(v[1, 1, k] * q_cell_integral(q, 1.0, faces[k], faces[k+1], 1.0)
+    expected_uᴰy = sum(v[1, 1, k] * q_cell_integral(q, 1.0, faces[k], faces[k+1], 1.0)
                       for k in axes(v, 3))
-    expected_dUxdkappa = sum(u[1, 1, k] * q_cell_integral_kappa_derivative(q, 0.2, faces[k], faces[k+1], 1.0)
+    expected_duᴰxdκ = sum(u[1, 1, k] * q_cell_integral_kappa_derivative(q, 0.2, faces[k], faces[k+1], 1.0)
                              for k in axes(u, 3))
-    expected_dUydkappa = sum(v[1, 1, k] * q_cell_integral_kappa_derivative(q, 1.0, faces[k], faces[k+1], 1.0)
+    expected_duᴰydκ = sum(v[1, 1, k] * q_cell_integral_kappa_derivative(q, 1.0, faces[k], faces[k+1], 1.0)
                              for k in axes(v, 3))
-    @test Ux[1, 1, 1] ≈ expected_Ux atol=1e-14
-    @test Uy[1, 1, 2] ≈ expected_Uy atol=1e-14
-    @test dUxdkappa[1, 1, 1] ≈ expected_dUxdkappa atol=1e-14
-    @test dUydkappa[1, 1, 2] ≈ expected_dUydkappa atol=1e-14
+    @test uᴰx[1, 1, 1] ≈ expected_uᴰx atol=1e-14
+    @test uᴰy[1, 1, 2] ≈ expected_uᴰy atol=1e-14
+    @test duᴰxdκ[1, 1, 1] ≈ expected_duᴰxdκ atol=1e-14
+    @test duᴰydκ[1, 1, 2] ≈ expected_duᴰydκ atol=1e-14
 
     precomputed = PrecomputeQWeights(q, grid, [0.2, 1.0], 1.0)
     @test size(precomputed.weights) == (vertical_size(grid), 2)
     @test sum(precomputed.weights[:, 1]) ≈ 1 atol=1e-14
     cached_qt = QTransform(q, grid, precomputed)
-    cached_Ux = zeros(1, 1, 2)
-    cached_Uy = zeros(1, 1, 2)
-    compute_doppler_velocity!(cached_Ux, cached_Uy, u, v, 1.0, [0.2, 1.0], cached_qt)
-    @test cached_Ux ≈ Ux atol=1e-14
-    @test cached_Uy ≈ Uy atol=1e-14
+    cached_uᴰx = zeros(1, 1, 2)
+    cached_uᴰy = zeros(1, 1, 2)
+    compute_doppler_velocity!(cached_uᴰx, cached_uᴰy, u, v, 1.0, [0.2, 1.0], cached_qt)
+    @test cached_uᴰx ≈ uᴰx atol=1e-14
+    @test cached_uᴰy ≈ uᴰy atol=1e-14
 
     cgrid = PolarWaveVectorGrid(; κ=[0.5, 1.0], φ=range(0, 2pi; length=9)[1:8])
     N = WaveActionField(grid, cgrid)
@@ -138,9 +138,9 @@ end
     current = PrescribedLagrangianMeanCurrent(u=u, v=v, depth=1.0)
     coupling = CWCMPrescribedCurrentCoupling(current, qt, cgrid.κ)
 
-    @test coupling.Ux[1, 1, 1] ≈ 1 atol=1e-12
-    @test coupling.Uy[2, 2, 2] ≈ 2 atol=1e-12
-    @test maximum(abs.(coupling.dUxdkappa)) < 1e-10
+    @test coupling.uᴰx[1, 1, 1] ≈ 1 atol=1e-12
+    @test coupling.uᴰy[2, 2, 2] ≈ 2 atol=1e-12
+    @test maximum(abs.(coupling.duᴰxdκ)) < 1e-10
 
     model = SpectralWaveModel(grid, cgrid; coupling, horizontal_advection=nothing, spectral_advection=nothing)
     @test model.coupling === coupling
@@ -151,8 +151,8 @@ end
     backend_v = MockBackendArray(2 .* ones(2, 2, vertical_size(grid)))
     backend_current = PrescribedLagrangianMeanCurrent(u=backend_u, v=backend_v, depth=1.0)
     backend_coupling = CWCMPrescribedCurrentCoupling(backend_current, qt, cgrid.κ)
-    @test backend_coupling.Ux isa MockBackendArray
-    @test backend_coupling.Uy isa MockBackendArray
-    @test backend_coupling.Ux[1, 1, 1] ≈ 1 atol=1e-12
-    @test backend_coupling.Uy[1, 1, 1] ≈ 2 atol=1e-12
+    @test backend_coupling.uᴰx isa MockBackendArray
+    @test backend_coupling.uᴰy isa MockBackendArray
+    @test backend_coupling.uᴰx[1, 1, 1] ≈ 1 atol=1e-12
+    @test backend_coupling.uᴰy[1, 1, 1] ≈ 2 atol=1e-12
 end

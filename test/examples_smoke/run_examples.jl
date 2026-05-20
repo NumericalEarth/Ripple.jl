@@ -15,13 +15,28 @@ function test_finite_product_field(field)
     @test total_action(field) >= -1e-12
 end
 
+function test_finite_monobanded_model(model)
+    @test !isempty(interior(model.action))
+    @test all(isfinite, interior(model.action))
+    @test all(isfinite, interior(model.wavenumber_moment.x))
+    @test all(isfinite, interior(model.wavenumber_moment.y))
+    @test all(isfinite, interior(model.diagnostics.κ))
+    @test minimum(interior(model.action)) >= -1e-12
+    @test sum(interior(model.action)) >= -1e-12
+end
+
 function test_example_module_artifacts(example_module)
     if isdefined(example_module, :model)
         model = getfield(example_module, :model)
-        @test model isa SpectralWaveModel
         @test model.clock.time >= 0
         @test model.clock.iteration >= 0
-        test_finite_product_field(model.action)
+        if model isa SpectralWaveModel
+            test_finite_product_field(model.action)
+        elseif model isa MonobandedWaveModel
+            test_finite_monobanded_model(model)
+        else
+            @test false
+        end
     end
 end
 
@@ -41,6 +56,8 @@ end
         "bounded_wave_packet_dispersion.jl",
         "spectral_refraction_by_shear.jl",
         "vortex_refraction.jl",
+        "monobanded_linear_shear_refraction.jl",
+        "coupled_wind_drift_instability.jl",
     ]
 
     discovered_examples = sort([basename(path) for path in readdir(example_dir; join=true)
@@ -65,7 +82,7 @@ end
                                                        "PolarWaveVectorGrid",
                                                        "velocities",
                                                        "Simulation",
-                                                       ":RK3"),
+                                                       ":RungeKutta3"),
             "source_only_fetch_limited_growth.jl"  => ("# # Source-Only Fetch-Limited Growth",
                                                        "horizontal_advection = nothing",
                                                        "ExponentialWindInput",
@@ -80,7 +97,19 @@ end
             "vortex_refraction.jl"                 => ("# # Wave Refraction Through A Barotropic Vortex",
                                                        "velocities",
                                                        "Simulation",
-                                                       ":RK3"),
+                                                       ":RungeKutta3"),
+            "monobanded_linear_shear_refraction.jl" => ("# # Monobanded Linear-Shear Refraction",
+                                                       "MonobandedWaveModel",
+                                                       "PrescribedVelocities",
+                                                       "Ky_reference(t) = Ky0 - S * Kx0 * t",
+                                                       "record(fig, movie_path"),
+            "coupled_wind_drift_instability.jl"    => ("# # Coupled Wind-Drift Instability",
+                                                       "NonhydrostaticModel",
+                                                       "UniformStokesDrift",
+                                                       "MonobandedWaveModel",
+                                                       "SpectralWaveModel",
+                                                       "Callback(case.update_wave_model!",
+                                                       "time_step!(wave_model"),
         )
 
         for (file, required_patterns) in semantic_examples
@@ -101,6 +130,11 @@ end
                                            replace(file, r"[^A-Za-z0-9_]" => "_")))
             success = mktempdir() do tmp
                 cd(tmp) do
+                    quick_key = "RIPPLE_EXAMPLE_QUICK"
+                    old_quick = get(ENV, quick_key, nothing)
+                    file in ("coupled_wind_drift_instability.jl",
+                             "monobanded_linear_shear_refraction.jl") && (ENV[quick_key] = "true")
+
                     try
                         redirect_stdout(devnull) do
                             Base.include(example_module, path)
@@ -109,6 +143,8 @@ end
                     catch err
                         @error "Example failed" file exception = (err, catch_backtrace())
                         false
+                    finally
+                        old_quick === nothing ? delete!(ENV, quick_key) : (ENV[quick_key] = old_quick)
                     end
                 end
             end

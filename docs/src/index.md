@@ -21,7 +21,7 @@ Depth = 2
 The shortest end-to-end Ripple simulation is laid out as a runnable
 literate page: [Quick Start](@ref). It refracts a narrow-banded
 wave-action field through a barotropic Gaussian vortex via the fused
-Doppler-plus-refraction kernel, advanced with SSP-RK3. The example uses
+Doppler-plus-refraction kernel, advanced with `RungeKutta3TimeStepper`. The example uses
 the major Ripple constructs (`RectilinearGrid`, `PolarWaveVectorGrid`,
 `SpectralWaveModel`, the `velocities` kwarg, `Simulation`, and the
 `m0` / `root_mean_square_wavenumber` / `mean_direction` diagnostics) in
