@@ -34,7 +34,6 @@ using Printf
 
 CairoMakie.activate!(type = "png")
 
-quick = lowercase(get(ENV, "RIPPLE_EXAMPLE_QUICK", "false")) in ("1", "true", "yes")
 output_dir = get(ENV, "RIPPLE_EXAMPLE_OUTPUT_DIR", pwd())
 mkpath(output_dir)
 
@@ -44,10 +43,11 @@ mkpath(output_dir)
 # spacing. We use a periodic x direction so the packet can translate
 # freely, and a bounded y direction. The packet remains well away from the y
 # boundaries over the run, so the reference solution is the unbounded linear
-# shear solution.
+# shear solution. Bump `Nx`, `Ny`, the frame count, and lower `dt` for a
+# higher-fidelity reproduction.
 
-Nx = quick ? 48 : 96
-Ny = quick ? 36 : 72
+Nx = 48
+Ny = 36
 Nz = 4
 
 Lx = 72.0
@@ -131,10 +131,10 @@ nothing #hide
 # x_0 = x - \xi(t) - S t (y_0 - y_c) - S I_\eta(t).
 # ```
 
-dt = quick ? 0.04 : 0.025
-stop_time = quick ? 3.2 : 5.0
+dt = 0.04
+stop_time = 3.2
 step_count = round(Int, stop_time / dt)
-frame_count = quick ? 12 : 48
+frame_count = 12
 frame_stride = max(1, step_count ÷ frame_count)
 
 times_full = collect((0:step_count) .* dt)

@@ -135,11 +135,6 @@ end
                                            replace(file, r"[^A-Za-z0-9_]" => "_")))
             success = mktempdir() do tmp
                 cd(tmp) do
-                    quick_key = "RIPPLE_EXAMPLE_QUICK"
-                    old_quick = get(ENV, quick_key, nothing)
-                    file in ("coupled_wind_drift_instability.jl",
-                             "monobanded_linear_shear_refraction.jl") && (ENV[quick_key] = "true")
-
                     try
                         redirect_stdout(devnull) do
                             Base.include(example_module, path)
@@ -148,8 +143,6 @@ end
                     catch err
                         @error "Example failed" file exception = (err, catch_backtrace())
                         false
-                    finally
-                        old_quick === nothing ? delete!(ENV, quick_key) : (ENV[quick_key] = old_quick)
                     end
                 end
             end

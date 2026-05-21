@@ -23,7 +23,6 @@ import KernelAbstractions
 using KernelAbstractions: @kernel, @index
 using Printf
 using Random
-using Serialization
 using Statistics
 
 CairoMakie.activate!(type = "png")
@@ -34,17 +33,13 @@ CairoMakie.activate!(type = "png")
 # cells in ``(y, z)`` with `Flat` topology in ``x``. The wave wavelength and
 # steepness are close to the paper's short gravity-capillary wave scale.
 
-truthy(value) = lowercase(string(value)) in ("true", "1", "yes")
-env_integer(name, default) = parse(Int, get(ENV, name, string(default)))
+# The defaults are sized so the docs build and the smoke harness both run
+# in well under a minute. Bump `Ny`, `Nz`, and the iteration counts for a
+# higher-fidelity reproduction; the unstable mode is already visible at
+# these scales.
 
-quick_run = truthy(get(ENV, "RIPPLE_EXAMPLE_QUICK", "false"))
-animate_run = truthy(get(ENV, "RIPPLE_EXAMPLE_ANIMATE", quick_run ? "false" : "true"))
-replot_only = truthy(get(ENV, "RIPPLE_EXAMPLE_REPLOT_ONLY", "false"))
-energy_axis_scale = parse(Float64, get(ENV, "RIPPLE_EXAMPLE_ENERGY_AXIS_SCALE", "2"))
-
-default_Ny, default_Nz = quick_run ? (64, 48) : (384, 256)
-Ny = env_integer("RIPPLE_EXAMPLE_NY", default_Ny)
-Nz = env_integer("RIPPLE_EXAMPLE_NZ", default_Nz)
+Ny = 96
+Nz = 64
 Ly, Lz = 0.060, 0.020
 
 g = 9.81
@@ -58,9 +53,10 @@ minimum_wave_action_factor = 0.25
 maximum_wave_action_factor = 4
 minimum_wave_wavenumber_factor = 0.5
 maximum_wave_wavenumber_factor = 2
-monobanded_wave_substeps = env_integer("RIPPLE_EXAMPLE_MONOBANDED_WAVE_SUBSTEPS", 32)
-spectral_wave_substeps = env_integer("RIPPLE_EXAMPLE_SPECTRAL_WAVE_SUBSTEPS", 4)
-spectral_Nκ, spectral_Nφ = quick_run ? (7, 12) : (13, 24)
+monobanded_wave_substeps = 32
+spectral_wave_substeps = 4
+spectral_Nκ = 7
+spectral_Nφ = 12
 spectral_κ_range = range(minimum_wave_wavenumber_factor * κ0,
                          maximum_wave_wavenumber_factor * κ0;
                          length = spectral_Nκ)
@@ -77,15 +73,9 @@ surface_stress = -4.8e-5
 noise_speed = 0.001
 
 Δt = 0.001
-default_spinup_iterations = quick_run ? 10 : 2000
-default_continuation_iterations = quick_run ? 10 : 4000
-default_frame_stride = quick_run ? 10 : 20
-spinup_iterations = env_integer("RIPPLE_EXAMPLE_SPINUP_ITERATIONS", default_spinup_iterations)
-continuation_iterations = env_integer("RIPPLE_EXAMPLE_CONTINUATION_ITERATIONS", default_continuation_iterations)
-frame_stride = env_integer("RIPPLE_EXAMPLE_FRAME_STRIDE", default_frame_stride)
-default_frame_cache_path =
-    "coupled_wind_drift_instability_frames_Ny$(Ny)_Nz$(Nz)_spinup$(spinup_iterations)_continuation$(continuation_iterations).jls"
-frame_cache_path = get(ENV, "RIPPLE_EXAMPLE_FRAME_CACHE", default_frame_cache_path)
+spinup_iterations = 100
+continuation_iterations = 250
+frame_stride = 10
 
 # ## Ocean and wave setup
 #
@@ -593,66 +583,54 @@ function run_case!(case, stop_iteration; capture = true)
     return merge(case, (; frames, growth_rate = σ))
 end
 
-if replot_only
-    isfile(frame_cache_path) || error("No frame cache found at $(abspath(frame_cache_path)); rerun with RIPPLE_EXAMPLE_REPLOT_ONLY=false first.")
-    comparison_data = deserialize(frame_cache_path)
-    prescribed_growth_rate = comparison_data.prescribed_growth_rate
-    coupled_growth_rate = comparison_data.coupled_growth_rate
-    spectral_coupled_growth_rate = comparison_data.spectral_coupled_growth_rate
-    println("loaded_frame_cache = $(abspath(frame_cache_path))")
-else
-    spinup = build_case(coupled_waves = false)
-    spinup = run_case!(spinup, spinup_iterations; capture = false)
-    spinup_state = save_state(spinup)
+spinup = build_case(coupled_waves = false)
+spinup = run_case!(spinup, spinup_iterations; capture = false)
+spinup_state = save_state(spinup)
 
-    prescribed = build_case(coupled_waves = false, time_offset = spinup_state.time)
-    restore_state!(prescribed, spinup_state)
-    prescribed = run_case!(prescribed, continuation_iterations)
+prescribed = build_case(coupled_waves = false, time_offset = spinup_state.time)
+restore_state!(prescribed, spinup_state)
+prescribed = run_case!(prescribed, continuation_iterations)
 
-    coupled = build_case(coupled_waves = true, time_offset = spinup_state.time)
-    restore_state!(coupled, spinup_state)
-    coupled = run_case!(coupled, continuation_iterations)
+coupled = build_case(coupled_waves = true, time_offset = spinup_state.time)
+restore_state!(coupled, spinup_state)
+coupled = run_case!(coupled, continuation_iterations)
 
-    spectral_coupled = build_case(coupled_waves = true,
-                                  wave_model_kind = :spectral,
-                                  time_offset = spinup_state.time)
-    restore_state!(spectral_coupled, spinup_state)
-    spectral_coupled = run_case!(spectral_coupled, continuation_iterations)
+spectral_coupled = build_case(coupled_waves = true,
+                              wave_model_kind = :spectral,
+                              time_offset = spinup_state.time)
+restore_state!(spectral_coupled, spinup_state)
+spectral_coupled = run_case!(spectral_coupled, continuation_iterations)
 
-    prescribed_growth_rate = prescribed.growth_rate
-    coupled_growth_rate = coupled.growth_rate
-    spectral_coupled_growth_rate = spectral_coupled.growth_rate
+prescribed_growth_rate = prescribed.growth_rate
+coupled_growth_rate = coupled.growth_rate
+spectral_coupled_growth_rate = spectral_coupled.growth_rate
 
-    println(@sprintf("spinup_time                  = %.3f s", spinup_state.time))
-    println(@sprintf("monobanded_wave_substep      = %.3e s", Δt / monobanded_wave_substeps))
-    println(@sprintf("spectral_wave_substep        = %.3e s", Δt / spectral_wave_substeps))
-    println(@sprintf("prescribed_wave_growth_rate          = %.4f s^-1", prescribed_growth_rate))
-    println(@sprintf("monobanded_coupled_wave_growth_rate  = %.4f s^-1", coupled_growth_rate))
-    println(@sprintf("spectral_coupled_wave_growth_rate    = %.4f s^-1", spectral_coupled_growth_rate))
-    println(@sprintf("monobanded_coupled / prescribed      = %.3f", coupled_growth_rate / prescribed_growth_rate))
-    println(@sprintf("spectral_coupled / prescribed        = %.3f", spectral_coupled_growth_rate / prescribed_growth_rate))
-    print_energy_summary("prescribed", prescribed.frames)
-    print_energy_summary("monobanded_coupled", coupled.frames)
-    print_energy_summary("spectral_coupled", spectral_coupled.frames)
+println(@sprintf("spinup_time                  = %.3f s", spinup_state.time))
+println(@sprintf("monobanded_wave_substep      = %.3e s", Δt / monobanded_wave_substeps))
+println(@sprintf("spectral_wave_substep        = %.3e s", Δt / spectral_wave_substeps))
+println(@sprintf("prescribed_wave_growth_rate          = %.4f s^-1", prescribed_growth_rate))
+println(@sprintf("monobanded_coupled_wave_growth_rate  = %.4f s^-1", coupled_growth_rate))
+println(@sprintf("spectral_coupled_wave_growth_rate    = %.4f s^-1", spectral_coupled_growth_rate))
+println(@sprintf("monobanded_coupled / prescribed      = %.3f", coupled_growth_rate / prescribed_growth_rate))
+println(@sprintf("spectral_coupled / prescribed        = %.3f", spectral_coupled_growth_rate / prescribed_growth_rate))
+print_energy_summary("prescribed", prescribed.frames)
+print_energy_summary("monobanded_coupled", coupled.frames)
+print_energy_summary("spectral_coupled", spectral_coupled.frames)
 
-    comparison_data = (; ys = collect(ynodes(spectral_coupled.grid) .* 100),
-                       zs = collect(znodes(spectral_coupled.grid) .* 100),
-                       prescribed_frames = prescribed.frames,
-                       coupled_frames = coupled.frames,
-                       spectral_coupled_frames = spectral_coupled.frames,
-                       prescribed_growth_rate,
-                       coupled_growth_rate,
-                       spectral_coupled_growth_rate)
+comparison_data = (; ys = collect(ynodes(spectral_coupled.grid) .* 100),
+                   zs = collect(znodes(spectral_coupled.grid) .* 100),
+                   prescribed_frames = prescribed.frames,
+                   coupled_frames = coupled.frames,
+                   spectral_coupled_frames = spectral_coupled.frames,
+                   prescribed_growth_rate,
+                   coupled_growth_rate,
+                   spectral_coupled_growth_rate)
 
-    serialize(frame_cache_path, comparison_data)
-    println("frame_cache = $(abspath(frame_cache_path))")
-
-    model = spectral_coupled.wave_model # exposed for the example smoke harness
-end
+model = spectral_coupled.wave_model # exposed for the example smoke harness
 
 # ## Animation
 
-if animate_run
+let
     ys = comparison_data.ys
     zs = comparison_data.zs
     prescribed_frames = comparison_data.prescribed_frames
@@ -686,7 +664,7 @@ if animate_run
     spectral_coupled_δEw = wave_energy_change(spectral_coupled_frames)
 
     prescribed_energy_scale = max(maximum(abs, prescribed_δK′), eps(Float64))
-    energy_limit = energy_axis_scale * prescribed_energy_scale
+    energy_limit = 2 * prescribed_energy_scale
 
     action_min = minimum(minimum(frame) for frame in (prescribed_frames.wave_action...,
                                                       coupled_frames.wave_action...,
