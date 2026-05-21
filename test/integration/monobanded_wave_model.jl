@@ -1158,3 +1158,131 @@ end
     @test all(isfinite, interior(m.wavenumber_moment.y))
     @test minimum(interior(m.action)) >= 0
 end
+
+@testset "MonobandedWaveModel AB2 lifecycle" begin
+    # `model.previous_tendencies_ready` is Ripple's state machine for AB2's
+    # first-step-Euler then subsequent-AB2 transition. `set!` must reset it
+    # so callers can re-initialize state mid-simulation without contaminating
+    # the multistep history.
+    grid = RectilinearGrid(CPU();
+                           size=(4, 4, 1),
+                           x=(0, 4),
+                           y=(0, 4),
+                           z=(-1, 0),
+                           halo=(3, 3, 3),
+                           topology=(Periodic, Periodic, Bounded))
+
+    model = MonobandedWaveModel(grid; timestepper=:AB2, advection=nothing,
+                                sources=LinearWindInput(rate=0.1))
+    set!(model; A=1.0, AKx=0.5, AKy=0.0)
+    @test model.timestepper.name === :AB2
+    @test !model.previous_tendencies_ready
+
+    time_step!(model, 0.01)
+    @test model.previous_tendencies_ready
+    @test model.clock.iteration == 1
+
+    time_step!(model, 0.01)
+    @test model.previous_tendencies_ready
+    @test model.clock.iteration == 2
+
+    # set! must clear the flag so the next step restarts from Euler.
+    set!(model; A=2.0)
+    @test !model.previous_tendencies_ready
+end
+
+@testset "MonobandedWaveModel clamp-low-action kernel zeros A, AKx, AKy together" begin
+    grid = RectilinearGrid(CPU();
+                           size=(4, 3, 1),
+                           x=(0, 4),
+                           y=(0, 3),
+                           z=(-1, 0),
+                           halo=(3, 3, 3),
+                           topology=(Periodic, Periodic, Bounded))
+
+    model = MonobandedWaveModel(grid; advection=nothing, minimum_action=0.1)
+
+    # Hand-poke a state with A below the floor but AK nonzero, then call the
+    # cleanup kernel directly. All three fields must be zeroed in the
+    # below-floor cells while above-floor cells stay untouched.
+    fill!(interior(model.action), 0.05)
+    fill!(interior(model.wavenumber_moment.x), 0.5)
+    fill!(interior(model.wavenumber_moment.y), -0.3)
+
+    state = (A   = model.action,
+             AKx = model.wavenumber_moment.x,
+             AKy = model.wavenumber_moment.y)
+    Ripple.monobanded_clamp_low_action!(state, 0.1)
+
+    @test all(interior(model.action) .== 0)
+    @test all(interior(model.wavenumber_moment.x) .== 0)
+    @test all(interior(model.wavenumber_moment.y) .== 0)
+
+    # And the reverse: an above-floor cell must be left alone.
+    fill!(interior(model.action), 0.5)
+    fill!(interior(model.wavenumber_moment.x), 0.3)
+    fill!(interior(model.wavenumber_moment.y), 0.0)
+    Ripple.monobanded_clamp_low_action!(state, 0.1)
+    @test all(interior(model.action) .== 0.5)
+    @test all(interior(model.wavenumber_moment.x) .== 0.3)
+end
+
+@testset "MonobandedWaveModel rejects ValueBC embedded in wavenumber_moment" begin
+    # The kwarg-BC rejection is covered in the API testset. This locks in
+    # the symmetric case where a non-default BC arrives via a supplied
+    # `wavenumber_moment` field, not the `boundary_conditions` kwarg.
+    bounded_grid = RectilinearGrid(CPU();
+                                   size=(4, 3, 2),
+                                   x=(0, 4),
+                                   y=(0, 3),
+                                   z=(-1, 0),
+                                   halo=(3, 3, 3),
+                                   topology=(Bounded, Bounded, Bounded))
+
+    value_bcs = Oceananigans.BoundaryConditions.FieldBoundaryConditions(
+        bounded_grid,
+        (Oceananigans.Grids.Center(), Oceananigans.Grids.Center(), Oceananigans.Grids.Center()),
+        (:, :, bounded_grid.Nz:bounded_grid.Nz);
+        east = Oceananigans.BoundaryConditions.ValueBoundaryCondition(7))
+
+    AKx_field = Oceananigans.Fields.CenterField(bounded_grid;
+        indices=(:, :, bounded_grid.Nz:bounded_grid.Nz),
+        boundary_conditions=value_bcs)
+    AKy_field = Oceananigans.Fields.CenterField(bounded_grid;
+        indices=(:, :, bounded_grid.Nz:bounded_grid.Nz))
+
+    @test_throws ArgumentError MonobandedWaveModel(bounded_grid;
+        wavenumber_moment=(; x=AKx_field, y=AKy_field), advection=nothing)
+end
+
+@testset "MonobandedWaveModel + Oceananigans.Simulation + JLD2Writer" begin
+    # Lock in the AbstractModel contract Oceananigans' Simulation calls
+    # into (time_step!, update_state!, prognostic_fields, model.clock, etc.)
+    # and that JLD2Writer can serialize the prognostic fields by name.
+    # Mirrors the equivalent SpectralWaveModel test in test/integration/model_api.jl.
+    grid = RectilinearGrid(CPU();
+                           size=(4, 4, 1),
+                           x=(0, 4),
+                           y=(0, 4),
+                           z=(-1, 0),
+                           halo=(3, 3, 3),
+                           topology=(Periodic, Periodic, Bounded))
+
+    model = MonobandedWaveModel(grid; advection=nothing)
+    set!(model; A=1.0, AKx=0.5, AKy=0.0)
+
+    output_path = tempname() * ".jld2"
+    simulation = Oceananigans.Simulation(model; Δt=0.01, stop_iteration=2, verbose=false)
+    simulation.output_writers[:fields] =
+        Oceananigans.JLD2Writer(model,
+                                (; A=model.action,
+                                   AKx=model.wavenumber_moment.x,
+                                   AKy=model.wavenumber_moment.y);
+                                filename=output_path,
+                                schedule=Oceananigans.IterationInterval(1),
+                                overwrite_existing=true)
+
+    Oceananigans.run!(simulation)
+    @test isfile(output_path)
+    @test model.clock.iteration == 2
+end
