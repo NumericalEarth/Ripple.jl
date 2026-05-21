@@ -15,4 +15,5 @@ goal_completion_checklist.tsv
 optional_gate_outputs/
 vortex_refraction_output/
 garden_sprinkler_output/
+*.jls
 .claude/

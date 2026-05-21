@@ -12,7 +12,7 @@ disabled with `nothing`. Oceananigans is a hard dependency, and Ripple does
 not define private advection schemes, simulation drivers, or output writers.
 
 ```@contents
-Pages = ["notation.md", "theory.md", "model_api.md", "finite_volume_integration.md", "api_reference.md", "examples.md"]
+Pages = ["notation.md", "theory.md", "model_api.md", "monobanded_model.md", "finite_volume_integration.md", "api_reference.md", "examples.md"]
 Depth = 2
 ```
 

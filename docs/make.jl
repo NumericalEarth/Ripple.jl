@@ -35,6 +35,7 @@ makedocs(;
         "Notation" => "notation.md",
         "Theory and Numerics" => "theory.md",
         "Model API" => "model_api.md",
+        "Monobanded Model" => "monobanded_model.md",
         "Finite-Volume Integration" => "finite_volume_integration.md",
         "API Reference" => "api_reference.md",
         "Examples" => generated_example_pages(),

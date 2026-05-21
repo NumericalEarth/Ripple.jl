@@ -7,7 +7,7 @@ import Oceananigans.BoundaryConditions: regularize_field_boundary_conditions
 import Oceananigans.Fields: Field, CenterField, interior, set!
 import Oceananigans.Grids: Center, Flat, Periodic
 import Oceananigans.Operators: Δxᶜᵃᵃ, Δyᵃᶜᵃ
-import Oceananigans.TimeSteppers: Clock, time_step!, update_state!, tick!
+import Oceananigans.TimeSteppers: Clock, RungeKutta3TimeStepper, time_step!, update_state!, tick!
 import KernelAbstractions
 import KernelAbstractions: @kernel, @index
 
@@ -17,13 +17,10 @@ const MONOBANDED_DIAGNOSTIC_NAMES =
     (:Kx, :Ky, :κ, :uᴰx, :uᴰy, :Hx, :Hy, :Cx, :Cy,
      :Γxx, :Γyx, :Γxy, :Γyy, :Ω, :ZK, :Ĉx, :Ĉy)
 
-mutable struct MonobandedTimeStepper{Tendencies, PreviousTendencies, InitialState, StageState}
+mutable struct MonobandedExplicitTimeStepper{Tendencies, PreviousTendencies}
     name :: Symbol
     Gⁿ :: Tendencies
     G⁻ :: PreviousTendencies
-    state⁰ :: InitialState
-    stage :: StageState
-    previous_tendencies_ready :: Bool
 end
 
 struct MonobandedPrescribedCurrentCoupling{Current, QT} <: AbstractCurrentCoupling
@@ -49,6 +46,7 @@ mutable struct MonobandedWaveModel{TS, Arch, G, C, A, M, D, Adv, Sources, Coupli
     sources :: Sources
     coupling :: Coupling
     timestepper :: TS
+    previous_tendencies_ready :: Bool
     gravitational_acceleration :: GA
     minimum_action :: MA
     minimum_wavenumber :: MK
@@ -217,16 +215,19 @@ end
 monobanded_supported_timestepper(timestepper::Symbol) =
     timestepper === :ForwardEuler ||
     timestepper === :AB2 ||
+    timestepper === :RungeKutta3 ||
     timestepper === :RK3 ||
+    timestepper === :SSPRungeKutta3 ||
     is_low_storage_rk3(timestepper)
 
 function canonical_monobanded_timestepper(timestepper::Symbol)
-    timestepper === :RungeKutta3 && return :RK3
-    timestepper === :SSPRungeKutta3 && return :RK3
+    timestepper === :RK3 && return :RungeKutta3
+    timestepper === :SSPRungeKutta3 && return :RungeKutta3
     timestepper === :QuasiAdamsBashforth2 && return :AB2
 
     monobanded_supported_timestepper(timestepper) ||
         throw(ArgumentError("unsupported MonobandedWaveModel timestepper $timestepper"))
+    is_low_storage_rk3(timestepper) && return :RungeKutta3
     return timestepper
 end
 
@@ -345,6 +346,13 @@ function monobanded_tendency_fields(prognostics)
     return map(similar, prognostics)
 end
 
+function materialize_monobanded_timestepper(timestepper::Symbol, grid, prognostics,
+                                            tendencies, previous_tendencies)
+    timestepper === :RungeKutta3 &&
+        return RungeKutta3TimeStepper(grid, prognostics; Gⁿ=tendencies, G⁻=previous_tendencies)
+    return MonobandedExplicitTimeStepper(timestepper, tendencies, previous_tendencies)
+end
+
 function MonobandedWaveModel(grid;
                              action=nothing,
                              wavenumber_moment=nothing,
@@ -353,7 +361,7 @@ function MonobandedWaveModel(grid;
                              velocities=nothing,
                              coupling=nothing,
                              boundary_conditions=NamedTuple(),
-                             timestepper=:RK3,
+                             timestepper=:RungeKutta3,
                              clock=nothing,
                              gravitational_acceleration=nothing,
                              minimum_action=nothing,
@@ -384,7 +392,7 @@ function MonobandedWaveModel(grid;
 
     # `minimum_action` floors `K = AK/A` to keep the diagnostic group velocity
     # bounded in cells where action is vanishingly small. Defaulting to
-    # `cbrt(eps(FT))` (≈6e-6 for Float64) is large enough to prevent the
+    # `cbrt(eps(FT))` is large enough to prevent the
     # K → ∞ cascade that triggers a CFL violation when WENO overshoot drives A
     # near zero, and small enough not to interfere with physical wave fields
     # (which carry A of order unity).
@@ -396,10 +404,8 @@ function MonobandedWaveModel(grid;
     prognostics = (A=action, AKx=wavenumber_moment.x, AKy=wavenumber_moment.y)
     tendencies = monobanded_tendency_fields(prognostics)
     previous_tendencies = monobanded_tendency_fields(prognostics)
-    initial_state = monobanded_tendency_fields(prognostics)
-    stage_state = monobanded_tendency_fields(prognostics)
-    timestepper = MonobandedTimeStepper(timestepper_name, tendencies, previous_tendencies,
-                                        initial_state, stage_state, false)
+    timestepper = materialize_monobanded_timestepper(timestepper_name, grid, prognostics,
+                                                     tendencies, previous_tendencies)
 
     arch = architecture(grid)
     model = MonobandedWaveModel{typeof(timestepper), typeof(arch), typeof(grid), typeof(clock),
@@ -409,7 +415,7 @@ function MonobandedWaveModel(grid;
                                                                                      action, wavenumber_moment,
                                                                                      diagnostics, advection,
                                                                                      sources, coupling,
-                                                                                     timestepper, g,
+                                                                                     timestepper, false, g,
                                                                                      minimum_action,
                                                                                      minimum_wavenumber)
 
@@ -423,6 +429,36 @@ prognostic_fields(model::MonobandedWaveModel) =
 fields(model::MonobandedWaveModel) = merge(prognostic_fields(model), model.diagnostics)
 Base.eltype(model::MonobandedWaveModel) = eltype(model.action)
 architecture(model::MonobandedWaveModel) = model.architecture
+
+monobanded_timestepper_name(timestepper::RungeKutta3TimeStepper) = :RungeKutta3
+monobanded_timestepper_name(timestepper::MonobandedExplicitTimeStepper) = timestepper.name
+
+monobanded_coupling_summary(::Nothing) = "none"
+monobanded_coupling_summary(::MonobandedPrescribedCurrentCoupling) = "prescribed velocities"
+monobanded_coupling_summary(::MonobandedPseudomomentumCoupling) = "pseudomomentum velocities"
+
+monobanded_sources_summary(::Nothing) = "none"
+monobanded_sources_summary(source) = string(nameof(typeof(source)))
+
+function Base.summary(model::MonobandedWaveModel)
+    Nx, Ny = horizontal_size(model.grid)
+    return string("MonobandedWaveModel{", eltype(model), "} on a ",
+                  Nx, "×", Ny, " surface grid")
+end
+
+function Base.show(io::IO, model::MonobandedWaveModel)
+    println(io, summary(model))
+    println(io, "├── grid: ", summary(model.grid))
+    println(io, "├── prognostic fields: A, AKx, AKy")
+    println(io, "├── diagnostics: Kx, Ky, κ, uᴰx, uᴰy, Hx, Hy, Cx, Cy, Γxx, Γyx, Γxy, Γyy, Ω, ZK, Ĉx, Ĉy")
+    println(io, "├── advection: ", model.advection === nothing ? "none" : nameof(typeof(model.advection)))
+    println(io, "├── coupling: ", monobanded_coupling_summary(model.coupling))
+    println(io, "├── sources: ", monobanded_sources_summary(model.sources))
+    println(io, "├── timestepper: ", monobanded_timestepper_name(model.timestepper))
+    println(io, "├── clock: time=", model.clock.time, ", iteration=", model.clock.iteration)
+    print(io,   "└── safeguards: minimum_action=", model.minimum_action,
+                ", minimum_wavenumber=", model.minimum_wavenumber)
+end
 
 active_monobanded_k(field) = first(axes(field.data, 3))
 monobanded_data_offsets(field) = ntuple(d -> first(axes(field.data, d)) - 1, 3)
@@ -1090,7 +1126,7 @@ function set!(model::MonobandedWaveModel; A=nothing, AKx=nothing, AKy=nothing)
     AKy === nothing || set!(model.wavenumber_moment.y, AKy)
 
     if A !== nothing || AKx !== nothing || AKy !== nothing
-        model.timestepper.previous_tendencies_ready = false
+        model.previous_tendencies_ready = false
         update_monobanded_diagnostics!(model)
     end
 
@@ -1206,6 +1242,66 @@ function monobanded_update_state!(state, G, dt, minimum_action)
     return state
 end
 
+function monobanded_add_scaled_runge_kutta_3_field!(field, G, G⁻, dt, γ, ζ, clamp_nonnegative)
+    FT = eltype(field)
+    launch_monobanded_kernel!(_monobanded_add_scaled_runge_kutta_3_field!, field,
+                              monobanded_parent(field),
+                              monobanded_parent(G),
+                              monobanded_parent(G⁻),
+                              convert(FT, dt),
+                              convert(FT, γ),
+                              convert(FT, ζ),
+                              clamp_nonnegative)
+    return field
+end
+
+function monobanded_add_scaled_runge_kutta_3_field!(field, G, G⁻, dt, γ, ::Nothing, clamp_nonnegative)
+    FT = eltype(field)
+    launch_monobanded_kernel!(_monobanded_add_scaled_runge_kutta_3_first_stage_field!, field,
+                              monobanded_parent(field),
+                              monobanded_parent(G),
+                              convert(FT, dt),
+                              convert(FT, γ),
+                              clamp_nonnegative)
+    return field
+end
+
+@kernel function _monobanded_add_scaled_runge_kutta_3_field!(field, G, G⁻, dt, γ, ζ,
+                                                             clamp_nonnegative,
+                                                             grid, Nx, Ny, k, Ox, Oy, Oz)
+    i, j = @index(Global, NTuple)
+    ix = monobanded_data_index(i, Ox)
+    jy = monobanded_data_index(j, Oy)
+    kz = monobanded_data_index(k, Oz)
+
+    @inbounds begin
+        value = field[ix, jy, kz] + dt * (γ * G[ix, jy, kz] + ζ * G⁻[ix, jy, kz])
+        field[ix, jy, kz] = ifelse(clamp_nonnegative, max(zero(value), value), value)
+    end
+end
+
+@kernel function _monobanded_add_scaled_runge_kutta_3_first_stage_field!(field, G, dt, γ,
+                                                                         clamp_nonnegative,
+                                                                         grid, Nx, Ny, k, Ox, Oy, Oz)
+    i, j = @index(Global, NTuple)
+    ix = monobanded_data_index(i, Ox)
+    jy = monobanded_data_index(j, Oy)
+    kz = monobanded_data_index(k, Oz)
+
+    @inbounds begin
+        value = field[ix, jy, kz] + dt * γ * G[ix, jy, kz]
+        field[ix, jy, kz] = ifelse(clamp_nonnegative, max(zero(value), value), value)
+    end
+end
+
+function monobanded_add_scaled_runge_kutta_3_state!(state, G, G⁻, dt, γ, ζ, minimum_action)
+    monobanded_add_scaled_runge_kutta_3_field!(state.A, G.A, G⁻.A, dt, γ, ζ, true)
+    monobanded_add_scaled_runge_kutta_3_field!(state.AKx, G.AKx, G⁻.AKx, dt, γ, ζ, false)
+    monobanded_add_scaled_runge_kutta_3_field!(state.AKy, G.AKy, G⁻.AKy, dt, γ, ζ, false)
+    monobanded_clamp_low_action!(state, minimum_action)
+    return state
+end
+
 function monobanded_update_ab2_state!(state, G, Gprevious, dt, minimum_action)
     monobanded_update_ab2_field!(state.A, G.A, Gprevious.A, dt, true)
     monobanded_update_ab2_field!(state.AKx, G.AKx, Gprevious.AKx, dt, false)
@@ -1289,52 +1385,38 @@ function time_step!(model::MonobandedWaveModel, dt; callbacks=[])
     state = prognostic_fields(model)
     timestepper = model.timestepper
 
-    if timestepper.name === :ForwardEuler
+    if timestepper isa RungeKutta3TimeStepper
+        model.previous_tendencies_ready = false
+
+        compute_tendencies!(model)
+        monobanded_add_scaled_runge_kutta_3_state!(state, timestepper.Gⁿ, timestepper.G⁻,
+                                                   dt, timestepper.γ¹, nothing, model.minimum_action)
+        monobanded_copy_state!(timestepper.G⁻, timestepper.Gⁿ)
+
+        compute_tendencies!(model)
+        monobanded_add_scaled_runge_kutta_3_state!(state, timestepper.Gⁿ, timestepper.G⁻,
+                                                   dt, timestepper.γ², timestepper.ζ², model.minimum_action)
+        monobanded_copy_state!(timestepper.G⁻, timestepper.Gⁿ)
+
+        compute_tendencies!(model)
+        monobanded_add_scaled_runge_kutta_3_state!(state, timestepper.Gⁿ, timestepper.G⁻,
+                                                   dt, timestepper.γ³, timestepper.ζ³, model.minimum_action)
+        monobanded_copy_state!(timestepper.G⁻, timestepper.Gⁿ)
+    elseif timestepper.name === :ForwardEuler
         compute_tendencies!(model)
         monobanded_update_state!(state, timestepper.Gⁿ, dt, model.minimum_action)
-        timestepper.previous_tendencies_ready = false
+        model.previous_tendencies_ready = false
     elseif timestepper.name === :AB2
         compute_tendencies!(model)
-        if timestepper.previous_tendencies_ready
+        if model.previous_tendencies_ready
             monobanded_update_ab2_state!(state, timestepper.Gⁿ, timestepper.G⁻, dt, model.minimum_action)
         else
             monobanded_update_state!(state, timestepper.Gⁿ, dt, model.minimum_action)
         end
         monobanded_copy_state!(timestepper.G⁻, timestepper.Gⁿ)
-        timestepper.previous_tendencies_ready = true
-    elseif timestepper.name === :RK3
-        timestepper.previous_tendencies_ready = false
-        state₀ = timestepper.state⁰
-        stage = timestepper.stage
-        monobanded_copy_state!(state₀, state)
-
-        compute_tendencies!(model)
-        monobanded_update_state!(state, timestepper.Gⁿ, dt, model.minimum_action)
-
-        compute_tendencies!(model)
-        monobanded_copy_state!(stage, state)
-        monobanded_update_state!(stage, timestepper.Gⁿ, dt, model.minimum_action)
-        monobanded_combine_state!(state, 3//4, state₀, 1//4, stage, model.minimum_action)
-
-        compute_tendencies!(model)
-        monobanded_copy_state!(stage, state)
-        monobanded_update_state!(stage, timestepper.Gⁿ, dt, model.minimum_action)
-        monobanded_combine_state!(state, 1//3, state₀, 2//3, stage, model.minimum_action)
-    elseif is_low_storage_rk3(timestepper.name)
-        timestepper.previous_tendencies_ready = false
-        state₀ = timestepper.state⁰
-        monobanded_copy_state!(state₀, state)
-
-        compute_tendencies!(model)
-        monobanded_update_state!(state, timestepper.Gⁿ, dt, model.minimum_action)
-
-        compute_tendencies!(model)
-        monobanded_combine_state_with_increment!(state, 3//4, state₀, 1//4, dt, timestepper.Gⁿ, model.minimum_action)
-
-        compute_tendencies!(model)
-        monobanded_combine_state_with_increment!(state, 1//3, state₀, 2//3, dt, timestepper.Gⁿ, model.minimum_action)
+        model.previous_tendencies_ready = true
     else
-        throw(ArgumentError("unsupported timestepper $(timestepper.name)"))
+        throw(ArgumentError("unsupported timestepper $(timestepper)"))
     end
 
     update_monobanded_diagnostics!(model)

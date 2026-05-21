@@ -1,5 +1,6 @@
 import Profile
 import Oceananigans
+import Oceananigans.TimeSteppers: RungeKutta3TimeStepper
 
 @testset "MonobandedWaveModel API" begin
     grid = RectilinearGrid(CPU();
@@ -10,7 +11,7 @@ import Oceananigans
                            halo=(3, 3, 3),
                            topology=(Periodic, Periodic, Bounded))
 
-    model = MonobandedWaveModel(grid; timestepper=:RK3)
+    model = MonobandedWaveModel(grid; timestepper=:RungeKutta3)
 
     @test keys(prognostic_fields(model)) == (:A, :AKx, :AKy)
     @test fields(model).A === model.action
@@ -22,10 +23,10 @@ import Oceananigans
     @test !haskey(fields(model), :G)
     @test !hasfield(typeof(model), :boundary_conditions)
     @test axes(model.action.data, 3) == grid.Nz:grid.Nz
+    @test model.timestepper isa RungeKutta3TimeStepper
     @test model.timestepper.Gⁿ.A !== model.action
-    @test model.timestepper.state⁰.A !== model.action
-    @test model.timestepper.stage.A !== model.action
-    @test model.timestepper.name === :RK3
+    @test model.timestepper.G⁻.A !== model.action
+    @test !model.previous_tendencies_ready
     @test eltype(model) === eltype(model.action)
     @test model.coupling === nothing
     @test model.sources === nothing
@@ -60,7 +61,8 @@ import Oceananigans
     @test_throws ArgumentError MonobandedWaveModel(grid; timestepper=:SemiImplicitEuler)
     @test_throws ArgumentError MonobandedWaveModel(grid; clock=:clock)
     @test_throws ArgumentError MonobandedWaveModel(grid; boundary_conditions=(; N=Oceananigans.BoundaryConditions.FieldBoundaryConditions()))
-    @test MonobandedWaveModel(grid; timestepper=:RungeKutta3, advection=nothing).timestepper.name === :RK3
+    @test MonobandedWaveModel(grid; timestepper=:RK3, advection=nothing).timestepper isa RungeKutta3TimeStepper
+    @test MonobandedWaveModel(grid; timestepper=:RungeKutta3, advection=nothing).timestepper isa RungeKutta3TimeStepper
     @test MonobandedWaveModel(grid; timestepper=:QuasiAdamsBashforth2, advection=nothing).timestepper.name === :AB2
 
     bounded_grid = RectilinearGrid(CPU();
@@ -582,7 +584,7 @@ end
 
     model = MonobandedWaveModel(grid;
                                 velocities=PseudomomentumVelocities(),
-                                timestepper=:RK3)
+                                timestepper=:RungeKutta3)
     set!(model;
          A=(x, y, z) -> 1 + 0.1 * sin(x),
          AKx=(x, y, z) -> 0.4 * (1 + 0.1 * sin(x)),
@@ -649,7 +651,7 @@ end
 
         parity_model = MonobandedWaveModel(parity_grid;
                                            velocities=PseudomomentumVelocities(),
-                                           timestepper=:RK3)
+                                           timestepper=:RungeKutta3)
         set!(parity_model;
              A=(x, y, z) -> 1 + 0.05 * sin(2π * x / 8) * cos(2π * y / 8),
              AKx=(x, y, z) -> 0.4 * (1 + 0.05 * sin(2π * x / 8)),
@@ -748,7 +750,7 @@ end
 
         allocation_model = MonobandedWaveModel(allocation_grid;
                                                velocities=PseudomomentumVelocities(),
-                                               timestepper=:RK3)
+                                               timestepper=:RungeKutta3)
         set!(allocation_model;
              A=(x, y, z) -> 1 + 0.05 * sin(2π * x / N) * cos(2π * y / N),
              AKx=(x, y, z) -> 0.4 * (1 + 0.05 * sin(2π * x / N)),
@@ -843,14 +845,14 @@ end
     @test all(isfinite, interior(flat_transport.wavenumber_moment.y))
     @test cfl(flat_transport) < Inf
 
-    rk3 = MonobandedWaveModel(grid; timestepper=:RK3)
+    rk3 = MonobandedWaveModel(grid; timestepper=:RungeKutta3)
     set!(rk3;
          A=(x, y, z) -> 1 + 0.05 * sin(2π * x / 16) * cos(2π * y / 8),
          AKx=(x, y, z) -> 0.5 * (1 + 0.05 * sin(2π * x / 16) * cos(2π * y / 8)),
          AKy=0.0)
 
-    rk3_state⁰_A = rk3.timestepper.state⁰.A
-    rk3_stage_A = rk3.timestepper.stage.A
+    rk3_Gⁿ_A = rk3.timestepper.Gⁿ.A
+    rk3_G⁻_A = rk3.timestepper.G⁻.A
     initial_rk3_action = sum(interior(rk3.action))
     initial_rk3_moment = sum(interior(rk3.wavenumber_moment.x))
 
@@ -859,8 +861,8 @@ end
         @test minimum(interior(rk3.action)) >= 0
     end
 
-    @test rk3.timestepper.state⁰.A === rk3_state⁰_A
-    @test rk3.timestepper.stage.A === rk3_stage_A
+    @test rk3.timestepper.Gⁿ.A === rk3_Gⁿ_A
+    @test rk3.timestepper.G⁻.A === rk3_G⁻_A
     @test cfl(rk3) <= 0.2
     @test sum(interior(rk3.action)) ≈ initial_rk3_action atol=1e-10 rtol=0
     @test sum(interior(rk3.wavenumber_moment.x)) ≈ initial_rk3_moment atol=1e-10 rtol=0
@@ -1127,7 +1129,7 @@ end
                            halo=(3, 3, 3),
                            topology=(Periodic, Periodic, Bounded))
 
-    m = MonobandedWaveModel(grid; timestepper=:RK3, advection=WENO())
+    m = MonobandedWaveModel(grid; timestepper=:RungeKutta3, advection=WENO())
     set!(m;
          A   = (x, y, z) -> 1 + 0.05 * sin(2π * x / 16) * cos(2π * y / 8),
          AKx = (x, y, z) -> 0.5 * (1 + 0.05 * sin(2π * x / 16) * cos(2π * y / 8)),

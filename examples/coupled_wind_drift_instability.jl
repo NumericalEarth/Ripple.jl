@@ -23,6 +23,7 @@ import KernelAbstractions
 using KernelAbstractions: @kernel, @index
 using Printf
 using Random
+using Serialization
 using Statistics
 
 CairoMakie.activate!(type = "png")
@@ -38,6 +39,8 @@ env_integer(name, default) = parse(Int, get(ENV, name, string(default)))
 
 quick_run = truthy(get(ENV, "RIPPLE_EXAMPLE_QUICK", "false"))
 animate_run = truthy(get(ENV, "RIPPLE_EXAMPLE_ANIMATE", quick_run ? "false" : "true"))
+replot_only = truthy(get(ENV, "RIPPLE_EXAMPLE_REPLOT_ONLY", "false"))
+energy_axis_scale = parse(Float64, get(ENV, "RIPPLE_EXAMPLE_ENERGY_AXIS_SCALE", "2"))
 
 default_Ny, default_Nz = quick_run ? (64, 48) : (384, 256)
 Ny = env_integer("RIPPLE_EXAMPLE_NY", default_Ny)
@@ -80,6 +83,9 @@ default_frame_stride = quick_run ? 10 : 20
 spinup_iterations = env_integer("RIPPLE_EXAMPLE_SPINUP_ITERATIONS", default_spinup_iterations)
 continuation_iterations = env_integer("RIPPLE_EXAMPLE_CONTINUATION_ITERATIONS", default_continuation_iterations)
 frame_stride = env_integer("RIPPLE_EXAMPLE_FRAME_STRIDE", default_frame_stride)
+default_frame_cache_path =
+    "coupled_wind_drift_instability_frames_Ny$(Ny)_Nz$(Nz)_spinup$(spinup_iterations)_continuation$(continuation_iterations).jls"
+frame_cache_path = get(ENV, "RIPPLE_EXAMPLE_FRAME_CACHE", default_frame_cache_path)
 
 # ## Ocean and wave setup
 #
@@ -258,13 +264,18 @@ end
     denominator = max(abs(Aᵢ), minimum_action)
     Kxᵢ = AKx[i, j, k] / denominator
     Kyᵢ = AKy[i, j, k] / denominator
-    κᵢ = max(hypot(Kxᵢ, Kyᵢ), minimum_wavenumber_factor * reference_wavenumber)
-    κˡ = min(κᵢ, maximum_wavenumber_factor * reference_wavenumber)
-    rescale = κˡ / κᵢ
+    κᵢ = hypot(Kxᵢ, Kyᵢ)
+    κᵐⁱⁿ = minimum_wavenumber_factor * reference_wavenumber
+    κᵐᵃˣ = maximum_wavenumber_factor * reference_wavenumber
+    κˡ = min(max(κᵢ, κᵐⁱⁿ), κᵐᵃˣ)
+    κᵉᵖˢ = sqrt(eps(eltype(AKx))) * reference_wavenumber
+    κ_safe = max(κᵢ, κᵉᵖˢ)
+    direction_x = ifelse(κᵢ > κᵉᵖˢ, Kxᵢ / κ_safe, one(Kxᵢ))
+    direction_y = ifelse(κᵢ > κᵉᵖˢ, Kyᵢ / κ_safe, zero(Kyᵢ))
 
     A[i, j, k] = A⁺
-    AKx[i, j, k] = A⁺ * Kxᵢ * rescale
-    AKy[i, j, k] = A⁺ * Kyᵢ * rescale
+    AKx[i, j, k] = A⁺ * κˡ * direction_x
+    AKy[i, j, k] = A⁺ * κˡ * direction_y
 end
 
 function limit_wave_state!(wave_model::MonobandedWaveModel; reference_action, reference_wavenumber)
@@ -582,54 +593,80 @@ function run_case!(case, stop_iteration; capture = true)
     return merge(case, (; frames, growth_rate = σ))
 end
 
-spinup = build_case(coupled_waves = false)
-spinup = run_case!(spinup, spinup_iterations; capture = false)
-spinup_state = save_state(spinup)
+if replot_only
+    isfile(frame_cache_path) || error("No frame cache found at $(abspath(frame_cache_path)); rerun with RIPPLE_EXAMPLE_REPLOT_ONLY=false first.")
+    comparison_data = deserialize(frame_cache_path)
+    prescribed_growth_rate = comparison_data.prescribed_growth_rate
+    coupled_growth_rate = comparison_data.coupled_growth_rate
+    spectral_coupled_growth_rate = comparison_data.spectral_coupled_growth_rate
+    println("loaded_frame_cache = $(abspath(frame_cache_path))")
+else
+    spinup = build_case(coupled_waves = false)
+    spinup = run_case!(spinup, spinup_iterations; capture = false)
+    spinup_state = save_state(spinup)
 
-prescribed = build_case(coupled_waves = false, time_offset = spinup_state.time)
-restore_state!(prescribed, spinup_state)
-prescribed = run_case!(prescribed, continuation_iterations)
+    prescribed = build_case(coupled_waves = false, time_offset = spinup_state.time)
+    restore_state!(prescribed, spinup_state)
+    prescribed = run_case!(prescribed, continuation_iterations)
 
-coupled = build_case(coupled_waves = true, time_offset = spinup_state.time)
-restore_state!(coupled, spinup_state)
-coupled = run_case!(coupled, continuation_iterations)
+    coupled = build_case(coupled_waves = true, time_offset = spinup_state.time)
+    restore_state!(coupled, spinup_state)
+    coupled = run_case!(coupled, continuation_iterations)
 
-spectral_coupled = build_case(coupled_waves = true,
-                              wave_model_kind = :spectral,
-                              time_offset = spinup_state.time)
-restore_state!(spectral_coupled, spinup_state)
-spectral_coupled = run_case!(spectral_coupled, continuation_iterations)
+    spectral_coupled = build_case(coupled_waves = true,
+                                  wave_model_kind = :spectral,
+                                  time_offset = spinup_state.time)
+    restore_state!(spectral_coupled, spinup_state)
+    spectral_coupled = run_case!(spectral_coupled, continuation_iterations)
 
-prescribed_growth_rate = prescribed.growth_rate
-coupled_growth_rate = coupled.growth_rate
-spectral_coupled_growth_rate = spectral_coupled.growth_rate
+    prescribed_growth_rate = prescribed.growth_rate
+    coupled_growth_rate = coupled.growth_rate
+    spectral_coupled_growth_rate = spectral_coupled.growth_rate
 
-println(@sprintf("spinup_time                  = %.3f s", spinup_state.time))
-println(@sprintf("monobanded_wave_substep      = %.3e s", Δt / monobanded_wave_substeps))
-println(@sprintf("spectral_wave_substep        = %.3e s", Δt / spectral_wave_substeps))
-println(@sprintf("prescribed_wave_growth_rate          = %.4f s^-1", prescribed_growth_rate))
-println(@sprintf("monobanded_coupled_wave_growth_rate  = %.4f s^-1", coupled_growth_rate))
-println(@sprintf("spectral_coupled_wave_growth_rate    = %.4f s^-1", spectral_coupled_growth_rate))
-println(@sprintf("monobanded_coupled / prescribed      = %.3f", coupled_growth_rate / prescribed_growth_rate))
-println(@sprintf("spectral_coupled / prescribed        = %.3f", spectral_coupled_growth_rate / prescribed_growth_rate))
-print_energy_summary("prescribed", prescribed.frames)
-print_energy_summary("monobanded_coupled", coupled.frames)
-print_energy_summary("spectral_coupled", spectral_coupled.frames)
+    println(@sprintf("spinup_time                  = %.3f s", spinup_state.time))
+    println(@sprintf("monobanded_wave_substep      = %.3e s", Δt / monobanded_wave_substeps))
+    println(@sprintf("spectral_wave_substep        = %.3e s", Δt / spectral_wave_substeps))
+    println(@sprintf("prescribed_wave_growth_rate          = %.4f s^-1", prescribed_growth_rate))
+    println(@sprintf("monobanded_coupled_wave_growth_rate  = %.4f s^-1", coupled_growth_rate))
+    println(@sprintf("spectral_coupled_wave_growth_rate    = %.4f s^-1", spectral_coupled_growth_rate))
+    println(@sprintf("monobanded_coupled / prescribed      = %.3f", coupled_growth_rate / prescribed_growth_rate))
+    println(@sprintf("spectral_coupled / prescribed        = %.3f", spectral_coupled_growth_rate / prescribed_growth_rate))
+    print_energy_summary("prescribed", prescribed.frames)
+    print_energy_summary("monobanded_coupled", coupled.frames)
+    print_energy_summary("spectral_coupled", spectral_coupled.frames)
+
+    comparison_data = (; ys = collect(ynodes(spectral_coupled.grid) .* 100),
+                       zs = collect(znodes(spectral_coupled.grid) .* 100),
+                       prescribed_frames = prescribed.frames,
+                       coupled_frames = coupled.frames,
+                       spectral_coupled_frames = spectral_coupled.frames,
+                       prescribed_growth_rate,
+                       coupled_growth_rate,
+                       spectral_coupled_growth_rate)
+
+    serialize(frame_cache_path, comparison_data)
+    println("frame_cache = $(abspath(frame_cache_path))")
+
+    model = spectral_coupled.wave_model # exposed for the example smoke harness
+end
 
 # ## Animation
 
 if animate_run
-    ys = ynodes(spectral_coupled.grid) .* 100
-    zs = znodes(spectral_coupled.grid) .* 100
+    ys = comparison_data.ys
+    zs = comparison_data.zs
+    prescribed_frames = comparison_data.prescribed_frames
+    coupled_frames = comparison_data.coupled_frames
+    spectral_coupled_frames = comparison_data.spectral_coupled_frames
 
-    times = prescribed.frames.times
-    frame_count = min(length(prescribed.frames.v),
-                      length(coupled.frames.v),
-                      length(spectral_coupled.frames.v))
+    times = prescribed_frames.times
+    frame_count = min(length(prescribed_frames.v),
+                      length(coupled_frames.v),
+                      length(spectral_coupled_frames.v))
 
-    prescribed_vlim = maximum(maximum(abs, frame) for frame in prescribed.frames.v)
-    coupled_vlim = maximum(maximum(abs, frame) for frame in coupled.frames.v)
-    spectral_coupled_vlim = maximum(maximum(abs, frame) for frame in spectral_coupled.frames.v)
+    prescribed_vlim = maximum(maximum(abs, frame) for frame in prescribed_frames.v)
+    coupled_vlim = maximum(maximum(abs, frame) for frame in coupled_frames.v)
+    spectral_coupled_vlim = maximum(maximum(abs, frame) for frame in spectral_coupled_frames.v)
     prescribed_vlim = max(prescribed_vlim, 0.05)
     coupled_vlim = max(coupled_vlim, 0.01)
     spectral_coupled_vlim = max(spectral_coupled_vlim, 0.01)
@@ -640,38 +677,37 @@ if animate_run
     wave_energy_change(frames) =
         frames.wave_energy .- first(frames.wave_energy)
 
-    prescribed_δK′ = perturbation_energy_change(prescribed.frames)
-    coupled_δK′ = perturbation_energy_change(coupled.frames)
-    spectral_coupled_δK′ = perturbation_energy_change(spectral_coupled.frames)
+    prescribed_δK′ = perturbation_energy_change(prescribed_frames)
+    coupled_δK′ = perturbation_energy_change(coupled_frames)
+    spectral_coupled_δK′ = perturbation_energy_change(spectral_coupled_frames)
 
-    prescribed_δEw = wave_energy_change(prescribed.frames)
-    coupled_δEw = wave_energy_change(coupled.frames)
-    spectral_coupled_δEw = wave_energy_change(spectral_coupled.frames)
+    prescribed_δEw = wave_energy_change(prescribed_frames)
+    coupled_δEw = wave_energy_change(coupled_frames)
+    spectral_coupled_δEw = wave_energy_change(spectral_coupled_frames)
 
-    energy_min = min(minimum(prescribed_δK′), 0)
-    energy_max = max(maximum(prescribed_δK′), 0)
-    energy_padding = 0.05 * max(energy_max - energy_min, eps(Float64))
+    prescribed_energy_scale = max(maximum(abs, prescribed_δK′), eps(Float64))
+    energy_limit = energy_axis_scale * prescribed_energy_scale
 
-    action_min = minimum(minimum(frame) for frame in (prescribed.frames.wave_action...,
-                                                      coupled.frames.wave_action...,
-                                                      spectral_coupled.frames.wave_action...))
-    action_max = maximum(maximum(frame) for frame in (prescribed.frames.wave_action...,
-                                                      coupled.frames.wave_action...,
-                                                      spectral_coupled.frames.wave_action...))
+    action_min = minimum(minimum(frame) for frame in (prescribed_frames.wave_action...,
+                                                      coupled_frames.wave_action...,
+                                                      spectral_coupled_frames.wave_action...))
+    action_max = maximum(maximum(frame) for frame in (prescribed_frames.wave_action...,
+                                                      coupled_frames.wave_action...,
+                                                      spectral_coupled_frames.wave_action...))
     action_padding = 0.05 * max(action_max - action_min, eps(Float64))
 
-    prescribed_v_obs = Observable(prescribed.frames.v[1])
-    coupled_v_obs = Observable(coupled.frames.v[1])
-    spectral_coupled_v_obs = Observable(spectral_coupled.frames.v[1])
+    prescribed_v_obs = Observable(prescribed_frames.v[1])
+    coupled_v_obs = Observable(coupled_frames.v[1])
+    spectral_coupled_v_obs = Observable(spectral_coupled_frames.v[1])
     prescribed_δK′_obs = Observable(Point2f[(times[1], prescribed_δK′[1])])
     coupled_δK′_obs = Observable(Point2f[(times[1], coupled_δK′[1])])
     spectral_coupled_δK′_obs = Observable(Point2f[(times[1], spectral_coupled_δK′[1])])
     prescribed_δEw_obs = Observable(Point2f[(times[1], prescribed_δEw[1])])
     coupled_δEw_obs = Observable(Point2f[(times[1], coupled_δEw[1])])
     spectral_coupled_δEw_obs = Observable(Point2f[(times[1], spectral_coupled_δEw[1])])
-    prescribed_action_obs = Observable(prescribed.frames.wave_action[1])
-    coupled_action_obs = Observable(coupled.frames.wave_action[1])
-    spectral_coupled_action_obs = Observable(spectral_coupled.frames.wave_action[1])
+    prescribed_action_obs = Observable(prescribed_frames.wave_action[1])
+    coupled_action_obs = Observable(coupled_frames.wave_action[1])
+    spectral_coupled_action_obs = Observable(spectral_coupled_frames.wave_action[1])
     title_obs = Observable("t = 0.00 s")
 
     fig = Figure(size = (1500, 820))
@@ -691,7 +727,7 @@ if animate_run
     ax4 = Axis(fig[2, 1:3];
                title = "Perturbation kinetic energy and wave energy",
                xlabel = "time (s)", ylabel = "energy change / ρ per unit x (m⁴ s⁻²)",
-               limits = ((times[1], times[end]), (energy_min - energy_padding, energy_max + energy_padding)))
+               limits = ((times[1], times[end]), (-energy_limit, energy_limit)))
 
     ax5 = Axis(fig[2, 4:6];
                title = "Horizontal wave-action distribution",
@@ -726,18 +762,18 @@ if animate_run
     comparison_animation = "coupled_wind_drift_instability.mp4"
 
     record(fig, comparison_animation, 1:frame_count; framerate = 10) do n
-        prescribed_v_obs[] = prescribed.frames.v[n]
-        coupled_v_obs[] = coupled.frames.v[n]
-        spectral_coupled_v_obs[] = spectral_coupled.frames.v[n]
+        prescribed_v_obs[] = prescribed_frames.v[n]
+        coupled_v_obs[] = coupled_frames.v[n]
+        spectral_coupled_v_obs[] = spectral_coupled_frames.v[n]
         prescribed_δK′_obs[] = Point2f.(times[1:n], prescribed_δK′[1:n])
         coupled_δK′_obs[] = Point2f.(times[1:n], coupled_δK′[1:n])
         spectral_coupled_δK′_obs[] = Point2f.(times[1:n], spectral_coupled_δK′[1:n])
         prescribed_δEw_obs[] = Point2f.(times[1:n], prescribed_δEw[1:n])
         coupled_δEw_obs[] = Point2f.(times[1:n], coupled_δEw[1:n])
         spectral_coupled_δEw_obs[] = Point2f.(times[1:n], spectral_coupled_δEw[1:n])
-        prescribed_action_obs[] = prescribed.frames.wave_action[n]
-        coupled_action_obs[] = coupled.frames.wave_action[n]
-        spectral_coupled_action_obs[] = spectral_coupled.frames.wave_action[n]
+        prescribed_action_obs[] = prescribed_frames.wave_action[n]
+        coupled_action_obs[] = coupled_frames.wave_action[n]
+        spectral_coupled_action_obs[] = spectral_coupled_frames.wave_action[n]
 
         title_obs[] = @sprintf("Wind-drift instability with wave coupling — t = %.2f s, σ_fixed = %.3f s⁻¹, σ_mono = %.3f s⁻¹, σ_spectral = %.3f s⁻¹",
                                times[n], prescribed_growth_rate, coupled_growth_rate, spectral_coupled_growth_rate)
@@ -745,8 +781,6 @@ if animate_run
 
     println("comparison_animation = $(abspath(comparison_animation))")
 end
-
-model = spectral_coupled.wave_model # exposed for the example smoke harness
 nothing #hide
 
 # ![](coupled_wind_drift_instability.mp4)

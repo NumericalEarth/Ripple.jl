@@ -47,6 +47,8 @@ with prognostic fields `A`, `AKx`, and `AKy` on the physical grid's top
 surface. The diagnosed wavevector is `K = AK / A`, and the diagnostic fields
 include `κ`, the Q-projected Doppler velocity `uᴰ`, its `κ` derivative `H`,
 the ray velocity `C`, absolute frequency `Ω`, and the refraction tensor `Γ`.
+See [Monobanded Wave Model](@ref) for the full equations, constructor contract,
+diagnostics, and numerical constraints.
 
 The constructor follows Oceananigans and Breeze model conventions: boundary
 conditions are consumed while constructing the prognostic `Field`s and are not
@@ -63,10 +65,13 @@ currently supports scalar action-only `LinearWindInput`, scalar action-only
 `BottomFriction`, and `SourceTermSet` combinations of those. These sources add
 `S_A` to `A` and `K S_A` to the moments, preserving local `K` under pure
 growth or decay.
-`advection=nothing` disables transport. The default `advection=WENO()` uses
-Ripple's monobanded conservative transport kernel with WENO5 face
-reconstruction, while other accepted Oceananigans advection schemes currently
-fall back to conservative upwind reconstruction.
+`advection=nothing` disables physical transport but leaves refraction and
+sources active. The default `advection=WENO()` uses Ripple's monobanded
+conservative transport kernel with WENO5 face reconstruction, while other
+accepted Oceananigans advection schemes currently fall back to conservative
+upwind reconstruction. The monobanded kernels require uniform horizontal
+spacing and currently support only default NoFlux/Periodic prognostic boundary
+conditions.
 
 ## Product Fields
 
