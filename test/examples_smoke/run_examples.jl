@@ -58,6 +58,7 @@ end
         "vortex_refraction.jl",
         "monobanded_linear_shear_refraction.jl",
         "coupled_wind_drift_instability.jl",
+        "translating_hurricane_swell.jl",
     ]
 
     discovered_examples = sort([basename(path) for path in readdir(example_dir; join=true)
@@ -110,6 +111,10 @@ end
                                                        "SpectralWaveModel",
                                                        "Callback(case.update_wave_model!",
                                                        "time_step!(wave_model"),
+            "translating_hurricane_swell.jl"       => ("# # Swell Generation by a Translating Idealized Hurricane",
+                                                       "HollandHurricaneWind",
+                                                       "PrecomputedSources",
+                                                       "PressureCorrelationInput"),
         )
 
         for (file, required_patterns) in semantic_examples

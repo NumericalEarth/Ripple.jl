@@ -1,0 +1,30 @@
+$ WAVEWATCH III NETCDF point-output post-processor.
+$ -----------------------------------------------------------------
+$
+$ First output time (yyyymmdd hhmmss), step (s), number of records
+  19680606 000000  600.  145
+$
+$ Point indices (one per line, -1 to terminate)
+   1
+  -1
+$
+$ NetCDF spec:
+$  file prefix
+  ww3.
+$  number of characters in date     [4|6|8|10]
+   6
+$  netCDF version                   [3|4]
+   4
+$  points in same file (T/F), max points per pass
+   T  150
+$  output type (1 = spectra, 2 = bulk params)
+   1
+$  flag for global attributes       [0|1-4]
+   0
+$  dimensions: time,station (T) or station,time (F)
+   T
+$
+$ ITYPE = 1 sub-config: OTYPE, scale_1D, scale_2D, NetCDF var type
+   3  1  0  4
+$
+$ End of input file

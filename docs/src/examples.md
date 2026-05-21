@@ -36,6 +36,11 @@ The example pages walk a deliberate arc:
    wind-drift-layer instability with a `MonobandedWaveModel` advanced from
    an Oceananigans callback that copies the current and refreshes the
    Stokes-drift shear every step.
+8. **[Swell Generation by a Translating Idealized Hurricane](@ref)** — the
+   ST3/ST4-equivalent physics bundle (Janssen wind input, saturation
+   dissipation, Hasselmann DIA) driven by a translating Holland (1980)
+   hurricane, showing the right-front extended-fetch enhancement and the
+   trailing swell wake.
 
 Run any example from the repository root:
 
@@ -58,6 +63,7 @@ Pages = [
     "generated/examples/vortex_refraction.md",
     "generated/examples/monobanded_linear_shear_refraction.md",
     "generated/examples/coupled_wind_drift_instability.md",
+    "generated/examples/translating_hurricane_swell.md",
 ]
 Depth = 1
 ```
