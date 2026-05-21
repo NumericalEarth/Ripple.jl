@@ -313,10 +313,10 @@ function build_case(; coupled_waves, wave_model_kind = :monobanded, time_offset 
     Random.seed!(1234)
     set!(ocean_model; u = u_initial, v = noisy_rest, w = noisy_rest)
 
-    # Ripple's prescribed-current coupling expects center-located horizontal
-    # velocity fields on the Q grid. Oceananigans keeps `u` and `v` on
-    # staggered faces, so we construct computed center fields and refresh them
-    # in the coupled callback and diagnostic callback.
+    ## Ripple's prescribed-current coupling expects center-located horizontal
+    ## velocity fields on the Q grid. Oceananigans keeps `u` and `v` on
+    ## staggered faces, so we construct computed center fields and refresh them
+    ## in the coupled callback and diagnostic callback.
     uᴸ = Field(@at (Center, Center, Center) ocean_model.velocities.u)
     vᴸ = Field(@at (Center, Center, Center) ocean_model.velocities.v)
     wᴸ = Field(@at (Center, Center, Center) ocean_model.velocities.w)

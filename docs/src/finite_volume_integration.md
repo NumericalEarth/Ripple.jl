@@ -11,8 +11,15 @@ wavetrains in moving or time-dependent media [BrethertonGarrett1968](@citep).
 Spectral integrals are therefore sums of cell averages multiplied by exact cell
 measures:
 
-```julia
+```@example finite_volume_integration
+using Ripple
+
+spectral_grid = PolarWaveVectorGrid(; κ = range(0.25, 1.0; length = 4),
+                                      φ = range(0, 2π; length = 9)[1:8])
+
+cell_average_values = ones(length(spectral_grid.κ), length(spectral_grid.φ))
 integral = integrate_spectrum(cell_average_values, spectral_grid)
+round(integral; digits = 6)
 ```
 
 This is not a point-sample quadrature rule. For a scalar quantity `q` over a

@@ -51,21 +51,33 @@ function build_literate_examples!(docs_root)
     rm(output_dir; force = true, recursive = true)
     mkpath(output_dir)
 
-    for (filename, _title) in EXAMPLE_TUTORIALS
-        script_path = joinpath(examples_src_dir, filename)
-        @info "Literate: building $(filename)"
-        Literate.markdown(script_path, output_dir;
-                          flavor     = Literate.DocumenterFlavor(),
-                          preprocess = content -> content * EXAMPLE_POSTAMBLE,
-                          execute    = true)
+    # Force animation generation for the docs build so static `![](...mp4)`
+    # references in the example markdown resolve to a file. Smoke tests
+    # invoke the examples directly without Documenter and can leave this
+    # off via RIPPLE_EXAMPLE_ANIMATE=false.
+    prior_animate = get(ENV, "RIPPLE_EXAMPLE_ANIMATE", nothing)
+    ENV["RIPPLE_EXAMPLE_ANIMATE"] = "true"
+
+    try
+        for (filename, _title) in EXAMPLE_TUTORIALS
+            script_path = joinpath(examples_src_dir, filename)
+            @info "Literate: building $(filename)"
+            Literate.markdown(script_path, output_dir;
+                              flavor     = Literate.DocumenterFlavor(),
+                              preprocess = content -> content * EXAMPLE_POSTAMBLE,
+                              execute    = true)
+        end
+    finally
+        prior_animate === nothing ? delete!(ENV, "RIPPLE_EXAMPLE_ANIMATE") :
+                                    (ENV["RIPPLE_EXAMPLE_ANIMATE"] = prior_animate)
     end
 
     return output_dir
 end
 
-function generate_documentation_sources!(docs_root = @__DIR__)
+function generate_documentation_sources!(docs_root = @__DIR__; examples = true)
     generated_dir = joinpath(docs_root, "src", "generated")
     mkpath(generated_dir)
-    build_literate_examples!(docs_root)
+    examples && build_literate_examples!(docs_root)
     return generated_dir
 end

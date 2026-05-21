@@ -12,24 +12,24 @@ disabled with `nothing`. Oceananigans is a hard dependency, and Ripple does
 not define private advection schemes, simulation drivers, or output writers.
 
 ```@contents
-Pages = ["notation.md", "theory.md", "model_api.md", "monobanded_model.md", "finite_volume_integration.md", "api_reference.md", "examples.md"]
+Pages = ["notation.md", "theory.md", "model_api.md", "monobanded_model.md", "finite_volume_integration.md", "api_reference.md"]
 Depth = 2
 ```
 
 ## Where to start
 
-The shortest end-to-end Ripple simulation is laid out as a runnable
-literate page: [Quick Start](@ref). It refracts a narrow-banded
-wave-action field through a barotropic Gaussian vortex via the fused
-Doppler-plus-refraction kernel, advanced with `RungeKutta3TimeStepper`. The example uses
-the major Ripple constructs (`RectilinearGrid`, `PolarWaveVectorGrid`,
-`SpectralWaveModel`, the `velocities` kwarg, `Simulation`, and the
-`m0` / `root_mean_square_wavenumber` / `mean_direction` diagnostics) in
-about fifty lines.
+The shortest end-to-end Ripple simulation is `examples/quick_start.jl`. It
+refracts a narrow-banded wave-action field through a barotropic Gaussian vortex
+via the fused Doppler-plus-refraction kernel, advanced with
+`RungeKutta3TimeStepper`. The example uses the major Ripple constructs
+(`RectilinearGrid`, `PolarWaveVectorGrid`, `SpectralWaveModel`, the
+`velocities` kwarg, `Simulation`, and the `m0` /
+`root_mean_square_wavenumber` / `mean_direction` diagnostics) in about fifty
+lines.
 
 For a longer tour at production resolution with an animated three-panel
 movie of `m₀`, `κᵣₘₛ`, and the mean direction, follow on to
-[Wave Refraction Through A Barotropic Vortex](@ref).
+`examples/vortex_refraction.jl`.
 
 For notation, continuum equations, and the numerical implementation behind the
 model, start with [Notation](@ref) and [Theory](@ref).

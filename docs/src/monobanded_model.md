@@ -54,7 +54,20 @@ and
 The moment source contribution ``K_\alpha S_A`` preserves the local wavevector
 under pure action growth or decay. The refraction force
 ``- A K_\beta \Gamma_{\beta\alpha}`` bends the wavevector without directly
-changing action.
+changing action. Repeated ``\beta`` indices are summed, so the two moment
+refraction tendencies are
+
+```math
+\left.\frac{\partial (A K_x)}{\partial t}\right|_{\mathrm{refraction}}
+= -A (K_x \Gamma_{xx} + K_y \Gamma_{yx}),
+```
+
+and
+
+```math
+\left.\frac{\partial (A K_y)}{\partial t}\right|_{\mathrm{refraction}}
+= -A (K_x \Gamma_{xy} + K_y \Gamma_{yy}).
+```
 
 For no current coupling, the intrinsic deep-water frequency and group velocity
 are
@@ -91,6 +104,10 @@ frequency and ray velocity are
   + \frac{\boldsymbol{K}\cdot\boldsymbol{H}}{\kappa}\boldsymbol{K}.
 ```
 
+The intrinsic part of this formula is currently the deep-water relation
+``\sqrt{g\kappa}``. A finite-depth Q grid controls the vertical projection of
+the current; it does not change the monobanded intrinsic dispersion relation.
+
 The fixed-``\kappa`` current-gradient tensor used by refraction is
 
 ```math
@@ -106,9 +123,7 @@ of the ``x`` component of ``\boldsymbol{u}^{D}`` at fixed ``\kappa``.
 
 The basic constructor takes only the physical grid as a positional argument:
 
-```julia
-model = MonobandedWaveModel(grid; kwargs...)
-```
+`MonobandedWaveModel(grid; kwargs...)`
 
 Common keywords:
 
@@ -128,10 +143,12 @@ Common keywords:
 
 The model follows Oceananigans conventions, so `time_step!(model, Δt)` advances
 the model and `fields(model)` returns prognostic and diagnostic fields.
+Initialize a prescribed wavevector by setting the moments consistently:
+`AKx = A * Kx` and `AKy = A * Ky`.
 
 ## Minimal Setup
 
-```julia
+```@example monobanded_model
 using Oceananigans, Ripple
 
 grid = RectilinearGrid(CPU();
@@ -144,12 +161,16 @@ grid = RectilinearGrid(CPU();
 
 model = MonobandedWaveModel(grid; timestepper = :RungeKutta3)
 
+packet(x, y, z) = exp(-((x - 16)^2 + (y - 16)^2) / 16)
+
 set!(model;
-     A   = (x, y, z) -> exp(-((x - 16)^2 + (y - 16)^2) / 16),
-     AKx = (x, y, z) -> 0.5 * exp(-((x - 16)^2 + (y - 16)^2) / 16),
+     A   = packet,
+     AKx = (x, y, z) -> 0.5 * packet(x, y, z),
      AKy = 0)
 
 time_step!(model, 0.05)
+
+model
 ```
 
 Here ``K_x = AK_x/A \approx 0.5`` inside the packet and ``K_y = 0``.
@@ -161,15 +182,15 @@ deep-water propagation with no current coupling.
 
 For prescribed currents, pass Oceananigans fields:
 
-```julia
+```@example monobanded_model
 u = CenterField(grid)
 v = CenterField(grid)
 set!(u, (x, y, z) -> 0.1 * sin(2π * y / 32))
 set!(v, 0)
 
-model = MonobandedWaveModel(grid;
-                            velocities = PrescribedVelocities(; u, v),
-                            advection = WENO())
+current_model = MonobandedWaveModel(grid;
+                                    velocities = PrescribedVelocities(; u, v),
+                                    advection = WENO())
 ```
 
 A bare `velocities=(; u, v)` is accepted and is converted to
@@ -255,8 +276,8 @@ encode the wavevector direction.
 
 ## Example Validation
 
-The [Monobanded Linear-Shear Refraction](@ref) example checks a nontrivial
-quasi-analytic solution. For a barotropic linear shear
+The `examples/monobanded_linear_shear_refraction.jl` example checks a
+nontrivial quasi-analytic solution. For a barotropic linear shear
 ``u_x^D(y)=U_0+S(y-y_c)``, ``u_y^D=0``, the monobanded refraction law predicts
 
 ```math

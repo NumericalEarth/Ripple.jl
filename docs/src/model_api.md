@@ -106,9 +106,12 @@ projection depth from that grid. Array-valued velocities and
 `PseudomomentumVelocities` can either pass an explicit `q_grid` or let Ripple
 build one from finite model `depth`:
 
-```julia
+```@example model_api
+using Oceananigans, Ripple
+
 wave_grid = RectilinearGrid(CPU();
                             size=(8, 4),
+                            halo=(3, 3),
                             x=(0, 8),
                             y=(0, 4),
                             topology=(Periodic, Periodic, Flat))
@@ -120,9 +123,14 @@ q_grid = RectilinearGrid(CPU();
                          z=(-1, 0),
                          topology=(Periodic, Periodic, Bounded))
 
+spectral_grid = PolarWaveVectorGrid(; κ=[0.5], φ=[0.0])
+
 model = SpectralWaveModel(wave_grid, spectral_grid;
-                          velocities=PseudomomentumVelocities(),
-                          depth=1.0)
+                          velocities=PseudomomentumVelocities(; q_grid),
+                          depth=1.0,
+                          advection=nothing)
+
+model isa SpectralWaveModel
 ```
 
 ## Spectral Grids

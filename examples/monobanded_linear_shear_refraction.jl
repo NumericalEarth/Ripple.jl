@@ -104,6 +104,8 @@ set!(model;
      AKx = (x, y, z) -> Kx0 * initial_action(x, y),
      AKy = (x, y, z) -> Ky0 * initial_action(x, y))
 
+nothing #hide
+
 # ## Quasi-analytic reference
 #
 # With ``\kappa(t) = |K(t)|`` and
