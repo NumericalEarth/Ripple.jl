@@ -122,7 +122,12 @@ end
     q_cell_integral_kappa_derivative_kernel(kernel, kappa, z₁, z₂, depth)
 
 @inline q_depth_at(depth::Number, i, j) = depth
-@inline q_depth_at(depth, i, j) = depth[i, j]
+@inline q_depth_at(depth::Oceananigans.Fields.ConstantField, i, j) = depth.constant
+@inline function q_depth_at(depth, i, j)
+    iᵈ = ifelse(i > size(depth, 1), size(depth, 1), i)
+    jᵈ = ifelse(j > size(depth, 2), size(depth, 2), j)
+    return depth[iᵈ, jᵈ]
+end
 
 q_depth_on_architecture(arch, depth::Number) = depth
 q_depth_on_architecture(arch, depth) = on_architecture(arch, depth)

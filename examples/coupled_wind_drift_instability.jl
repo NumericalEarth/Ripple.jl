@@ -10,16 +10,18 @@
 #    into the wave model.
 # 3. **Spectral-coupled**: same, with `SpectralWaveModel`.
 #
-# Both coupled cases drive `UniformStokesDrift` from a deep-water Stokes-shear
-# formula `∂z uˢ = 2κ ε² c exp(2κz) K̂` evaluated on the wave-model state.
-# Calibration of `∂z` of the CWCM pseudomomentum directly is left as a
-# follow-up (units differ; the analytic formula gives the right magnitude).
+# The Stokes drift is the wave-model pseudomomentum: with the wave action
+# calibrated so `A·K·Q(0) = ε²·c` (giving `A = ε²·c/(2κ²)`), the depth profile
+# `p(z) = Q(z)·A·K` equals the deep-water Stokes drift `uˢ(z) = ε²·c·exp(2κz)`
+# exactly. We feed `∂z(uˢ), ∂z(vˢ)` into Oceananigans' `UniformStokesDrift` via
+# abstract operations on the wave-model pseudomomentum fields. (The full 3D
+# `StokesDrift` only accepts callable function derivatives, not Fields, so
+# we stay with the `UniformStokesDrift` path here — the cross-derivative
+# terms `∂y uˢ` etc. it drops are small for this flat-x flow.)
 
 using Oceananigans, Ripple
-using Oceananigans.AbstractOperations: @at
+using Oceananigans.AbstractOperations: @at, ∂z
 using CairoMakie, Printf, Random, Statistics
-import KernelAbstractions
-using KernelAbstractions: @kernel, @index
 
 CairoMakie.activate!(type = "png")
 
@@ -73,44 +75,22 @@ function set_spectral_wave_state!(model::SpectralWaveModel; action=1, Kx=κ0, Ky
 end
 
 const steepness = 0.16
+const A_init = steepness^2 * sqrt(g / κ0) / (2κ0^2)
 
 function build_wave_model(::Val{:monobanded}, grid, uᴸ, vᴸ)
     m = MonobandedWaveModel(grid; velocities=(; u=uᴸ, v=vᴸ),
                             advection=Centered(), timestepper=:RungeKutta3,
                             gravitational_acceleration=g)
-    set!(m; A=1, AKx=κ0, AKy=0)
+    set!(m; A=A_init, AKx=A_init * κ0, AKy=0)
     return m
 end
 
 function build_wave_model(::Val{:spectral}, grid, uᴸ, vᴸ)
     m = SpectralWaveModel(grid, spectral_wave_grid(); velocities=(; u=uᴸ, v=vᴸ),
                           depth=Lz, sources=nothing, timestepper=:RungeKutta3)
-    set_spectral_wave_state!(m)
+    set_spectral_wave_state!(m; action=A_init)
     Ripple.update_coupling!(m)
     return m
-end
-
-# Wave-bulk state used by the Stokes-shear kernel. Returns dense arrays of
-# A, Kx, Ky, κ on the physical grid; the spectral version computes them
-# from `m0`/`first_moment` of the spectral action field.
-function wave_bulk_arrays(m::MonobandedWaveModel)
-    return (Array(interior(m.action)),
-            Array(interior(m.diagnostics.Kx)),
-            Array(interior(m.diagnostics.Ky)),
-            Array(interior(m.diagnostics.κ)))
-end
-
-function wave_bulk_arrays(m::SpectralWaveModel)
-    A_field = m0(m.action); compute!(A_field)
-    Mx_field, My_field = first_moment(m.action); compute!(Mx_field); compute!(My_field)
-    A = Array(interior(A_field))
-    Mx = Array(interior(Mx_field))
-    My = Array(interior(My_field))
-    denominator = max.(A, sqrt(eps(Float64)))
-    Kx = Mx ./ denominator
-    Ky = My ./ denominator
-    κ = max.(hypot.(Kx, Ky), sqrt(eps(Float64)))
-    return A, Kx, Ky, κ
 end
 
 wave_substeps(::MonobandedWaveModel) = monobanded_wave_substeps
@@ -126,39 +106,11 @@ wave_substeps(::SpectralWaveModel)   = spectral_wave_substeps
 noise_envelope(z) = exp(z / 0.012)
 noisy(y, z) = noise_speed * noise_envelope(z) * randn()
 
-# Stokes-shear kernel: builds `∂z uˢ = 2κ ε² c exp(2κz) K̂` from wave-model
-# arrays (A, Kx, Ky, κ). Locations: `∂z uˢ` at (Face, Center, Face), `∂z vˢ`
-# at (Center, Face, Center) — matching where Oceananigans naturally
-# interpolates these for the vortex force.
-@kernel function _stokes_shear_kernel!(∂z_uˢ, ∂z_vˢ, A, Kx, Ky, κ, zf,
-                                       ε, ref_A, gravity, κ_max)
-    j, k = @index(Global, NTuple)
-    A⁺ = max(A[1, j, 1], zero(eltype(A)))
-    Kxᵢ, Kyᵢ = Kx[1, j, 1], Ky[1, j, 1]
-    κᵢ = max(κ[1, j, 1], sqrt(eps(eltype(κ))))
-    K_norm = max(hypot(Kxᵢ, Kyᵢ), sqrt(eps(eltype(κ))))
-    κˢ = min(κᵢ, κ_max)
-    c  = sqrt(gravity / κˢ)
-    surface_uˢ = ε^2 * (A⁺ / ref_A) * c
-    expz_uˢ = exp(2κˢ * zf[k])
-    @inbounds ∂z_uˢ[1, j, k] = 2κˢ * surface_uˢ * expz_uˢ * Kxᵢ / K_norm
-    @inbounds ∂z_vˢ[1, j, k] = 2κˢ * surface_uˢ * expz_uˢ * Kyᵢ / K_norm
-end
-
-function refresh_stokes_shear!(∂z_uˢ, ∂z_vˢ, wave_model, ref_A)
-    grid = wave_model.grid
-    A, Kx, Ky, κ = wave_bulk_arrays(wave_model)
-    kernel! = _stokes_shear_kernel!(KernelAbstractions.CPU(), (8, 8), (grid.Ny, grid.Nz + 1))
-    kernel!(interior(∂z_uˢ), interior(∂z_vˢ), A, Kx, Ky, κ,
-            zfaces(grid), steepness, ref_A, g, 1.5κ0)
-    KernelAbstractions.synchronize(KernelAbstractions.CPU())
-    fill_halo_regions!((∂z_uˢ, ∂z_vˢ))
-    return nothing
-end
-
 function build_case(; coupled_waves, wave_model_kind=:monobanded, seed=1234)
     grid = wind_drift_grid()
 
+    uˢ = Field{Face,   Center, Center}(grid)
+    vˢ = Field{Center, Face,   Center}(grid)
     ∂z_uˢ = Field{Face,   Center, Face  }(grid)
     ∂z_vˢ = Field{Center, Face,   Center}(grid)
     stokes_drift = UniformStokesDrift(grid; ∂z_uˢ, ∂z_vˢ)
@@ -175,8 +127,13 @@ function build_case(; coupled_waves, wave_model_kind=:monobanded, seed=1234)
     compute!(uᴸ); compute!(vᴸ); fill_halo_regions!((uᴸ, vᴸ))
 
     wave_model = build_wave_model(Val(wave_model_kind), grid, uᴸ, vᴸ)
-    ref_A = mean(first(wave_bulk_arrays(wave_model)))
-    refresh_stokes_shear!(∂z_uˢ, ∂z_vˢ, wave_model, ref_A)
+
+    function refresh_stokes_drift!()
+        p_x, p_y = pseudomomentum_fields(wave_model)
+        set!(uˢ, p_x); set!(vˢ, p_y); fill_halo_regions!((uˢ, vˢ))
+        set!(∂z_uˢ, ∂z(uˢ)); set!(∂z_vˢ, ∂z(vˢ))
+    end
+    refresh_stokes_drift!()
 
     function update_wave_model!(sim)
         compute!(uᴸ); compute!(vᴸ); fill_halo_regions!((uᴸ, vᴸ))
@@ -184,7 +141,7 @@ function build_case(; coupled_waves, wave_model_kind=:monobanded, seed=1234)
         if coupled_waves && remaining > 0
             substeps = wave_substeps(wave_model)
             for _ in 1:substeps; time_step!(wave_model, remaining / substeps); end
-            refresh_stokes_shear!(∂z_uˢ, ∂z_vˢ, wave_model, ref_A)
+            refresh_stokes_drift!()
         end
     end
 
