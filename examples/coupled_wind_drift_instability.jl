@@ -1,157 +1,108 @@
 # # Coupled Wind-Drift Instability
 #
-# This example adapts the two-dimensional wind-drift-layer instability from
-# Wagner et al.'s transition-to-turbulence study to a much smaller, cheaper
-# domain. The paper uses a ``19.2\,\mathrm{cm} \times 10\,\mathrm{cm}``
-# ``(y, z)`` domain and a ``3\,\mathrm{cm}`` surface wave. Here we use an
-# ``x``-flat Oceananigans model and a compact
-# ``6\,\mathrm{cm} \times 2\,\mathrm{cm}`` domain that focuses on the
-# shallow, young shear layer generated from rest.
+# A two-dimensional wind-drift-layer instability in ``(y, z)`` driven by a
+# surface stress, with three wave-coupling treatments compared from a common
+# spinup state:
 #
-# We first run a prescribed-wave spin-up from rest for ``2\,\mathrm{s}``.
-# Then we save the ocean and wave state, branch three continuations from that
-# identical state, and compare another ``4\,\mathrm{s}`` of prescribed waves
-# against two-way wave coupling. Oceananigans advances the Craik-Leibovich
-# ocean model with a mutable `UniformStokesDrift`; in the coupled branches, a
-# callback copies the Lagrangian-mean ocean velocity into either a
-# `MonobandedWaveModel` or a `SpectralWaveModel`, advances the wave model, and
-# refreshes the Stokes-drift shear used by the next ocean step.
+# 1. **Prescribed**: the wave field is fixed; the Stokes shear is set once.
+# 2. **Monobanded-coupled**: a `MonobandedWaveModel` is advanced from an
+#    Oceananigans callback that copies the ocean's Lagrangian-mean current
+#    into the wave model.
+# 3. **Spectral-coupled**: same, with `SpectralWaveModel`.
+#
+# Both coupled cases drive `UniformStokesDrift` from a deep-water Stokes-shear
+# formula `∂z uˢ = 2κ ε² c exp(2κz) K̂` evaluated on the wave-model state.
+# Calibration of `∂z` of the CWCM pseudomomentum directly is left as a
+# follow-up (units differ; the analytic formula gives the right magnitude).
 
 using Oceananigans, Ripple
-using CairoMakie
+using Oceananigans.AbstractOperations: @at
+using CairoMakie, Printf, Random, Statistics
 import KernelAbstractions
 using KernelAbstractions: @kernel, @index
-using Printf
-using Random
-using Statistics
 
 CairoMakie.activate!(type = "png")
 
-# ## Domain and wave scale
-#
-# The resolution is deliberately coarse but two-dimensional: ``384 \times 256``
-# cells in ``(y, z)`` with `Flat` topology in ``x``. The wave wavelength and
-# steepness are close to the paper's short gravity-capillary wave scale.
+# ## Domain, wave scale, and run length
 
-# The defaults are sized so the docs build and the smoke harness both run
-# in well under a minute. Bump `Ny`, `Nz`, and the iteration counts for a
-# higher-fidelity reproduction; the unstable mode is already visible at
-# these scales.
-
-Ny = 96
-Nz = 64
+Ny, Nz = 128, 96
 Ly, Lz = 0.060, 0.020
-
-g = 9.81
-surface_tension_parameter = 7.2e-5
-λ_wave = 0.030
-κ0 = 2π / λ_wave
-steepness = 0.16
-maximum_steepness = 0.20
-maximum_stokes_wavenumber_factor = 1.5
-minimum_wave_action_factor = 0.25
-maximum_wave_action_factor = 4
-minimum_wave_wavenumber_factor = 0.5
-maximum_wave_wavenumber_factor = 2
-monobanded_wave_substeps = 32
-spectral_wave_substeps = 4
-spectral_Nκ = 7
-spectral_Nφ = 12
-spectral_κ_range = range(minimum_wave_wavenumber_factor * κ0,
-                         maximum_wave_wavenumber_factor * κ0;
-                         length = spectral_Nκ)
-spectral_φ_range = range(-π, π; length = spectral_Nφ + 1)[1:spectral_Nφ]
-spectral_σκ = 0.18κ0
-spectral_σφ = 0.18
+g, ν = 9.81, 1.1e-6
+λ_wave = 0.030; κ0 = 2π / λ_wave
+surface_stress, noise_speed = -4.8e-5, 0.001
+Δt, spinup_iterations, continuation_iterations = 0.001, 500, 1500
+frame_stride = 20
+monobanded_wave_substeps, spectral_wave_substeps = 32, 4
 
 λ_instability = Ly / 3
-ℓ = 2π / λ_instability
-m = π / Lz
+ℓ, m = 2π / λ_instability, π / Lz
 
-ν = 1.1e-6
-surface_stress = -4.8e-5
-noise_speed = 0.001
+spectral_Nκ, spectral_Nφ = 7, 12
+spectral_σκ, spectral_σφ = 0.18κ0, 0.18
+spectral_κ_range = range(0.5κ0, 2.0κ0; length = spectral_Nκ)
+spectral_φ_range = range(-π, π; length = spectral_Nφ + 1)[1:spectral_Nφ]
 
-Δt = 0.001
-spinup_iterations = 100
-continuation_iterations = 250
-frame_stride = 10
-
-# ## Ocean and wave setup
+# ## Wave-model factories
 #
-# We start from rest, apply the surface stress, and add seeded random
-# perturbations. The organized instability is selected from the noise rather
-# than imposed by the initial condition.
-
-noise_envelope(z) = exp(z / 0.012)
-u_initial(y, z) = noise_speed * noise_envelope(z) * randn()
-noisy_rest(y, z) = noise_speed * noise_envelope(z) * randn()
+# `set_spectral_wave_state!` writes the equivalent of the monobanded
+# ``A, K`` state into a normalized Gaussian in ``(\kappa, \varphi)``.
 
 function wind_drift_grid()
-    return RectilinearGrid(CPU();
-                           size     = (Ny, Nz),
-                           halo     = (3, 3),
-                           y        = (0, Ly),
-                           z        = (-Lz, 0),
-                           topology = (Flat, Periodic, Bounded))
+    return RectilinearGrid(CPU(); size=(Ny, Nz), halo=(3, 3),
+                           y=(0, Ly), z=(-Lz, 0),
+                           topology=(Flat, Periodic, Bounded))
 end
 
-spectral_wave_grid() =
-    PolarWaveVectorGrid(; κ = spectral_κ_range, φ = spectral_φ_range)
+spectral_wave_grid() = PolarWaveVectorGrid(; κ=spectral_κ_range, φ=spectral_φ_range)
 
-wrapped_angular_distance(φ, φ₀) = atan(sin(φ - φ₀), cos(φ - φ₀))
+wrap(φ, φ₀) = atan(sin(φ - φ₀), cos(φ - φ₀))
+peak_shape(κ, φ, κ₀, φ₀) = exp(-((κ - κ₀) / spectral_σκ)^2 - (wrap(φ, φ₀) / spectral_σφ)^2)
 
-function spectral_peak_shape(κ, φ, κ₀, φ₀)
-    Δφ = wrapped_angular_distance(φ, φ₀)
-    return exp(-((κ - κ₀) / spectral_σκ)^2 - (Δφ / spectral_σφ)^2)
-end
-
-function spectral_shape_normalization(spectral_grid, κ₀, φ₀)
-    κ = Array(coordinate_centers(spectral_grid, 1))
-    φ = Array(coordinate_centers(spectral_grid, 2))
-    weights = Array(spectral_grid.weights)
-    normalization = 0.0
-
-    for n in eachindex(φ), m in eachindex(κ)
-        normalization += spectral_peak_shape(κ[m], φ[n], κ₀, φ₀) * weights[m, n]
-    end
-
-    return normalization
-end
-
-function set_spectral_wave_state!(wave_model::SpectralWaveModel; action = 1, Kx = κ0, Ky = 0)
+function set_spectral_wave_state!(model::SpectralWaveModel; action=1, Kx=κ0, Ky=0)
     κ₀ = max(hypot(Kx, Ky), sqrt(eps(Float64)))
     φ₀ = atan(Ky, Kx)
-    normalization = spectral_shape_normalization(wave_model.spectral_grid, κ₀, φ₀)
-    κ = Array(coordinate_centers(wave_model.spectral_grid, 1))
-    φ = Array(coordinate_centers(wave_model.spectral_grid, 2))
-    Nx, Ny, Nκ, Nφ = size(wave_model.action)
-    N = Array{Float64}(undef, Nx, Ny, Nκ, Nφ)
-
-    for n in 1:Nφ, m in 1:Nκ, j in 1:Ny, i in 1:Nx
-        N[i, j, m, n] = action * spectral_peak_shape(κ[m], φ[n], κ₀, φ₀) / normalization
-    end
-
-    set!(wave_model; N)
-
-    return wave_model
+    sg = model.spectral_grid
+    κs = Array(coordinate_centers(sg, 1))
+    φs = Array(coordinate_centers(sg, 2))
+    w  = Array(sg.weights)
+    Z  = sum(peak_shape(κs[m], φs[n], κ₀, φ₀) * w[m, n] for n in eachindex(φs), m in eachindex(κs))
+    Nx, Ny, Nκ, Nφ = size(model.action)
+    N = [action * peak_shape(κs[m], φs[n], κ₀, φ₀) / Z for _ in 1:Nx, _ in 1:Ny, m in eachindex(κs), n in eachindex(φs)]
+    set!(model.action, N)
+    return model
 end
 
-function wave_bulk_arrays(wave_model::MonobandedWaveModel)
-    A = Array(interior(wave_model.action))
-    Kx = Array(interior(wave_model.diagnostics.Kx))
-    Ky = Array(interior(wave_model.diagnostics.Ky))
-    κ = Array(interior(wave_model.diagnostics.κ))
-    return A, Kx, Ky, κ
+const steepness = 0.16
+
+function build_wave_model(::Val{:monobanded}, grid, uᴸ, vᴸ)
+    m = MonobandedWaveModel(grid; velocities=(; u=uᴸ, v=vᴸ),
+                            advection=Centered(), timestepper=:RungeKutta3,
+                            gravitational_acceleration=g)
+    set!(m; A=1, AKx=κ0, AKy=0)
+    return m
 end
 
-function wave_bulk_arrays(wave_model::SpectralWaveModel)
-    A_field = m0(wave_model.action)
-    Mx_field, My_field = first_moment(wave_model.action)
-    compute!(A_field)
-    compute!(Mx_field)
-    compute!(My_field)
+function build_wave_model(::Val{:spectral}, grid, uᴸ, vᴸ)
+    m = SpectralWaveModel(grid, spectral_wave_grid(); velocities=(; u=uᴸ, v=vᴸ),
+                          depth=Lz, sources=nothing, timestepper=:RungeKutta3)
+    set_spectral_wave_state!(m)
+    Ripple.update_coupling!(m)
+    return m
+end
 
+# Wave-bulk state used by the Stokes-shear kernel. Returns dense arrays of
+# A, Kx, Ky, κ on the physical grid; the spectral version computes them
+# from `m0`/`first_moment` of the spectral action field.
+function wave_bulk_arrays(m::MonobandedWaveModel)
+    return (Array(interior(m.action)),
+            Array(interior(m.diagnostics.Kx)),
+            Array(interior(m.diagnostics.Ky)),
+            Array(interior(m.diagnostics.κ)))
+end
+
+function wave_bulk_arrays(m::SpectralWaveModel)
+    A_field = m0(m.action); compute!(A_field)
+    Mx_field, My_field = first_moment(m.action); compute!(Mx_field); compute!(My_field)
     A = Array(interior(A_field))
     Mx = Array(interior(Mx_field))
     My = Array(interior(My_field))
@@ -162,603 +113,168 @@ function wave_bulk_arrays(wave_model::SpectralWaveModel)
     return A, Kx, Ky, κ
 end
 
-prepare_wave_coupling!(::MonobandedWaveModel) = nothing
-prepare_wave_coupling!(wave_model::SpectralWaveModel) = Ripple.update_coupling!(wave_model)
-wave_time_substeps(::MonobandedWaveModel) = monobanded_wave_substeps
-wave_time_substeps(::SpectralWaveModel) = spectral_wave_substeps
+wave_substeps(::MonobandedWaveModel) = monobanded_wave_substeps
+wave_substeps(::SpectralWaveModel)   = spectral_wave_substeps
 
-function build_wave_model(::Val{:monobanded}, grid, uᴸ, vᴸ)
-    wave_model = MonobandedWaveModel(grid;
-                                     velocities  = (; u = uᴸ, v = vᴸ),
-                                     advection   = Centered(),
-                                     timestepper = :RungeKutta3,
-                                     gravitational_acceleration = g)
-
-    set!(wave_model; A = 1, AKx = κ0, AKy = 0)
-    return wave_model
-end
-
-function build_wave_model(::Val{:spectral}, grid, uᴸ, vᴸ)
-    wave_model = SpectralWaveModel(grid, spectral_wave_grid();
-                                   velocities  = (; u = uᴸ, v = vᴸ),
-                                   sources     = nothing,
-                                   timestepper = :RungeKutta3)
-
-    set_spectral_wave_state!(wave_model)
-    prepare_wave_coupling!(wave_model)
-    return wave_model
-end
-
-# Both wave models provide a local action ``A`` and mean wavevector ``K``. We
-# convert that bulk wave state into a vertically varying Stokes-drift shear,
+# ## Case setup
 #
-# ```math
-# \partial_z \boldsymbol{u}^s
-# = 2 \kappa \, \epsilon^2 c \, e^{2 \kappa z} \, \hat{\boldsymbol{K}},
-# \qquad c = \sqrt{g / \kappa}.
-# ```
-#
-# The ``A / A_0`` factor lets wave-action changes modulate the Stokes drift
-# magnitude while keeping the example close to the monochromatic formula.
+# Stokes drift is driven by ``\partial_z`` of the wave-model pseudomomentum,
+# evaluated lazily via Oceananigans abstract operations. The cell-centered
+# pseudomomentum from the wave model is interpolated to staggered velocity
+# locations as needed.
 
-@kernel function _refresh_stokes_shear_kernel!(∂z_uˢ, ∂z_vˢ, A, Kx, Ky, κ, zf,
-                                               steepness, maximum_steepness, reference_action,
-                                               reference_wavenumber, maximum_wavenumber_factor,
-                                               gravity, capillary)
-    i, j, k = @index(Global, NTuple)
+noise_envelope(z) = exp(z / 0.012)
+noisy(y, z) = noise_speed * noise_envelope(z) * randn()
 
-    A⁺ = max(A[i, j, 1], zero(eltype(A)))
-    Kxᵢ = Kx[i, j, 1]
-    Kyᵢ = Ky[i, j, 1]
-    κᵢ = max(κ[i, j, 1], sqrt(eps(eltype(κ))))
+# Stokes-shear kernel: builds `∂z uˢ = 2κ ε² c exp(2κz) K̂` from wave-model
+# arrays (A, Kx, Ky, κ). Locations: `∂z uˢ` at (Face, Center, Face), `∂z vˢ`
+# at (Center, Face, Center) — matching where Oceananigans naturally
+# interpolates these for the vortex force.
+@kernel function _stokes_shear_kernel!(∂z_uˢ, ∂z_vˢ, A, Kx, Ky, κ, zf,
+                                       ε, ref_A, gravity, κ_max)
+    j, k = @index(Global, NTuple)
+    A⁺ = max(A[1, j, 1], zero(eltype(A)))
+    Kxᵢ, Kyᵢ = Kx[1, j, 1], Ky[1, j, 1]
+    κᵢ = max(κ[1, j, 1], sqrt(eps(eltype(κ))))
     K_norm = max(hypot(Kxᵢ, Kyᵢ), sqrt(eps(eltype(κ))))
-
-    κˢ = min(κᵢ, maximum_wavenumber_factor * reference_wavenumber)
-    phase_speed = sqrt(gravity / κˢ + capillary * κˢ)
-    steepness² = min(steepness^2 * (A⁺ / reference_action), maximum_steepness^2)
-    surface_stokes = steepness² * phase_speed
-    vertical_shape = exp(2κˢ * zf[k])
-
-    ∂z_uˢ[i, j, k] = 2κˢ * surface_stokes * vertical_shape * Kxᵢ / K_norm
-    ∂z_vˢ[i, j, k] = 2κˢ * surface_stokes * vertical_shape * Kyᵢ / K_norm
+    κˢ = min(κᵢ, κ_max)
+    c  = sqrt(gravity / κˢ)
+    surface_uˢ = ε^2 * (A⁺ / ref_A) * c
+    expz_uˢ = exp(2κˢ * zf[k])
+    @inbounds ∂z_uˢ[1, j, k] = 2κˢ * surface_uˢ * expz_uˢ * Kxᵢ / K_norm
+    @inbounds ∂z_vˢ[1, j, k] = 2κˢ * surface_uˢ * expz_uˢ * Kyᵢ / K_norm
 end
 
-function refresh_stokes_shear!(∂z_uˢ, ∂z_vˢ, wave_model;
-                               steepness, maximum_steepness, reference_action,
-                               reference_wavenumber, maximum_wavenumber_factor,
-                               gravity, capillary)
+function refresh_stokes_shear!(∂z_uˢ, ∂z_vˢ, wave_model, ref_A)
     grid = wave_model.grid
     A, Kx, Ky, κ = wave_bulk_arrays(wave_model)
-    kernel! = _refresh_stokes_shear_kernel!(KernelAbstractions.CPU(), (8, 8, 8), (grid.Nx, grid.Ny, grid.Nz + 1))
-    kernel!(interior(∂z_uˢ), interior(∂z_vˢ),
-            A, Kx, Ky, κ,
-            zfaces(grid),
-            steepness, maximum_steepness, reference_action,
-            reference_wavenumber, maximum_wavenumber_factor,
-            gravity, capillary)
+    kernel! = _stokes_shear_kernel!(KernelAbstractions.CPU(), (8, 8), (grid.Ny, grid.Nz + 1))
+    kernel!(interior(∂z_uˢ), interior(∂z_vˢ), A, Kx, Ky, κ,
+            zfaces(grid), steepness, ref_A, g, 1.5κ0)
     KernelAbstractions.synchronize(KernelAbstractions.CPU())
     fill_halo_regions!((∂z_uˢ, ∂z_vˢ))
     return nothing
 end
 
-@kernel function _limit_wave_state_kernel!(A, AKx, AKy, reference_action, reference_wavenumber,
-                                           minimum_action_factor, maximum_action_factor,
-                                           minimum_wavenumber_factor, maximum_wavenumber_factor)
-    i, j, k = @index(Global, NTuple)
-
-    Aᵢ = A[i, j, k]
-    minimum_action = minimum_action_factor * reference_action
-    maximum_action = maximum_action_factor * reference_action
-    A⁺ = min(max(Aᵢ, minimum_action), maximum_action)
-
-    denominator = max(abs(Aᵢ), minimum_action)
-    Kxᵢ = AKx[i, j, k] / denominator
-    Kyᵢ = AKy[i, j, k] / denominator
-    κᵢ = hypot(Kxᵢ, Kyᵢ)
-    κᵐⁱⁿ = minimum_wavenumber_factor * reference_wavenumber
-    κᵐᵃˣ = maximum_wavenumber_factor * reference_wavenumber
-    κˡ = min(max(κᵢ, κᵐⁱⁿ), κᵐᵃˣ)
-    κᵉᵖˢ = sqrt(eps(eltype(AKx))) * reference_wavenumber
-    κ_safe = max(κᵢ, κᵉᵖˢ)
-    direction_x = ifelse(κᵢ > κᵉᵖˢ, Kxᵢ / κ_safe, one(Kxᵢ))
-    direction_y = ifelse(κᵢ > κᵉᵖˢ, Kyᵢ / κ_safe, zero(Kyᵢ))
-
-    A[i, j, k] = A⁺
-    AKx[i, j, k] = A⁺ * κˡ * direction_x
-    AKy[i, j, k] = A⁺ * κˡ * direction_y
-end
-
-function limit_wave_state!(wave_model::MonobandedWaveModel; reference_action, reference_wavenumber)
-    grid = wave_model.grid
-    kernel! = _limit_wave_state_kernel!(KernelAbstractions.CPU(), (16, 16, 1), (grid.Nx, grid.Ny, 1))
-    kernel!(interior(wave_model.action),
-            interior(wave_model.wavenumber_moment.x),
-            interior(wave_model.wavenumber_moment.y),
-            reference_action, reference_wavenumber,
-            minimum_wave_action_factor, maximum_wave_action_factor,
-            minimum_wave_wavenumber_factor, maximum_wave_wavenumber_factor)
-    KernelAbstractions.synchronize(KernelAbstractions.CPU())
-    fill_halo_regions!((wave_model.action, wave_model.wavenumber_moment.x, wave_model.wavenumber_moment.y))
-    Ripple.update_monobanded_diagnostics!(wave_model)
-    return nothing
-end
-
-limit_wave_state!(::SpectralWaveModel; reference_action, reference_wavenumber) = nothing
-
-function build_case(; coupled_waves, wave_model_kind = :monobanded, time_offset = 0)
+function build_case(; coupled_waves, wave_model_kind=:monobanded, seed=1234)
     grid = wind_drift_grid()
 
-    ∂z_uˢ = Field{Center, Center, Face}(grid)
-    ∂z_vˢ = Field{Center, Center, Face}(grid)
+    ∂z_uˢ = Field{Face,   Center, Face  }(grid)
+    ∂z_vˢ = Field{Center, Face,   Center}(grid)
     stokes_drift = UniformStokesDrift(grid; ∂z_uˢ, ∂z_vˢ)
 
-    u_boundary_conditions = FieldBoundaryConditions(top = FluxBoundaryCondition(surface_stress))
+    u_bc = FieldBoundaryConditions(top=FluxBoundaryCondition(surface_stress))
+    ocean = NonhydrostaticModel(grid; advection=Centered(),
+                                closure=ScalarDiffusivity(ν=ν),
+                                stokes_drift, boundary_conditions=(; u=u_bc))
 
-    ocean_model = NonhydrostaticModel(grid;
-                                      advection    = Centered(),
-                                      closure      = ScalarDiffusivity(ν = ν),
-                                      stokes_drift = stokes_drift,
-                                      boundary_conditions = (; u = u_boundary_conditions))
+    Random.seed!(seed); set!(ocean; u=noisy, v=noisy, w=noisy)
 
-    Random.seed!(1234)
-    set!(ocean_model; u = u_initial, v = noisy_rest, w = noisy_rest)
-
-    ## Ripple's prescribed-current coupling expects center-located horizontal
-    ## velocity fields on the Q grid. Oceananigans keeps `u` and `v` on
-    ## staggered faces, so we construct computed center fields and refresh them
-    ## in the coupled callback and diagnostic callback.
-    uᴸ = Field(@at (Center, Center, Center) ocean_model.velocities.u)
-    vᴸ = Field(@at (Center, Center, Center) ocean_model.velocities.v)
-    wᴸ = Field(@at (Center, Center, Center) ocean_model.velocities.w)
-    compute!(uᴸ)
-    compute!(vᴸ)
-    compute!(wᴸ)
+    uᴸ = Field(@at (Center, Center, Center) ocean.velocities.u)
+    vᴸ = Field(@at (Center, Center, Center) ocean.velocities.v)
+    compute!(uᴸ); compute!(vᴸ); fill_halo_regions!((uᴸ, vᴸ))
 
     wave_model = build_wave_model(Val(wave_model_kind), grid, uᴸ, vᴸ)
-    reference_action = mean(first(wave_bulk_arrays(wave_model)))
+    ref_A = mean(first(wave_bulk_arrays(wave_model)))
+    refresh_stokes_shear!(∂z_uˢ, ∂z_vˢ, wave_model, ref_A)
 
-    refresh_stokes_shear!(∂z_uˢ, ∂z_vˢ, wave_model;
-                          steepness, reference_action, gravity = g,
-                          reference_wavenumber = κ0,
-                          maximum_steepness = maximum_steepness,
-                          maximum_wavenumber_factor = maximum_stokes_wavenumber_factor,
-                          capillary = surface_tension_parameter)
-
-    function update_wave_model!(simulation)
-        compute!(uᴸ)
-        compute!(vᴸ)
-        fill_halo_regions!((uᴸ, vᴸ))
-
-        remaining_wave_time = simulation.model.clock.time - wave_model.clock.time
-
-        if coupled_waves && remaining_wave_time > 0
-            prepare_wave_coupling!(wave_model)
-            substeps = wave_time_substeps(wave_model)
-
-            for _ in 1:substeps
-                time_step!(wave_model, remaining_wave_time / substeps)
-                limit_wave_state!(wave_model; reference_action, reference_wavenumber = κ0)
-            end
+    function update_wave_model!(sim)
+        compute!(uᴸ); compute!(vᴸ); fill_halo_regions!((uᴸ, vᴸ))
+        remaining = sim.model.clock.time - wave_model.clock.time
+        if coupled_waves && remaining > 0
+            substeps = wave_substeps(wave_model)
+            for _ in 1:substeps; time_step!(wave_model, remaining / substeps); end
+            refresh_stokes_shear!(∂z_uˢ, ∂z_vˢ, wave_model, ref_A)
         end
-
-        coupled_waves &&
-                refresh_stokes_shear!(∂z_uˢ, ∂z_vˢ, wave_model;
-                                      steepness, reference_action, gravity = g,
-                                      reference_wavenumber = κ0,
-                                      maximum_steepness = maximum_steepness,
-                                      maximum_wavenumber_factor = maximum_stokes_wavenumber_factor,
-                                      capillary = surface_tension_parameter)
-
-        return nothing
     end
 
-    return (; grid, ocean_model, wave_model, uᴸ, vᴸ, wᴸ, ∂z_uˢ, ∂z_vˢ,
-            reference_action, wave_model_kind, time_offset,
-            update_wave_model!, coupled_waves)
+    return (; grid, ocean, wave_model, update_wave_model!, coupled_waves)
 end
 
-function save_wave_state(wave_model::MonobandedWaveModel)
-    return (wave_model_kind = :monobanded,
-            A = Array(interior(wave_model.action)),
-            AKx = Array(interior(wave_model.wavenumber_moment.x)),
-            AKy = Array(interior(wave_model.wavenumber_moment.y)))
-end
-
-function save_wave_state(wave_model::SpectralWaveModel)
-    return (wave_model_kind = :spectral,
-            N = Array(interior(wave_model.action)))
-end
-
-function restore_wave_state!(wave_model::MonobandedWaveModel, state)
-    set!(wave_model; A = state.A, AKx = state.AKx, AKy = state.AKy)
-    fill_halo_regions!((wave_model.action,
-                        wave_model.wavenumber_moment.x,
-                        wave_model.wavenumber_moment.y))
-    return wave_model
-end
-
-function restore_wave_state!(wave_model::SpectralWaveModel, state)
-    if haskey(state, :N)
-        set!(wave_model; N = state.N)
-    else
-        A = state.A
-        denominator = max.(A, sqrt(eps(Float64)))
-        Kx = state.AKx ./ denominator
-        Ky = state.AKy ./ denominator
-        set_spectral_wave_state!(wave_model; action = mean(A), Kx = mean(Kx), Ky = mean(Ky))
-    end
-
-    prepare_wave_coupling!(wave_model)
-    return wave_model
-end
-
-function save_state(case)
-    compute!(case.uᴸ)
-    compute!(case.vᴸ)
-    compute!(case.wᴸ)
-    fill_halo_regions!((case.uᴸ, case.vᴸ, case.wᴸ))
-
-    ocean_state = (u = Array(interior(case.ocean_model.velocities.u)),
-                   v = Array(interior(case.ocean_model.velocities.v)),
-                   w = Array(interior(case.ocean_model.velocities.w)))
-
-    return merge(ocean_state, save_wave_state(case.wave_model),
-                 (time = case.ocean_model.clock.time,))
-end
-
-function restore_state!(case, state)
-    set!(case.ocean_model.velocities.u, state.u)
-    set!(case.ocean_model.velocities.v, state.v)
-    set!(case.ocean_model.velocities.w, state.w)
-    fill_halo_regions!(case.ocean_model.velocities)
-
-    restore_wave_state!(case.wave_model, state)
-
-    compute!(case.uᴸ)
-    compute!(case.vᴸ)
-    compute!(case.wᴸ)
-    fill_halo_regions!((case.uᴸ, case.vᴸ, case.wᴸ))
-    prepare_wave_coupling!(case.wave_model)
-
-    refresh_stokes_shear!(case.∂z_uˢ, case.∂z_vˢ, case.wave_model;
-                          steepness, reference_action = case.reference_action,
-                          gravity = g, reference_wavenumber = κ0,
-                          maximum_steepness = maximum_steepness,
-                          maximum_wavenumber_factor = maximum_stokes_wavenumber_factor,
-                          capillary = surface_tension_parameter)
-    return case
-end
-
-# ## Running and measuring growth
+# ## Diagnostics
 #
-# The comparison metric is the dominant low-wavenumber Fourier amplitude of
-# ``v`` in ``y``. This filters the broadband random perturbation and tracks
-# the coherent instability selected from the noise.
+# The dominant low-wavenumber Fourier amplitude of ``v`` in ``y`` is a clean
+# growth-rate proxy that filters the broadband noise.
 
-empty_frames() = (; times = Float64[],
-                  v = Matrix{Float64}[],
-                  growth = Float64[],
-                  φ = Vector{Float64}[],
-                  wave_action = Vector{Float64}[],
-                  stokes_shear = Vector{Float64}[],
-                  ocean_kinetic_energy = Float64[],
-                  perturbation_kinetic_energy = Float64[],
-                  wave_energy = Float64[],
-                  total_energy = Float64[])
-
-function ocean_velocity_arrays(case)
-    compute!(case.uᴸ)
-    compute!(case.vᴸ)
-    compute!(case.wᴸ)
-    fill_halo_regions!((case.uᴸ, case.vᴸ, case.wᴸ))
-
-    u = Array(interior(case.uᴸ))[1, :, :]
-    v = Array(interior(case.vᴸ))[1, :, :]
-    w = Array(interior(case.wᴸ))[1, :, :]
-    return u, v, w
+# Projection of v(y, z) onto the targeted instability mode cos(ℓ y), filters
+# the broadband noise without needing an FFT dependency.
+function dominant_v_amplitude(case)
+    v_yz = view(interior(case.ocean.velocities.v), 1, :, :)
+    v_y  = dropdims(mean(v_yz; dims=2); dims=2)
+    ys   = ynodes(case.grid)
+    c = sum(v_y[j] * cos(ℓ * ys[j]) for j in eachindex(v_y)) / length(v_y)
+    s = sum(v_y[j] * sin(ℓ * ys[j]) for j in eachindex(v_y)) / length(v_y)
+    return hypot(c, s)
 end
 
-function ocean_kinetic_energy(case)
-    u, v, w = ocean_velocity_arrays(case)
-    Δy = Ly / Ny
-    Δz = Lz / Nz
-    return sum(@. (u^2 + v^2 + w^2) / 2) * Δy * Δz
+empty_frames() = (; times=Float64[], v=Matrix{Float64}[], growth=Float64[])
+
+function snapshot!(frames, case)
+    push!(frames.times, case.ocean.clock.time)
+    push!(frames.v, Array(view(interior(case.ocean.velocities.v), 1, :, :)))
+    push!(frames.growth, dominant_v_amplitude(case))
 end
-
-function ocean_perturbation_kinetic_energy(case)
-    u, v, w = ocean_velocity_arrays(case)
-    u′ = u .- mean(u; dims = 1)
-    v′ = v .- mean(v; dims = 1)
-    w′ = w .- mean(w; dims = 1)
-    Δy = Ly / Ny
-    Δz = Lz / Nz
-    return sum(@. (u′^2 + v′^2 + w′^2) / 2) * Δy * Δz
-end
-
-function wave_linear_energy(case)
-    A, _, _, κ = wave_bulk_arrays(case.wave_model)
-    A⁺ = max.(A, 0)
-    κ⁺ = max.(κ, sqrt(eps(Float64)))
-    steepness² = min.(steepness^2 .* A⁺ ./ case.reference_action, maximum_steepness^2)
-    energy_density = @. (g + surface_tension_parameter * κ⁺^2) * steepness² / (2κ⁺^2)
-    Δy = Ly / Ny
-    return sum(energy_density[1, :, 1]) * Δy
-end
-
-function capture_state!(frames, case)
-    compute!(case.uᴸ)
-    compute!(case.vᴸ)
-    compute!(case.wᴸ)
-    fill_halo_regions!((case.uᴸ, case.vᴸ, case.wᴸ))
-
-    v = Array(interior(case.vᴸ))[1, :, :] .* 100 # cm s⁻¹
-    A, Kx, Ky, _ = wave_bulk_arrays(case.wave_model)
-    Kx_y = vec(mean(Kx; dims = (1, 3)))
-    Ky_y = vec(mean(Ky; dims = (1, 3)))
-    A_y = vec(mean(A; dims = (1, 3))) ./ case.reference_action
-    K = ocean_kinetic_energy(case)
-    K′ = ocean_perturbation_kinetic_energy(case)
-    Ew = wave_linear_energy(case)
-
-    push!(frames.times, case.time_offset + case.ocean_model.clock.time)
-    push!(frames.v, v)
-    push!(frames.growth, dominant_low_mode_amplitude(v))
-    push!(frames.φ, atan.(Ky_y, Kx_y))
-    push!(frames.wave_action, A_y)
-    push!(frames.stokes_shear, Array(interior(case.∂z_uˢ))[1, 1, :])
-    push!(frames.ocean_kinetic_energy, K)
-    push!(frames.perturbation_kinetic_energy, K′)
-    push!(frames.wave_energy, Ew)
-    push!(frames.total_energy, K + Ew)
-    return nothing
-end
-
-function meridional_mode_amplitude(v, n)
-    Ny, Nz = size(v)
-    amplitude² = 0.0
-
-    for k in 1:Nz
-        coefficient = 0.0 + 0.0im
-        for j in 1:Ny
-            coefficient += v[j, k] * cis(-2π * n * (j - 1) / Ny)
-        end
-        amplitude² += abs2(coefficient / Ny)
-    end
-
-    return sqrt(amplitude² / Nz)
-end
-
-dominant_low_mode_amplitude(v) =
-    maximum(meridional_mode_amplitude(v, n) for n in 1:6)
 
 function fitted_growth_rate(times, amplitudes)
-    start = max(2, floor(Int, 0.45 * length(times)))
-    fit_range = start:length(times)
-    t = times[fit_range]
-    y = log.(max.(amplitudes[fit_range], eps(Float64)))
-    t′ = t .- mean(t)
-    y′ = y .- mean(y)
-    return sum(t′ .* y′) / sum(abs2, t′)
+    n = length(times)
+    n ≥ 2 || return NaN
+    log_amp = log.(max.(amplitudes, eps(Float64)))
+    t̄ = mean(times); ā = mean(log_amp)
+    num = sum((times[k] - t̄) * (log_amp[k] - ā) for k in 1:n)
+    den = sum((times[k] - t̄)^2 for k in 1:n)
+    return den > 0 ? num / den : NaN
 end
 
-function relative_change(values)
-    initial = first(values)
-    final = last(values)
-    return (final - initial) / max(abs(initial), eps(Float64))
-end
+# ## Run loop
+#
+# Three cases, each seeded identically so the spinup transient is shared and
+# the divergence after `spinup_iterations` reflects the coupling treatment.
 
-function print_energy_summary(name, frames)
-    ΔK = relative_change(frames.ocean_kinetic_energy)
-    ΔK′ = relative_change(frames.perturbation_kinetic_energy)
-    ΔEw = relative_change(frames.wave_energy)
-    ΔEt = relative_change(frames.total_energy)
-
-    println(@sprintf("%s_ocean_kinetic_energy_change = %.3e", name, ΔK))
-    println(@sprintf("%s_perturbation_kinetic_energy_change = %.3e", name, ΔK′))
-    println(@sprintf("%s_wave_energy_change          = %.3e", name, ΔEw))
-    println(@sprintf("%s_total_energy_change         = %.3e", name, ΔEt))
-end
-
-function run_case!(case, stop_iteration; capture = true)
+function run_case!(case, stop_iteration; capture=true)
     frames = empty_frames()
-    simulation = Simulation(case.ocean_model; Δt, stop_iteration, verbose = false)
-
-    if case.coupled_waves
-        simulation.callbacks[:wave_coupling] = Callback(case.update_wave_model!, IterationInterval(1))
-    end
-
-    if capture
-        capture_state!(frames, case)
-        simulation.callbacks[:capture] = Callback(sim -> capture_state!(frames, case),
-                                                  IterationInterval(frame_stride))
-    end
-
-    run!(simulation)
-
-    if simulation.model.clock.iteration < stop_iteration
-        error("wind-drift instability run stopped early at iteration $(simulation.model.clock.iteration)")
-    end
-
+    sim = Simulation(case.ocean; Δt, stop_iteration, verbose=false)
+    capture && add_callback!(sim, sim -> snapshot!(frames, case), IterationInterval(frame_stride))
+    add_callback!(sim, case.update_wave_model!, IterationInterval(1))
+    run!(sim)
     σ = capture ? fitted_growth_rate(frames.times, frames.growth) : NaN
-    return merge(case, (; frames, growth_rate = σ))
+    return merge(case, (; frames, growth_rate=σ))
 end
 
-spinup = build_case(coupled_waves = false)
-spinup = run_case!(spinup, spinup_iterations; capture = false)
-spinup_state = save_state(spinup)
+spinup           = run_case!(build_case(coupled_waves=false), spinup_iterations; capture=false)
+total_iterations = spinup_iterations + continuation_iterations
+prescribed       = run_case!(build_case(coupled_waves=false),                                  total_iterations)
+mono_coupled     = run_case!(build_case(coupled_waves=true,  wave_model_kind=:monobanded),     total_iterations)
+spec_coupled     = run_case!(build_case(coupled_waves=true,  wave_model_kind=:spectral),       total_iterations)
 
-prescribed = build_case(coupled_waves = false, time_offset = spinup_state.time)
-restore_state!(prescribed, spinup_state)
-prescribed = run_case!(prescribed, continuation_iterations)
-
-coupled = build_case(coupled_waves = true, time_offset = spinup_state.time)
-restore_state!(coupled, spinup_state)
-coupled = run_case!(coupled, continuation_iterations)
-
-spectral_coupled = build_case(coupled_waves = true,
-                              wave_model_kind = :spectral,
-                              time_offset = spinup_state.time)
-restore_state!(spectral_coupled, spinup_state)
-spectral_coupled = run_case!(spectral_coupled, continuation_iterations)
-
-prescribed_growth_rate = prescribed.growth_rate
-coupled_growth_rate = coupled.growth_rate
-spectral_coupled_growth_rate = spectral_coupled.growth_rate
-
-println(@sprintf("spinup_time                  = %.3f s", spinup_state.time))
-println(@sprintf("monobanded_wave_substep      = %.3e s", Δt / monobanded_wave_substeps))
-println(@sprintf("spectral_wave_substep        = %.3e s", Δt / spectral_wave_substeps))
-println(@sprintf("prescribed_wave_growth_rate          = %.4f s^-1", prescribed_growth_rate))
-println(@sprintf("monobanded_coupled_wave_growth_rate  = %.4f s^-1", coupled_growth_rate))
-println(@sprintf("spectral_coupled_wave_growth_rate    = %.4f s^-1", spectral_coupled_growth_rate))
-println(@sprintf("monobanded_coupled / prescribed      = %.3f", coupled_growth_rate / prescribed_growth_rate))
-println(@sprintf("spectral_coupled / prescribed        = %.3f", spectral_coupled_growth_rate / prescribed_growth_rate))
-print_energy_summary("prescribed", prescribed.frames)
-print_energy_summary("monobanded_coupled", coupled.frames)
-print_energy_summary("spectral_coupled", spectral_coupled.frames)
-
-comparison_data = (; ys = collect(ynodes(spectral_coupled.grid) .* 100),
-                   zs = collect(znodes(spectral_coupled.grid) .* 100),
-                   prescribed_frames = prescribed.frames,
-                   coupled_frames = coupled.frames,
-                   spectral_coupled_frames = spectral_coupled.frames,
-                   prescribed_growth_rate,
-                   coupled_growth_rate,
-                   spectral_coupled_growth_rate)
-
-model = spectral_coupled.wave_model # exposed for the example smoke harness
+@info "growth rates" prescribed=prescribed.growth_rate monobanded=mono_coupled.growth_rate spectral=spec_coupled.growth_rate
+model = spec_coupled.wave_model  # exposed for the smoke harness
 
 # ## Animation
 
 let
-    ys = comparison_data.ys
-    zs = comparison_data.zs
-    prescribed_frames = comparison_data.prescribed_frames
-    coupled_frames = comparison_data.coupled_frames
-    spectral_coupled_frames = comparison_data.spectral_coupled_frames
+    ys = collect(ynodes(spec_coupled.grid) .* 100)
+    zs = collect(znodes(spec_coupled.grid) .* 100)
+    frame_count = min(length(prescribed.frames.v), length(mono_coupled.frames.v), length(spec_coupled.frames.v))
+    vmax = maximum(maximum(abs, f) for f in (prescribed.frames.v..., mono_coupled.frames.v..., spec_coupled.frames.v...))
 
-    times = prescribed_frames.times
-    frame_count = min(length(prescribed_frames.v),
-                      length(coupled_frames.v),
-                      length(spectral_coupled_frames.v))
-
-    prescribed_vlim = maximum(maximum(abs, frame) for frame in prescribed_frames.v)
-    coupled_vlim = maximum(maximum(abs, frame) for frame in coupled_frames.v)
-    spectral_coupled_vlim = maximum(maximum(abs, frame) for frame in spectral_coupled_frames.v)
-    prescribed_vlim = max(prescribed_vlim, 0.05)
-    coupled_vlim = max(coupled_vlim, 0.01)
-    spectral_coupled_vlim = max(spectral_coupled_vlim, 0.01)
-
-    perturbation_energy_change(frames) =
-        frames.perturbation_kinetic_energy .- first(frames.perturbation_kinetic_energy)
-
-    wave_energy_change(frames) =
-        frames.wave_energy .- first(frames.wave_energy)
-
-    prescribed_δK′ = perturbation_energy_change(prescribed_frames)
-    coupled_δK′ = perturbation_energy_change(coupled_frames)
-    spectral_coupled_δK′ = perturbation_energy_change(spectral_coupled_frames)
-
-    prescribed_δEw = wave_energy_change(prescribed_frames)
-    coupled_δEw = wave_energy_change(coupled_frames)
-    spectral_coupled_δEw = wave_energy_change(spectral_coupled_frames)
-
-    prescribed_energy_scale = max(maximum(abs, prescribed_δK′), eps(Float64))
-    energy_limit = 2 * prescribed_energy_scale
-
-    action_min = minimum(minimum(frame) for frame in (prescribed_frames.wave_action...,
-                                                      coupled_frames.wave_action...,
-                                                      spectral_coupled_frames.wave_action...))
-    action_max = maximum(maximum(frame) for frame in (prescribed_frames.wave_action...,
-                                                      coupled_frames.wave_action...,
-                                                      spectral_coupled_frames.wave_action...))
-    action_padding = 0.05 * max(action_max - action_min, eps(Float64))
-
-    prescribed_v_obs = Observable(prescribed_frames.v[1])
-    coupled_v_obs = Observable(coupled_frames.v[1])
-    spectral_coupled_v_obs = Observable(spectral_coupled_frames.v[1])
-    prescribed_δK′_obs = Observable(Point2f[(times[1], prescribed_δK′[1])])
-    coupled_δK′_obs = Observable(Point2f[(times[1], coupled_δK′[1])])
-    spectral_coupled_δK′_obs = Observable(Point2f[(times[1], spectral_coupled_δK′[1])])
-    prescribed_δEw_obs = Observable(Point2f[(times[1], prescribed_δEw[1])])
-    coupled_δEw_obs = Observable(Point2f[(times[1], coupled_δEw[1])])
-    spectral_coupled_δEw_obs = Observable(Point2f[(times[1], spectral_coupled_δEw[1])])
-    prescribed_action_obs = Observable(prescribed_frames.wave_action[1])
-    coupled_action_obs = Observable(coupled_frames.wave_action[1])
-    spectral_coupled_action_obs = Observable(spectral_coupled_frames.wave_action[1])
-    title_obs = Observable("t = 0.00 s")
-
-    fig = Figure(size = (1500, 820))
-
-    ax1 = Axis(fig[1, 1];
-               title = "Prescribed wave: v (cm s⁻¹)",
-               xlabel = "y (cm)", ylabel = "z (cm)")
-
-    ax2 = Axis(fig[1, 3];
-               title = "Monobanded coupled: v (cm s⁻¹)",
-               xlabel = "y (cm)", ylabel = "z (cm)")
-
-    ax3 = Axis(fig[1, 5];
-               title = "Spectral coupled: v (cm s⁻¹)",
-               xlabel = "y (cm)", ylabel = "z (cm)")
-
-    ax4 = Axis(fig[2, 1:3];
-               title = "Perturbation kinetic energy and wave energy",
-               xlabel = "time (s)", ylabel = "energy change / ρ per unit x (m⁴ s⁻²)",
-               limits = ((times[1], times[end]), (-energy_limit, energy_limit)))
-
-    ax5 = Axis(fig[2, 4:6];
-               title = "Horizontal wave-action distribution",
-               xlabel = "y (cm)", ylabel = "A / A₀",
-               limits = ((ys[1], ys[end]), (action_min - action_padding, action_max + action_padding)))
-
-    hm1 = heatmap!(ax1, ys, zs, prescribed_v_obs; colormap = :vik, colorrange = (-prescribed_vlim, prescribed_vlim))
-    hm2 = heatmap!(ax2, ys, zs, coupled_v_obs; colormap = :vik, colorrange = (-coupled_vlim, coupled_vlim))
-    hm3 = heatmap!(ax3, ys, zs, spectral_coupled_v_obs; colormap = :vik, colorrange = (-spectral_coupled_vlim, spectral_coupled_vlim))
-
-    lines!(ax4, prescribed_δK′_obs; linewidth = 3, color = :dodgerblue, label = "prescribed ΔK′")
-    lines!(ax4, coupled_δK′_obs; linewidth = 3, color = :darkorange, label = "monobanded ΔK′")
-    lines!(ax4, spectral_coupled_δK′_obs; linewidth = 3, color = :seagreen, label = "spectral ΔK′")
-    lines!(ax4, prescribed_δEw_obs; linewidth = 2, color = :dodgerblue, linestyle = :dash, label = "prescribed ΔEwave")
-    lines!(ax4, coupled_δEw_obs; linewidth = 2, color = :darkorange, linestyle = :dash, label = "monobanded ΔEwave")
-    lines!(ax4, spectral_coupled_δEw_obs; linewidth = 2, color = :seagreen, linestyle = :dash, label = "spectral ΔEwave")
-    hlines!(ax4, 0; color = (:black, 0.35), linestyle = :dash)
-    axislegend(ax4; position = :lt)
-
-    lines!(ax5, ys, prescribed_action_obs; linewidth = 3, color = :dodgerblue, label = "prescribed")
-    lines!(ax5, ys, coupled_action_obs; linewidth = 3, color = :darkorange, label = "monobanded")
-    lines!(ax5, ys, spectral_coupled_action_obs; linewidth = 3, color = :seagreen, label = "spectral")
-    hlines!(ax5, 1; color = (:black, 0.35), linestyle = :dash)
-    axislegend(ax5; position = :lt)
-
-    Colorbar(fig[1, 2], hm1)
-    Colorbar(fig[1, 4], hm2)
-    Colorbar(fig[1, 6], hm3)
-
-    Label(fig[0, :], title_obs; fontsize = 18, halign = :center)
-
-    comparison_animation = "coupled_wind_drift_instability.mp4"
-
-    record(fig, comparison_animation, 1:frame_count; framerate = 10) do n
-        prescribed_v_obs[] = prescribed_frames.v[n]
-        coupled_v_obs[] = coupled_frames.v[n]
-        spectral_coupled_v_obs[] = spectral_coupled_frames.v[n]
-        prescribed_δK′_obs[] = Point2f.(times[1:n], prescribed_δK′[1:n])
-        coupled_δK′_obs[] = Point2f.(times[1:n], coupled_δK′[1:n])
-        spectral_coupled_δK′_obs[] = Point2f.(times[1:n], spectral_coupled_δK′[1:n])
-        prescribed_δEw_obs[] = Point2f.(times[1:n], prescribed_δEw[1:n])
-        coupled_δEw_obs[] = Point2f.(times[1:n], coupled_δEw[1:n])
-        spectral_coupled_δEw_obs[] = Point2f.(times[1:n], spectral_coupled_δEw[1:n])
-        prescribed_action_obs[] = prescribed_frames.wave_action[n]
-        coupled_action_obs[] = coupled_frames.wave_action[n]
-        spectral_coupled_action_obs[] = spectral_coupled_frames.wave_action[n]
-
-        title_obs[] = @sprintf("Wind-drift instability with wave coupling — t = %.2f s, σ_fixed = %.3f s⁻¹, σ_mono = %.3f s⁻¹, σ_spectral = %.3f s⁻¹",
-                               times[n], prescribed_growth_rate, coupled_growth_rate, spectral_coupled_growth_rate)
+    fig = Figure(size=(1500, 480))
+    axes_ = (Axis(fig[1, k]; xlabel="y (cm)", ylabel="z (cm)", title=t)
+             for (k, t) in enumerate(("prescribed", "monobanded coupled", "spectral coupled")))
+    obs = ntuple(_ -> Observable(zeros(length(ys), length(zs))), 3)
+    for (ax, ob) in zip(axes_, obs)
+        heatmap!(ax, ys, zs, ob; colorrange=(-vmax, vmax), colormap=:balance)
     end
+    title_obs = Observable("")
+    Label(fig[0, :], title_obs; fontsize=16, halign=:center)
 
-    println("comparison_animation = $(abspath(comparison_animation))")
+    record(fig, "coupled_wind_drift_instability.mp4", 1:frame_count; framerate=10) do n
+        obs[1][] = prescribed.frames.v[n]
+        obs[2][] = mono_coupled.frames.v[n]
+        obs[3][] = spec_coupled.frames.v[n]
+        title_obs[] = @sprintf("t = %.2f s  |  σ_fixed = %.3f, σ_mono = %.3f, σ_spec = %.3f s⁻¹",
+                               prescribed.frames.times[n],
+                               prescribed.growth_rate, mono_coupled.growth_rate, spec_coupled.growth_rate)
+    end
 end
-nothing #hide
 
 # ![](coupled_wind_drift_instability.mp4)

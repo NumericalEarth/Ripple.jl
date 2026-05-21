@@ -99,12 +99,17 @@ function validate_model_coupling(coupling::AbstractCWCMCurrentCoupling, grid, sp
     coupling.kappa == spectral_kappa ||
         throw(ArgumentError("CWCM current coupling kappa does not match the model spectral grid"))
 
-    Nx, Ny = horizontal_size(grid)
-    expected_size = (Nx, Ny, length(spectral_kappa))
-    validate_cwcm_coupling_cache_shape(coupling, "uᴰx", coupling.uᴰx, expected_size)
-    validate_cwcm_coupling_cache_shape(coupling, "uᴰy", coupling.uᴰy, expected_size)
-    validate_cwcm_coupling_cache_shape(coupling, "duᴰxdκ", coupling.duᴰxdκ, expected_size)
-    validate_cwcm_coupling_cache_shape(coupling, "duᴰydκ", coupling.duᴰydκ, expected_size)
+    expected_size = (grid.Nx, grid.Ny, length(spectral_kappa))
+    u_expected_size = coupling isa CWCMPrescribedCurrentCoupling ?
+                      cgrid_velocity_cache_size(grid, :x, length(spectral_kappa)) :
+                      expected_size
+    v_expected_size = coupling isa CWCMPrescribedCurrentCoupling ?
+                      cgrid_velocity_cache_size(grid, :y, length(spectral_kappa)) :
+                      expected_size
+    validate_cwcm_coupling_cache_shape(coupling, "uᴰx", coupling.uᴰx, u_expected_size)
+    validate_cwcm_coupling_cache_shape(coupling, "uᴰy", coupling.uᴰy, v_expected_size)
+    validate_cwcm_coupling_cache_shape(coupling, "duᴰxdκ", coupling.duᴰxdκ, u_expected_size)
+    validate_cwcm_coupling_cache_shape(coupling, "duᴰydκ", coupling.duᴰydκ, v_expected_size)
     return coupling
 end
 
@@ -241,3 +246,47 @@ fields(model::SpectralWaveModel) = (N=model.action, G=model.tendencies)
 prognostic_fields(model::SpectralWaveModel) = (N=model.action,)
 Base.eltype(model::SpectralWaveModel) = eltype(model.action)
 architecture(model::SpectralWaveModel) = architecture(model.grid)
+
+spectral_coupling_summary(::Nothing) = "none"
+spectral_coupling_summary(::CWCMPrescribedCurrentCoupling) = "CWCM prescribed velocities"
+spectral_coupling_summary(::CWCMPseudomomentumCoupling) = "CWCM pseudomomentum velocities"
+spectral_coupling_summary(c) = string(nameof(typeof(c)))
+
+# `velocities(model)` returns the (u, v) Lagrangian-mean current the wave
+# model is coupled to (same contract as `MonobandedWaveModel`).
+velocities(model::SpectralWaveModel) = velocities(model.coupling)
+velocities(c::CWCMPrescribedCurrentCoupling) = (u=c.current.u, v=c.current.v)
+velocities(c::CWCMPseudomomentumCoupling) = nothing  # self-coupled; no externally-set u/v
+
+# `pseudomomentum_fields(model::SpectralWaveModel; location)` mirrors the
+# monobanded API: returns center-by-default fields px, py constructed from
+# the model's coupling Q-transform.
+function pseudomomentum_fields(model::SpectralWaveModel; location=(Center, Center, Center))
+    coupling = model.coupling
+    coupling isa AbstractCWCMCurrentCoupling ||
+        throw(ArgumentError("pseudomomentum_fields(::SpectralWaveModel) requires a CWCM coupling that owns a Q-transform; got $(typeof(coupling))"))
+    return pseudomomentum_fields(model.action, model.depth, coupling.qtransform; location)
+end
+
+spectral_sources_summary(::Nothing) = "none"
+spectral_sources_summary(s) = string(nameof(typeof(s)))
+
+spectral_timestepper_name(ts::RungeKutta3TimeStepper) = :RungeKutta3
+spectral_timestepper_name(ts) = ts isa Symbol ? ts : nameof(typeof(ts))
+
+function Base.show(io::IO, model::SpectralWaveModel)
+    println(io, summary(model))
+    println(io, "├── grid: ", summary(model.grid))
+    println(io, "├── spectral grid: ", summary(model.spectral_grid))
+    println(io, "├── prognostic fields: N")
+    println(io, "├── horizontal advection: ",
+                model.horizontal_advection === nothing ? "none" : nameof(typeof(model.horizontal_advection)))
+    println(io, "├── spectral advection: ",
+                model.spectral_advection === nothing ? "none" : nameof(typeof(model.spectral_advection)))
+    println(io, "├── coupling: ", spectral_coupling_summary(model.coupling))
+    println(io, "├── sources: ", spectral_sources_summary(model.sources))
+    println(io, "├── propagation smoothing: ",
+                model.propagation_smoothing === nothing ? "none" : nameof(typeof(model.propagation_smoothing)))
+    println(io, "├── timestepper: ", spectral_timestepper_name(model.timestepper))
+    print(io,   "└── clock: time=", model.clock.time, ", iteration=", model.clock.iteration)
+end

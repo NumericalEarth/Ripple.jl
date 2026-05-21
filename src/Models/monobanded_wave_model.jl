@@ -433,6 +433,15 @@ architecture(model::MonobandedWaveModel) = model.architecture
 monobanded_timestepper_name(timestepper::RungeKutta3TimeStepper) = :RungeKutta3
 monobanded_timestepper_name(timestepper::MonobandedExplicitTimeStepper) = timestepper.name
 
+# `velocities(model)` returns the (u, v) pair the wave model's coupling
+# treats as the Lagrangian-mean current. For prescribed currents this is
+# the supplied user current; for pseudomomentum self-coupling it is the
+# wave-induced pseudomomentum cell averages (px, py).
+velocities(model::MonobandedWaveModel) = velocities(model.coupling)
+velocities(::Nothing) = nothing
+velocities(c::MonobandedPrescribedCurrentCoupling) = (u=c.current.u, v=c.current.v)
+velocities(c::MonobandedPseudomomentumCoupling) = (u=c.px, v=c.py)
+
 monobanded_coupling_summary(::Nothing) = "none"
 monobanded_coupling_summary(::MonobandedPrescribedCurrentCoupling) = "prescribed velocities"
 monobanded_coupling_summary(::MonobandedPseudomomentumCoupling) = "pseudomomentum velocities"

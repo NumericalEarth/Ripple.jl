@@ -52,7 +52,7 @@ export AbstractLagrangianVelocities, ZeroVelocities, PrescribedVelocities, Pseud
 export q_value, q_cell_integral, q_cell_integral_kappa_derivative
 export compute_doppler_velocity!, compute_doppler_velocity_derivative!, compute_pseudomomentum
 export compute_wave_current_refraction_tendency!
-export pseudomomentum_field, pseudomomentum_fields
+export pseudomomentum_field, pseudomomentum_fields, velocities
 export vertical_spacings, vertical_integral
 export compute_pseudomomentum_cell_integrals, compute_pseudomomentum_cell_integrals!
 export compute_pseudomomentum_cell_averages, compute_pseudomomentum_cell_averages!
