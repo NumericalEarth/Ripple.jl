@@ -26,8 +26,10 @@ using Oceananigans
 
 const g_test = 9.81
 
-# Wave energy for monobanded:  W = ∫ σ_int(κ) · A dV   with σ_int = √(g·κ).
-# Its tendency includes both the action tendency and the κ-tendency:
+# Wave energy for monobanded:  W = ∫dx dy σ_int(κ) · A   with σ_int = √(g·κ).
+# Note A lives at a single horizontal slice (per-unit-area), so the integral
+# is 2D (dA = Δx·Δy), not 3D. Its tendency includes both the action tendency
+# and the κ-tendency:
 #   dW/dt = ⟨σ, ∂tA⟩ + ⟨A · ∂σ/∂κ, ∂tκ⟩.
 function monobanded_wave_energy_tendency(model::MonobandedWaveModel)
     Ripple.update_monobanded_diagnostics!(model)
@@ -48,24 +50,19 @@ function monobanded_wave_energy_tendency(model::MonobandedWaveModel)
     ∂tκ = @. (Kx * GAKx + Ky * GAKy) / Aκ_safe - κ * GA / A_safe
     ∂tκ = ifelse.(Aκ .> 0, ∂tκ, zero.(∂tκ))
 
-    Δx = model.grid.Δxᶜᵃᵃ
-    Δy = model.grid.Δyᵃᶜᵃ
-    Δz = model.grid.z.cᵃᵃᶠ[2] - model.grid.z.cᵃᵃᶠ[1] # uniform z
-    dV = Δx * Δy * Δz
-    return (sum(σ .* GA) + sum(A .* ∂σ∂κ .* ∂tκ)) * dV
+    dA = model.grid.Δxᶜᵃᵃ * model.grid.Δyᵃᶜᵃ
+    return (sum(σ .* GA) + sum(A .* ∂σ∂κ .* ∂tκ)) * dA
 end
 
 # External source power for monobanded with LinearWindInput(rate=r): S = r·A.
+# 2D integral, matching `monobanded_wave_energy_tendency`.
 function monobanded_source_power(model::MonobandedWaveModel, rate)
     Ripple.update_monobanded_diagnostics!(model)
     A = interior(model.action)
     κ = interior(model.diagnostics.κ)
     σ = @. sqrt(g_test * κ)
-    Δx = model.grid.Δxᶜᵃᵃ
-    Δy = model.grid.Δyᵃᶜᵃ
-    Δz = model.grid.z.cᵃᵃᶠ[2] - model.grid.z.cᵃᵃᶠ[1]
-    dV = Δx * Δy * Δz
-    return sum(σ .* rate .* A) * dV
+    dA = model.grid.Δxᶜᵃᵃ * model.grid.Δyᵃᶜᵃ
+    return sum(σ .* rate .* A) * dA
 end
 
 # Ocean-side kinetic-energy tendency from the Stokes acceleration alone.
@@ -193,6 +190,71 @@ end
         # closed-budget statement does not hold. Document the gap so the
         # refraction-enabled test below can verify that closure recovers.
         @test isapprox(P_ocean + P_w, P_source + P_ocean; rtol=1e-13)
+    end
+
+    # ──────────────────────────────────────────────────────────────────────
+    # Case 4. Closed coupling with refraction. The wave model is given the
+    # ocean velocities as Lagrangian-mean (so refraction is live), and there
+    # is no external source. In the continuum dE/dt = 0; discretely the
+    # wave-side refraction tendency and the ocean-side Stokes-acceleration
+    # operators are only "almost" adjoint, so the closed budget closes to
+    # O(Δx²), not roundoff. Two assertions:
+    #
+    #   (a) a fixed-N upper bound that catches any term flipping sign,
+    #       being dropped, or being mis-located,
+    #   (b) the drift halves by ≳ 2× per resolution doubling, which fails
+    #       if a regression introduces an O(1) or O(Δx) term.
+    #
+    # Closure factory: returns (P_w, P_ocean, scale) at resolution N.
+    # ──────────────────────────────────────────────────────────────────────
+    function closed_refraction_budget(N)
+        grid = RectilinearGrid(CPU(); size=(N, N, N), halo=(3, 3, 3),
+                               x=(0, 1), y=(0, 1), z=(-0.5, 0),
+                               topology=(Periodic, Periodic, Bounded))
+        uᴱ = Field{Face, Center, Center}(grid)
+        vᴱ = Field{Center, Face, Center}(grid)
+        set!(uᴱ, (x, y, z) -> 0.05 * cos(2π * x) * exp(z / 0.2))
+        set!(vᴱ, (x, y, z) -> 0.03 * sin(2π * y) * exp(z / 0.2))
+        Oceananigans.BoundaryConditions.fill_halo_regions!((uᴱ, vᴱ))
+
+        m = MonobandedWaveModel(grid; advection=Centered(),
+                                velocities=(; u=uᴱ, v=vᴱ),
+                                timestepper=:RungeKutta3,
+                                gravitational_acceleration=g_test)
+        A0(x, y, z) = 0.02 + 0.005 * sin(2π * x)
+        set!(m; A=A0, AKx=(x,y,z)->100*A0(x,y,z), AKy=0.0)
+        Ripple.update_coupling!(m)
+        compute_tendencies!(m)
+
+        P_w = monobanded_wave_energy_tendency(m)
+        ptx, _ = pseudomomentum_tendency_fields(m; location=(Face, Center, Center))
+        _, pty = pseudomomentum_tendency_fields(m; location=(Center, Face, Center))
+        P_ocean = ocean_stokes_acceleration_power(uᴱ, vᴱ, ptx, pty)
+        scale = max(abs(P_w), abs(P_ocean))
+        return P_w, P_ocean, scale
+    end
+
+    @testset "refraction-enabled closed: O(Δx²) drift bound at N=8" begin
+        P_w, P_ocean, scale = closed_refraction_budget(8)
+        rel = abs(P_w + P_ocean) / scale
+        # Empirically ~0.15 at N=8; assert an upper bound that catches any
+        # missing term but is loose enough to survive minor refactors.
+        @test rel < 0.25
+    end
+
+    @testset "refraction-enabled closed: drift ~ O(Δx²) under refinement" begin
+        function rel_drift(N)
+            P_w, P_ocean, scale = closed_refraction_budget(N)
+            return abs(P_w + P_ocean) / scale
+        end
+        # Each doubling should shrink the drift by ≥ 2×. A correct O(Δx²)
+        # discretization gives ~4×; a regression that introduces an O(Δx)
+        # or O(1) term breaks this.
+        r8  = rel_drift(8)
+        r16 = rel_drift(16)
+        r32 = rel_drift(32)
+        @test r16 < 0.55 * r8
+        @test r32 < 0.55 * r16
     end
 
 end
