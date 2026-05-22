@@ -257,4 +257,98 @@ end
         @test r32 < 0.55 * r16
     end
 
+    # ──────────────────────────────────────────────────────────────────────
+    # Case 5. Time-stepped closed coupling: both wave and ocean models step
+    # forward with RK3, ocean receives uˢ, vˢ, ∂t_uˢ, ∂t_vˢ from the wave
+    # model at the start of each step (stage-consistent coupling). Verify
+    # the integrated energy drift over a fixed window decreases as Δt → 0
+    # until the O(Δx²) spatial-discretization floor takes over.
+    # ──────────────────────────────────────────────────────────────────────
+    function timestepped_coupled_drift(N, Δt, T)
+        grid = RectilinearGrid(CPU(); size=(N, N, N), halo=(3, 3, 3),
+                               x=(0, 1), y=(0, 1), z=(-0.5, 0),
+                               topology=(Periodic, Periodic, Bounded))
+        uˢ    = Field{Face,   Center, Center}(grid)
+        vˢ    = Field{Center, Face,   Center}(grid)
+        ∂t_uˢ = Field{Face,   Center, Center}(grid)
+        ∂t_vˢ = Field{Center, Face,   Center}(grid)
+        stokes_drift = StokesDrift(; uˢ, vˢ, ∂t_uˢ, ∂t_vˢ)
+        ocean = NonhydrostaticModel(grid; advection=Centered(),
+                                    stokes_drift=stokes_drift,
+                                    closure=nothing)
+        set!(ocean,
+             u=(x, y, z) -> 0.05 * cos(2π * x) * exp(z / 0.2),
+             v=(x, y, z) -> 0.03 * sin(2π * y) * exp(z / 0.2),
+             w=0)
+
+        wave = MonobandedWaveModel(grid; advection=Centered(),
+                                   velocities=(; u=ocean.velocities.u,
+                                                 v=ocean.velocities.v),
+                                   timestepper=:RungeKutta3,
+                                   gravitational_acceleration=g_test)
+        A0(x, y, z) = 0.02 + 0.005 * sin(2π * x)
+        set!(wave; A=A0, AKx=(x,y,z)->100*A0(x,y,z), AKy=0.0)
+        Ripple.update_coupling!(wave)
+
+        function refresh_stokes!()
+            Ripple.compute_tendencies!(wave)
+            px, _ = pseudomomentum_fields(wave; location=(Face, Center, Center))
+            _, py = pseudomomentum_fields(wave; location=(Center, Face, Center))
+            ∂tpx, _ = pseudomomentum_tendency_fields(wave;
+                                                    location=(Face, Center, Center))
+            _, ∂tpy = pseudomomentum_tendency_fields(wave;
+                                                    location=(Center, Face, Center))
+            set!(uˢ, px);       set!(vˢ, py)
+            set!(∂t_uˢ, ∂tpx);  set!(∂t_vˢ, ∂tpy)
+            Oceananigans.BoundaryConditions.fill_halo_regions!((uˢ, vˢ, ∂t_uˢ, ∂t_vˢ))
+        end
+
+        function total_energy()
+            Ripple.update_monobanded_diagnostics!(wave)
+            A = interior(wave.action); κ = interior(wave.diagnostics.κ)
+            σ = @. sqrt(g_test * κ)
+            dA = grid.Δxᶜᵃᵃ * grid.Δyᵃᶜᵃ
+            W = sum(σ .* A) * dA
+            dV = dA * (grid.z.cᵃᵃᶠ[2] - grid.z.cᵃᵃᶠ[1])
+            u = interior(ocean.velocities.u); v = interior(ocean.velocities.v)
+            w = interior(ocean.velocities.w)
+            K = 0.5 * (sum(u .^ 2) + sum(v .^ 2) + sum(w .^ 2)) * dV
+            return W + K
+        end
+
+        refresh_stokes!()
+        E0 = total_energy()
+        nsteps = round(Int, T / Δt)
+        for _ in 1:nsteps
+            refresh_stokes!()
+            Oceananigans.TimeSteppers.time_step!(ocean, Δt)
+            Ripple.time_step!(wave, Δt)
+        end
+        E1 = total_energy()
+        return abs(E1 - E0), abs(E0)
+    end
+
+    @testset "refraction-enabled closed: time-stepped drift bounded" begin
+        # Tiny grid, short window — runs in a few seconds.
+        N, T = 8, 0.01
+        drift, scale = timestepped_coupled_drift(N, T/4, T)
+        # Drift accumulates from the O(Δx²) coupling discretization gap
+        # × T plus the RK3 time-integrator error. At N=8 the spatial gap
+        # dominates and bounds the relative drift ≲ a few percent.
+        @test drift / scale < 0.05
+    end
+
+    @testset "refraction-enabled closed: drift decreases when Δt shrinks" begin
+        # Compare a "large" Δt (RK3 time-integrator error dominates) to
+        # a "small" Δt (we're near the spatial floor). The small-Δt drift
+        # should be substantially smaller — anything else means the time
+        # integrator is not converging or the coupling has an O(1) bug.
+        # Once near the floor the drift fluctuates by roundoff, so we
+        # don't require strict monotonicity for every halving.
+        N, T = 8, 0.01
+        d_coarse = first(timestepped_coupled_drift(N, T,   T))      # 1 step
+        d_fine   = first(timestepped_coupled_drift(N, T/8, T))      # 8 steps
+        @test d_fine < d_coarse
+    end
+
 end
