@@ -222,6 +222,19 @@ vertical topology, pass an explicit finite-depth `q_grid`.
 ``p_x`` and ``p_y`` on the model's Q geometry. Their vertical integral recovers
 the horizontal monobanded moments.
 
+`pseudomomentum_tendency_fields(model)` returns the analytic time derivative
+``\partial_t p_x, \partial_t p_y`` evaluated from the wave-model tendency
+``G^n``. For the monobanded model this includes both
+``Q(\kappa, z)\, \partial_t (A K_\alpha)`` from the analytic action and
+moment tendencies *and* the
+``\partial_\kappa Q(\kappa, z)\, A K_\alpha\, \partial_t \kappa`` correction
+that captures how the Q-shape changes when refraction or sources move
+``\kappa``. These fields are exactly the ``\partial_t u^s, \partial_t v^s``
+that Oceananigans' Craik-Leibovich `StokesDrift` wants as input to evaluate
+the Stokes-acceleration term ``+\partial_t u^s`` in the momentum tendency.
+The caller is expected to have run `compute_tendencies!(model)` (or just
+finished a `time_step!`) so the tendency reflects the current state.
+
 ## Transport And Refraction
 
 `advection=nothing` disables physical transport but does not disable

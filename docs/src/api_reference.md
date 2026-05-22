@@ -62,10 +62,14 @@ This page groups the main exported names by workflow.
   `update_coupling!`
 - Pseudomomentum: `pseudomomentum_field`, `pseudomomentum_fields`,
   `compute_pseudomomentum`, `compute_pseudomomentum_cell_integrals`,
-  `compute_pseudomomentum_cell_averages`; `pseudomomentum_fields` also
-  accepts `MonobandedWaveModel` and projects `AKx`, `AKy` through the model's
-  Q geometry,
-  `compute_pseudomomentum_tendency_cell_averages!`,
+  `compute_pseudomomentum_cell_averages`; `pseudomomentum_fields(model)`
+  accepts `MonobandedWaveModel` and `SpectralWaveModel` and projects
+  `AKx, AKy` (or `∫k·N dk`) through the model's Q geometry,
+  `pseudomomentum_tendency_fields(model)` returns the analytic time
+  derivative `∂t uˢ, ∂t vˢ` from the wave-model tendency (monobanded
+  variant also includes the `∂κQ·AK·∂tκ` refraction term),
+  `compute_pseudomomentum_tendency_cell_averages!` (finite-difference
+  fallback path),
   `cwcm_momentum_tendency_fields!`
 
 ## Validation
