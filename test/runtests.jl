@@ -41,6 +41,7 @@ ripple_testset = @testset "Ripple.jl" begin
     include("diagnostics/cfl.jl")
     include("forcing/winds.jl")
     include("coupling/q_transform.jl")
+    include("coupling/pseudomomentum_tendency.jl")
     include("sources/source_terms.jl")
     include("physics/shared.jl")
     include("physics/st3.jl")
@@ -48,6 +49,7 @@ ripple_testset = @testset "Ripple.jl" begin
     include("integration/model_api.jl")
     include("integration/monobanded_wave_model.jl")
     include("integration/transport.jl")
+    include("integration/energy_conservation.jl")
     include("validation/validation_suite.jl")
     include("examples_smoke/run_examples.jl")
 end

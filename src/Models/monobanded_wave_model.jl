@@ -791,6 +791,60 @@ function pseudomomentum_fields(model::MonobandedWaveModel;
     return px, py
 end
 
+# Project the analytic action-momentum tendency onto Q(z) to return ∂t uˢ, ∂t vˢ.
+#
+# For the monobanded model, uˢ_x(z) = Q(κ, z) · AKx and similarly for y, so
+#
+#   ∂t uˢ_x = Q(κ, z) · ∂t(AKx) + ∂κQ(κ, z) · AKx · ∂tκ
+#
+# where ∂tκ follows from the tendencies of A, AKx, AKy:
+#
+#   ∂tκ = (Kx · ∂t(AKx) + Ky · ∂t(AKy)) / (A · κ) − κ · ∂tA / A.
+#
+# The caller is expected to have called `compute_tendencies!(model)` so that
+# Gⁿ.A, Gⁿ.AKx, Gⁿ.AKy reflect the desired tendency operator (advection,
+# refraction, sources).
+function pseudomomentum_tendency_fields(model::MonobandedWaveModel;
+                                        location=(Center, Center, Center))
+    qtransform, depth = monobanded_pseudomomentum_context(model, model.coupling)
+    ptx = pseudomomentum_field(qtransform.grid; location, eltype=eltype(model))
+    pty = pseudomomentum_field(qtransform.grid; location, eltype=eltype(model))
+
+    G = model.timestepper.Gⁿ
+    ptx_data = field_storage(ptx)
+    pty_data = field_storage(pty)
+    Nx, Ny, Nz = size(ptx_data)
+    size(pty_data) == (Nx, Ny, Nz) ||
+        throw(ArgumentError("monobanded pseudomomentum-tendency fields must have matching size"))
+    horizontal_size(model.grid) == (Nx, Ny) ||
+        throw(ArgumentError("monobanded pseudomomentum-tendency fields must match the model grid horizontally"))
+    qtransform.grid.Nz == Nz ||
+        throw(ArgumentError("monobanded pseudomomentum-tendency fields must use the Q-transform vertical grid"))
+
+    arch = architecture(ptx)
+    faces = on_architecture(arch, vertical_faces(qtransform))
+    depth_on_arch = q_depth_on_architecture(arch, depth)
+    k = active_monobanded_k(model.action)
+    Ox, Oy, Oz = monobanded_data_offsets(model.action)
+
+    kernel = _monobanded_pseudomomentum_tendency_kernel!(device(arch), (8, 8, 1), (Nx, Ny, Nz))
+    kernel(ptx_data, pty_data,
+           monobanded_parent(G.A),
+           monobanded_parent(G.AKx),
+           monobanded_parent(G.AKy),
+           monobanded_parent(model.action),
+           monobanded_parent(model.wavenumber_moment.x),
+           monobanded_parent(model.wavenumber_moment.y),
+           monobanded_parent(model.diagnostics.Kx),
+           monobanded_parent(model.diagnostics.Ky),
+           monobanded_parent(model.diagnostics.κ),
+           depth_on_arch, faces, qtransform.kernel, OnTheFlyQ(),
+           k, Ox, Oy, Oz)
+    KernelAbstractions.synchronize(device(arch))
+
+    return ptx, pty
+end
+
 @kernel function _monobanded_pseudomomentum_cells_kernel!(px, py, AKx, AKy, κ,
                                                           depth, faces, qkernel, qpolicy,
                                                           surface_k, Ox, Oy, Oz)
@@ -807,6 +861,47 @@ end
         scale = inv(abs(z₂ - z₁))
         px[i, j, k] = AKx[ix, jy, kz] * qΔz * scale
         py[i, j, k] = AKy[ix, jy, kz] * qΔz * scale
+    end
+end
+
+@kernel function _monobanded_pseudomomentum_tendency_kernel!(ptx, pty,
+                                                             GA, GAKx, GAKy,
+                                                             A, AKx, AKy,
+                                                             Kx, Ky, κ,
+                                                             depth, faces, qkernel, qpolicy,
+                                                             surface_k, Ox, Oy, Oz)
+    i, j, k = @index(Global, NTuple)
+    ix = monobanded_data_index(i, Ox)
+    jy = monobanded_data_index(j, Oy)
+    kz = monobanded_data_index(surface_k, Oz)
+    d = q_depth_at(depth, i, j)
+    z₁ = faces[k]
+    z₂ = faces[k+1]
+
+    @inbounds begin
+        κ_loc = κ[ix, jy, kz]
+        A_loc = A[ix, jy, kz]
+        Kx_loc = Kx[ix, jy, kz]
+        Ky_loc = Ky[ix, jy, kz]
+        AKx_loc = AKx[ix, jy, kz]
+        AKy_loc = AKy[ix, jy, kz]
+        gA_loc = GA[ix, jy, kz]
+        gAKx_loc = GAKx[ix, jy, kz]
+        gAKy_loc = GAKy[ix, jy, kz]
+
+        qΔz   = q_cell_weight_kernel(qpolicy, qkernel, i, j, k, 1, κ_loc, z₁, z₂, d)
+        dqΔdκ = q_cell_weight_kappa_derivative_kernel(qpolicy, qkernel, i, j, k, 1, κ_loc, z₁, z₂, d)
+        scale = inv(abs(z₂ - z₁))
+
+        # ∂tκ = (Kx·∂t(AKx) + Ky·∂t(AKy))/(A·κ) − κ·∂tA/A. Guarded for tiny A, κ.
+        Aκ = A_loc * κ_loc
+        Aκ_safe = ifelse(Aκ > zero(Aκ), Aκ, one(Aκ))
+        A_safe = ifelse(A_loc > zero(A_loc), A_loc, one(A_loc))
+        ∂tκ_raw = (Kx_loc * gAKx_loc + Ky_loc * gAKy_loc) / Aκ_safe - κ_loc * gA_loc / A_safe
+        ∂tκ = ifelse(Aκ > zero(Aκ), ∂tκ_raw, zero(∂tκ_raw))
+
+        ptx[i, j, k] = (gAKx_loc * qΔz + AKx_loc * dqΔdκ * ∂tκ) * scale
+        pty[i, j, k] = (gAKy_loc * qΔz + AKy_loc * dqΔdκ * ∂tκ) * scale
     end
 end
 

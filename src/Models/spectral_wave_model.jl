@@ -268,6 +268,18 @@ function pseudomomentum_fields(model::SpectralWaveModel; location=(Center, Cente
     return pseudomomentum_fields(model.action, model.depth, coupling.qtransform; location)
 end
 
+# Project the analytic action tendency `model.tendencies` onto Q(z) to return
+# (∂t uˢ, ∂t vˢ). The caller is expected to have called
+# `compute_tendencies!(model)` so that `model.tendencies` reflects the desired
+# tendency operator (transport + refraction + sources).
+function pseudomomentum_tendency_fields(model::SpectralWaveModel;
+                                        location=(Center, Center, Center))
+    coupling = model.coupling
+    coupling isa AbstractCWCMCurrentCoupling ||
+        throw(ArgumentError("pseudomomentum_tendency_fields(::SpectralWaveModel) requires a CWCM coupling that owns a Q-transform; got $(typeof(coupling))"))
+    return pseudomomentum_fields(model.tendencies, model.depth, coupling.qtransform; location)
+end
+
 spectral_sources_summary(::Nothing) = "none"
 spectral_sources_summary(s) = string(nameof(typeof(s)))
 
