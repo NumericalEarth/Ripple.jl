@@ -13,12 +13,11 @@
 # The Stokes drift is the wave-model pseudomomentum: with the wave action
 # calibrated so `A·K·Q(0) = ε²·c` (giving `A = ε²·c/(2κ²)`), the depth profile
 # `p(z) = Q(z)·A·K` equals the deep-water Stokes drift `uˢ(z) = ε²·c·exp(2κz)`
-# exactly. We pass `uˢ, vˢ, ∂t_uˢ, ∂t_vˢ` straight to
-# `StokesDrift(; uˢ, vˢ, ∂t_uˢ, ∂t_vˢ)`. `uˢ, vˢ` come from the wave-model
-# pseudomomentum; `∂t_uˢ, ∂t_vˢ` come from the analytic pseudomomentum
-# tendency `Q(z)·∂t(A·K)` so the ocean sees the Stokes acceleration the
-# wave-mean energy budget calls for. When the time-derivative kwargs are
-# `Field`s, Oceananigans reads them with `getindex` at the velocity location.
+# exactly. We use Oceananigans' `FieldStokesDrift(grid)`, which allocates
+# `uˢ, vˢ, wˢ, ∂t_uˢ, ∂t_vˢ, ∂t_wˢ` `Field`s at the staggered velocity
+# locations; `uˢ, vˢ` come from the wave-model pseudomomentum, `∂t_uˢ, ∂t_vˢ`
+# come from the analytic pseudomomentum tendency `Q(z)·∂t(A·K)`, and `wˢ, ∂t_wˢ`
+# are filled by `compute_stokes_drift!` from continuity inside `update_state!`.
 
 using Oceananigans, Ripple
 using Oceananigans.AbstractOperations: @at
@@ -110,7 +109,7 @@ noisy(y, z) = noise_speed * noise_envelope(z) * randn()
 function build_case(; coupled_waves, wave_model_kind=:monobanded, seed=1234)
     grid = wind_drift_grid()
 
-    stokes_drift = StokesDrift(grid)
+    stokes_drift = FieldStokesDrift(grid)
     uˢ, vˢ       = stokes_drift.uˢ, stokes_drift.vˢ
     ∂t_uˢ, ∂t_vˢ = stokes_drift.∂t_uˢ, stokes_drift.∂t_vˢ
 

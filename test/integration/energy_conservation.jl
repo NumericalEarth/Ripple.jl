@@ -294,7 +294,7 @@ end
         grid = RectilinearGrid(CPU(); size=(N, N, N), halo=(3, 3, 3),
                                x=(0, 1), y=(0, 1), z=(-0.5, 0),
                                topology=(Periodic, Periodic, Bounded))
-        stokes_drift = StokesDrift(grid)
+        stokes_drift = FieldStokesDrift(grid)
         uˢ, vˢ       = stokes_drift.uˢ, stokes_drift.vˢ
         ∂t_uˢ, ∂t_vˢ = stokes_drift.∂t_uˢ, stokes_drift.∂t_vˢ
         ocean = NonhydrostaticModel(grid; advection=Centered(),
