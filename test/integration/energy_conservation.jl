@@ -193,6 +193,32 @@ end
     end
 
     # ──────────────────────────────────────────────────────────────────────
+    # Case 3b. Transport-only conservation: wave model with centered advection
+    # and ZeroVelocities (no current) — pure intrinsic group-velocity
+    # propagation. With κ uniform in space and time, σ_int(κ) is constant,
+    # so the wave-energy tendency reduces to σ · sum(Gⁿ.A), and centered
+    # conservative transport on a periodic grid gives sum(Gⁿ.A) = 0 to
+    # roundoff. dW/dt should hit machine precision.
+    # ──────────────────────────────────────────────────────────────────────
+    @testset "transport-only, ZeroVelocities → ∂t W = 0 to roundoff" begin
+        grid = RectilinearGrid(CPU(); size=(8, 8, 8), halo=(3, 3, 3),
+                               x=(0, 1), y=(0, 1), z=(-0.5, 0),
+                               topology=(Periodic, Periodic, Bounded))
+        m = MonobandedWaveModel(grid; advection=Centered(),
+                                timestepper=:RungeKutta3,
+                                gravitational_acceleration=g_test)
+        # Uniform K → κ constant in space and time → no refraction.
+        # Spatially varying A → nontrivial transport divergence per cell, but
+        # the integrated divergence vanishes by periodic + flux-form.
+        Aenv(x, y, z) = 0.01 + 0.005 * (sin(2π * x) + cos(2π * y))
+        set!(m; A=Aenv, AKx=(x,y,z)->100*Aenv(x,y,z), AKy=0.0)
+        compute_tendencies!(m)
+
+        P_w = monobanded_wave_energy_tendency(m)
+        @test abs(P_w) < 1e-13 * abs(monobanded_source_power(m, 1.0))
+    end
+
+    # ──────────────────────────────────────────────────────────────────────
     # Case 4. Closed coupling with refraction. The wave model is given the
     # ocean velocities as Lagrangian-mean (so refraction is live), and there
     # is no external source. In the continuum dE/dt = 0; discretely the
