@@ -13,14 +13,16 @@
 # The Stokes drift is the wave-model pseudomomentum: with the wave action
 # calibrated so `A·K·Q(0) = ε²·c` (giving `A = ε²·c/(2κ²)`), the depth profile
 # `p(z) = Q(z)·A·K` equals the deep-water Stokes drift `uˢ(z) = ε²·c·exp(2κz)`
-# exactly. We feed `∂z(uˢ), ∂z(vˢ)` into Oceananigans' `UniformStokesDrift` via
-# abstract operations on the wave-model pseudomomentum fields. (The full 3D
-# `StokesDrift` only accepts callable function derivatives, not Fields, so
-# we stay with the `UniformStokesDrift` path here — the cross-derivative
-# terms `∂y uˢ` etc. it drops are small for this flat-x flow.)
+# exactly. We pass `uˢ, vˢ` straight to `StokesDrift(; uˢ, vˢ)` — when
+# `uˢ, vˢ` are `Field`s, Oceananigans derives every vortex-force term by
+# finite-differencing the supplied fields inline, including the
+# cross-derivative terms `∂y uˢ` and `∂x vˢ` that `UniformStokesDrift`
+# drops. When `uˢ, vˢ` are `nothing`, the existing function-only path
+# (callable `∂z_uˢ(x, y, z, t)` etc.) is used. Time derivatives are zero
+# unless explicitly provided via the `∂t_uˢ`, `∂t_vˢ` kwargs.
 
 using Oceananigans, Ripple
-using Oceananigans.AbstractOperations: @at, ∂z
+using Oceananigans.AbstractOperations: @at
 using CairoMakie, Printf, Random, Statistics
 
 CairoMakie.activate!(type = "png")
@@ -111,9 +113,7 @@ function build_case(; coupled_waves, wave_model_kind=:monobanded, seed=1234)
 
     uˢ = Field{Face,   Center, Center}(grid)
     vˢ = Field{Center, Face,   Center}(grid)
-    ∂z_uˢ = Field{Face,   Center, Face  }(grid)
-    ∂z_vˢ = Field{Center, Face,   Center}(grid)
-    stokes_drift = UniformStokesDrift(grid; ∂z_uˢ, ∂z_vˢ)
+    stokes_drift = StokesDrift(; uˢ, vˢ)
 
     u_bc = FieldBoundaryConditions(top=FluxBoundaryCondition(surface_stress))
     ocean = NonhydrostaticModel(grid; advection=Centered(),
@@ -131,7 +131,6 @@ function build_case(; coupled_waves, wave_model_kind=:monobanded, seed=1234)
     function refresh_stokes_drift!()
         p_x, p_y = pseudomomentum_fields(wave_model)
         set!(uˢ, p_x); set!(vˢ, p_y); fill_halo_regions!((uˢ, vˢ))
-        set!(∂z_uˢ, ∂z(uˢ)); set!(∂z_vˢ, ∂z(vˢ))
     end
     refresh_stokes_drift!()
 
