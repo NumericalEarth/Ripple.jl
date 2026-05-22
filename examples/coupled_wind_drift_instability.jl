@@ -13,13 +13,12 @@
 # The Stokes drift is the wave-model pseudomomentum: with the wave action
 # calibrated so `A·K·Q(0) = ε²·c` (giving `A = ε²·c/(2κ²)`), the depth profile
 # `p(z) = Q(z)·A·K` equals the deep-water Stokes drift `uˢ(z) = ε²·c·exp(2κz)`
-# exactly. We pass `uˢ, vˢ` straight to `StokesDrift(; uˢ, vˢ)` — when
-# `uˢ, vˢ` are `Field`s, Oceananigans derives every vortex-force term by
-# finite-differencing the supplied fields inline, including the
-# cross-derivative terms `∂y uˢ` and `∂x vˢ` that `UniformStokesDrift`
-# drops. When `uˢ, vˢ` are `nothing`, the existing function-only path
-# (callable `∂z_uˢ(x, y, z, t)` etc.) is used. Time derivatives are zero
-# unless explicitly provided via the `∂t_uˢ`, `∂t_vˢ` kwargs.
+# exactly. We pass `uˢ, vˢ, ∂t_uˢ, ∂t_vˢ` straight to
+# `StokesDrift(; uˢ, vˢ, ∂t_uˢ, ∂t_vˢ)`. `uˢ, vˢ` come from the wave-model
+# pseudomomentum; `∂t_uˢ, ∂t_vˢ` come from the analytic pseudomomentum
+# tendency `Q(z)·∂t(A·K)` so the ocean sees the Stokes acceleration the
+# wave-mean energy budget calls for. When the time-derivative kwargs are
+# `Field`s, Oceananigans reads them with `getindex` at the velocity location.
 
 using Oceananigans, Ripple
 using Oceananigans.AbstractOperations: @at
@@ -111,9 +110,11 @@ noisy(y, z) = noise_speed * noise_envelope(z) * randn()
 function build_case(; coupled_waves, wave_model_kind=:monobanded, seed=1234)
     grid = wind_drift_grid()
 
-    uˢ = Field{Face,   Center, Center}(grid)
-    vˢ = Field{Center, Face,   Center}(grid)
-    stokes_drift = StokesDrift(; uˢ, vˢ)
+    uˢ    = Field{Face,   Center, Center}(grid)
+    vˢ    = Field{Center, Face,   Center}(grid)
+    ∂t_uˢ = Field{Face,   Center, Center}(grid)
+    ∂t_vˢ = Field{Center, Face,   Center}(grid)
+    stokes_drift = StokesDrift(; uˢ, vˢ, ∂t_uˢ, ∂t_vˢ)
 
     u_bc = FieldBoundaryConditions(top=FluxBoundaryCondition(surface_stress))
     ocean = NonhydrostaticModel(grid; advection=Centered(),
@@ -129,8 +130,20 @@ function build_case(; coupled_waves, wave_model_kind=:monobanded, seed=1234)
     wave_model = build_wave_model(Val(wave_model_kind), grid, uᴸ, vᴸ)
 
     function refresh_stokes_drift!()
-        p_x, p_y = pseudomomentum_fields(wave_model)
-        set!(uˢ, p_x); set!(vˢ, p_y); fill_halo_regions!((uˢ, vˢ))
+        ## Pseudomomentum → Stokes drift at the velocity locations.
+        ptx, _ = pseudomomentum_fields(wave_model; location=(Face, Center, Center))
+        _, pty = pseudomomentum_fields(wave_model; location=(Center, Face, Center))
+        set!(uˢ, ptx); set!(vˢ, pty)
+        ## Analytic action-tendency → ∂t uˢ. Refresh Gⁿ first so the
+        ## tendency reflects the *current* wave state, not the last
+        ## sub-step's tendency.
+        Ripple.compute_tendencies!(wave_model)
+        ∂tpx, _ = pseudomomentum_tendency_fields(wave_model;
+                                                 location=(Face, Center, Center))
+        _, ∂tpy = pseudomomentum_tendency_fields(wave_model;
+                                                 location=(Center, Face, Center))
+        set!(∂t_uˢ, ∂tpx); set!(∂t_vˢ, ∂tpy)
+        fill_halo_regions!((uˢ, vˢ, ∂t_uˢ, ∂t_vˢ))
     end
     refresh_stokes_drift!()
 
