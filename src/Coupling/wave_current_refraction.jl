@@ -63,7 +63,7 @@ end
     return ifelse(has_stencil, weno_value, first_order_value)
 end
 
-@inline _periodic(i, N) = ifelse(i < 1, i + N, ifelse(i > N, i - N, i))
+@inline _periodic(i, N) = mod1(i, N)
 @inline _clamp_idx(i, N) = ifelse(i < 1, 1, ifelse(i > N, N, i))
 
 # Fused KA kernel: Doppler-shifted physical transport + kinematic spectral
