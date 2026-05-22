@@ -110,11 +110,9 @@ noisy(y, z) = noise_speed * noise_envelope(z) * randn()
 function build_case(; coupled_waves, wave_model_kind=:monobanded, seed=1234)
     grid = wind_drift_grid()
 
-    uˢ    = Field{Face,   Center, Center}(grid)
-    vˢ    = Field{Center, Face,   Center}(grid)
-    ∂t_uˢ = Field{Face,   Center, Center}(grid)
-    ∂t_vˢ = Field{Center, Face,   Center}(grid)
-    stokes_drift = StokesDrift(; uˢ, vˢ, ∂t_uˢ, ∂t_vˢ)
+    stokes_drift = StokesDrift(grid)
+    uˢ, vˢ       = stokes_drift.uˢ, stokes_drift.vˢ
+    ∂t_uˢ, ∂t_vˢ = stokes_drift.∂t_uˢ, stokes_drift.∂t_vˢ
 
     u_bc = FieldBoundaryConditions(top=FluxBoundaryCondition(surface_stress))
     ocean = NonhydrostaticModel(grid; advection=Centered(),
