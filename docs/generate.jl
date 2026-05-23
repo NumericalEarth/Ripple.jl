@@ -9,6 +9,7 @@ const EXAMPLE_TUTORIALS = (
     ("vortex_refraction.jl",                 "Wave Refraction Through A Barotropic Vortex"),
     ("monobanded_linear_shear_refraction.jl", "Monobanded Linear-Shear Refraction"),
     ("coupled_wind_drift_instability.jl",    "Coupled Wind-Drift Instability"),
+    ("three_dimensional_langmuir.jl",        "3D Langmuir Circulation"),
     ("translating_hurricane_swell.jl",       "Swell Generation by a Translating Idealized Hurricane"),
 )
 
