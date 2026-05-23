@@ -50,9 +50,9 @@ belong to Oceananigans.
 Set up an initially uniform, narrow-banded wave-action field and refract it
 through a barotropic Gaussian vortex. The vortex velocity is the
 Lagrangian-mean current `uᴸ`; Ripple's fused refraction kernel applies
-Doppler-shifted physical transport at `c_g + uᴸ` together with kinematic
+Doppler-shifted physical transport at `c_g + uᴰ` together with kinematic
 spectral refraction `∇_k·(c_k N)` in a single pass, driven by the model's
-SSP-RK3 time-stepper through `Oceananigans.Simulation`.
+`RungeKutta3TimeStepper` through `Oceananigans.Simulation`.
 
 ```julia
 using Oceananigans, Ripple
@@ -89,7 +89,7 @@ model = SpectralWaveModel(grid, spectral_grid;
                           velocities = (; u, v),
                           horizontal_advection = nothing,  # fused kernel drives transport
                           sources = nothing,
-                          timestepper = :RK3)
+                          timestepper = :RungeKutta3)
 
 # Narrow-banded Gaussian initial condition: uniform in (x, y), centred on
 # κ₀ = 0.4 and direction φ = 0. set!(::ProductField, fun) tracks the

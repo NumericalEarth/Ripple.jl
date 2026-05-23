@@ -48,7 +48,7 @@ spectral_grid = PolarWaveVectorGrid(Float64;
 
 model = SpectralWaveModel(grid, spectral_grid;
                           horizontal_advection = WENO(order = 5),
-                          timestepper          = :RK3);
+                          timestepper = :RungeKutta3);
 
 packet_left  = 24.0
 packet_right = 64.0
@@ -96,7 +96,7 @@ end
 # Action mass on the (``x``, ``t``) plane. The fan of leading and trailing
 # edges spread linearly: each ``\kappa`` component contributes a wedge at
 # slope ``c_g(\kappa)``. The dashed vertical line marks the observer
-# column ``x = `` $(round(x_nodes[i_obs]; digits=1)) m used below.
+# column used below.
 
 hovmoller = reduce(vcat, transpose.(profiles))
 
@@ -111,9 +111,9 @@ fig1
 
 # ## Wavenumber at a fixed observer
 #
-# At the observer column ``x = `` $(round(x_nodes[i_obs]; digits=1)) m,
-# the local mean wavenumber is initially zero (no action present), jumps
-# up to ``\kappa \approx 0.35`` (longest waves arrive first), and then
+# At the observer column, the local mean wavenumber is initially zero (no
+# action present), jumps up to ``\kappa \approx 0.35`` (longest waves arrive
+# first), and then
 # climbs monotonically toward ``\kappa \approx 1.25`` as the slower,
 # shorter-wavelength components catch up. The dashed reference is the
 # stationary-phase prediction

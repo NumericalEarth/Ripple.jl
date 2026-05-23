@@ -1,16 +1,16 @@
 # # Spectral Refraction by a Sheared Current
 #
 # Ripple's wave-action model carries advection both in physical space
-# ``\partial_t N + (c_g + u^L) \cdot \nabla N`` *and* in spectral space
+# ``\partial_t N + (c_g + u^D) \cdot \nabla N`` *and* in spectral space
 # ``\partial_t N + \nabla_k \cdot (c_k N)``. The spectral fluxes
 # ``c_\kappa, c_\varphi`` are driven by gradients of the
-# Lagrangian-mean current ``u^L``. For a horizontal shear ``\partial u
+# Doppler velocity ``u^D``. For a horizontal shear ``\partial u^D
 # / \partial y`` acting on waves whose group velocity points in ``+x``,
 # the direction tendency reduces (to leading order in
-# ``\partial u / \partial y``) to
+# ``\partial u^D / \partial y``) to
 #
 # ```math
-# \frac{\mathrm{d}\varphi}{\mathrm{d}t} = -\cos^2(\varphi)\,\frac{\partial u}{\partial y}.
+# \frac{\mathrm{d}\varphi}{\mathrm{d}t} = -\cos^2(\varphi)\,\frac{\partial u^D}{\partial y}.
 # ```
 #
 # This page exercises that prediction in a clean, doubly-periodic
@@ -80,15 +80,15 @@ end
 model = SpectralWaveModel(grid, spectral_grid;
                           velocities  = (; u = u_field, v = v_field),
                           sources     = nothing,
-                          timestepper = :RK3);
+                          timestepper = :RungeKutta3);
 
 σφ = 0.15
 set!(model, N = (x, y, kx, ky) -> exp(-(atan(ky, kx))^2 / (2 * σφ^2)));
 
 # ## Time integration
 #
-# 10 s of model time at ``\Delta t = 0.1\,\mathrm{s}`` via SSP-RK3
-# through the fused refraction kernel.
+# 10 s of model time at ``\Delta t = 0.1\,\mathrm{s}`` via
+# `RungeKutta3TimeStepper` through the fused refraction kernel.
 
 dt    = 0.1
 steps = 100

@@ -31,14 +31,50 @@ methods, and how they map to model kwargs.
   inputs and normalize to `nothing`.
 - With all optional dynamics absent, `time_step!` advances the clock and leaves
   the action field unchanged.
-- The CFL diagnostic is zero when `horizontal_advection=nothing` and uses the
-  active transport velocities otherwise.
+- The CFL diagnostic uses the same active physical transport velocities as the
+  model step. For fused CWCM refraction this includes the current and
+  ``\partial_\kappa u^D`` ray-velocity correction even though
+  `horizontal_advection` is ignored by that fused path.
 - `advection=` is a convenience shortcut that sets both `horizontal_advection`
   and `spectral_advection` to the same scheme.
 
 Ripple no longer provides `HamiltonianFiniteVolume`, Hamiltonian velocity
 operators, a `Simulation` type, or diagnostic/output writer types. Transport
 is routed through Oceananigans advection machinery.
+
+## Monobanded Model
+
+`MonobandedWaveModel(grid; ...)` implements the single-wave-train reduction
+with prognostic fields `A`, `AKx`, and `AKy` on the physical grid's top
+surface. The diagnosed wavevector is `K = AK / A`, and the diagnostic fields
+include `κ`, the Q-projected Doppler velocity `uᴰ`, its `κ` derivative `H`,
+the ray velocity `C`, absolute frequency `Ω`, and the refraction tensor `Γ`.
+See [Monobanded Wave Model](@ref) for the full equations, constructor contract,
+diagnostics, and numerical constraints.
+
+The constructor follows Oceananigans and Breeze model conventions: boundary
+conditions are consumed while constructing the prognostic `Field`s and are not
+stored as a model-level slot. `velocities=PrescribedVelocities(...)` or a
+bare `velocities=(; u, v)` builds the monobanded prescribed-current coupling;
+`velocities=PseudomomentumVelocities()` uses the monobanded pseudomomentum as
+the Lagrangian velocity; and `velocities=nothing` gives intrinsic deep-water
+propagation. A Flat monobanded grid requires an explicit Q grid for
+`PseudomomentumVelocities`.
+`pseudomomentum_fields(model)` Q-projects the monobanded moments `AKx` and
+`AKy` onto the model grid or the prescribed-current Q grid, and its vertical
+integral recovers the horizontal pseudomomentum. `MonobandedWaveModel`
+currently supports scalar action-only `LinearWindInput`, scalar action-only
+`BottomFriction`, and `SourceTermSet` combinations of those. These sources add
+`S_A` to `A` and `K S_A` to the moments, preserving local `K` under pure
+growth or decay.
+`advection=nothing` disables physical transport but leaves refraction and
+sources active. The default `advection=WENO()` uses Ripple's monobanded
+conservative transport kernel with WENO5 face reconstruction.
+`advection=Centered()` uses the same conservative flux form with centered face
+values. Other Oceananigans advection schemes are rejected until they are wired
+to their corresponding reconstruction. The monobanded kernels require uniform
+horizontal spacing and currently support only default NoFlux/Periodic
+prognostic boundary conditions.
 
 ## Product Fields
 
@@ -67,15 +103,19 @@ on the horizontal wave grid. Scalars are materialized as Oceananigans
 arrays are intentionally not part of the public depth interface.
 
 A CWCM Q transform also needs a resolved vertical coordinate. When
-`velocities=(; u, v)` passes Oceananigans `Field`s, Ripple infers the Q grid
-from those fields and, if `depth=InfiniteDepth()`, derives the finite Q
-projection depth from that grid. Array-valued velocities and
+`velocities=(; u, v)` passes Oceananigans `Field`s, provide C-grid components
+`u::Field{Face, Center, Center}` and `v::Field{Center, Face, Center}`; Ripple
+infers the Q grid from those fields and, if `depth=InfiniteDepth()`, derives
+the finite Q projection depth from that grid. Array-valued velocities and
 `PseudomomentumVelocities` can either pass an explicit `q_grid` or let Ripple
 build one from finite model `depth`:
 
-```julia
+```@example model_api
+using Oceananigans, Ripple
+
 wave_grid = RectilinearGrid(CPU();
                             size=(8, 4),
+                            halo=(3, 3),
                             x=(0, 8),
                             y=(0, 4),
                             topology=(Periodic, Periodic, Flat))
@@ -87,9 +127,14 @@ q_grid = RectilinearGrid(CPU();
                          z=(-1, 0),
                          topology=(Periodic, Periodic, Bounded))
 
+spectral_grid = PolarWaveVectorGrid(; κ=[0.5], φ=[0.0])
+
 model = SpectralWaveModel(wave_grid, spectral_grid;
-                          velocities=PseudomomentumVelocities(),
-                          depth=1.0)
+                          velocities=PseudomomentumVelocities(; q_grid),
+                          depth=1.0,
+                          advection=nothing)
+
+model isa SpectralWaveModel
 ```
 
 ## Spectral Grids
@@ -121,6 +166,8 @@ wave grid, finite model `depth` is required and Ripple chooses a stretched
 vertical grid whose top-cell spacing is set by the largest spectral wavenumber.
 Ripple precomputes the finite-volume vertical overlap between source and
 target wavenumber rings and refreshes the Doppler velocity caches from
-`model.action` before each tendency evaluation. Use `depth=InfiniteDepth()` to
-keep deep-water intrinsic dispersion while deriving Q-projection depth from a
+`model.action` before each tendency evaluation. In the equations this
+Q-projected Doppler velocity is denoted ``\boldsymbol{u}^{D}``; internal cache
+names are implementation details. Use `depth=InfiniteDepth()` to keep
+deep-water intrinsic dispersion while deriving Q-projection depth from a
 finite-depth velocity grid.

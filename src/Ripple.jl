@@ -52,7 +52,7 @@ export AbstractLagrangianVelocities, ZeroVelocities, PrescribedVelocities, Pseud
 export q_value, q_cell_integral, q_cell_integral_kappa_derivative
 export compute_doppler_velocity!, compute_doppler_velocity_derivative!, compute_pseudomomentum
 export compute_wave_current_refraction_tendency!
-export pseudomomentum_field, pseudomomentum_fields
+export pseudomomentum_field, pseudomomentum_fields, velocities
 export vertical_spacings, vertical_integral
 export compute_pseudomomentum_cell_integrals, compute_pseudomomentum_cell_integrals!
 export compute_pseudomomentum_cell_averages, compute_pseudomomentum_cell_averages!
@@ -80,7 +80,9 @@ export PressureCorrelationInput
 export LocalSaturationDissipation, MeanSpectrumWhitecapping
 export ListedQuadruplets, SymmetricQuadruplet
 export PrecomputedSources
-export SpectralWaveModel, Clock, fields, prognostic_fields, compute_tendencies!, time_step!, cfl
+export SpectralWaveModel, MonobandedWaveModel
+export MonobandedPrescribedCurrentCoupling, MonobandedPseudomomentumCoupling
+export Clock, RungeKutta3TimeStepper, fields, prognostic_fields, compute_tendencies!, time_step!, cfl
 export Centered, UpwindBiased, WENO, FluxFormAdvection
 export AbstractPropagationSmoothing, SpatialAveraging, apply_propagation_smoothing!
 export ValidationCase, ValidationResult, default_validation_cases, run_validation

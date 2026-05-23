@@ -90,9 +90,14 @@ function q_cell_weight(qtransform::QTransform, i, j, k, m, kappa, z₁, z₂, de
     return q_cell_integral(qtransform.kernel, kappa, z₁, z₂, depth)
 end
 
+function q_cell_weight(qtransform::QTransform{Q, VG, <:PrecomputeQWeights{K, <:Number}},
+                       i, j, k, m, kappa, z₁, z₂, depth) where {Q, VG, K}
+    return precomputed_q_cell_weight(qtransform.cache_policy, i, j, k, m, kappa, depth)
+end
+
 function q_cell_weight(qtransform::QTransform{Q, VG, <:PrecomputeQWeights},
                        i, j, k, m, kappa, z₁, z₂, depth) where {Q, VG}
-    return precomputed_q_cell_weight(qtransform.cache_policy, i, j, k, m, kappa, depth)
+    return q_cell_integral(qtransform.kernel, kappa, z₁, z₂, depth)
 end
 
 function q_cell_weight_kappa_derivative(qtransform::QTransform, i, j, k, m, kappa, z₁, z₂, depth)
@@ -115,14 +120,57 @@ end
 
 @inline q_cell_weight_kernel(policy::PrecomputeQWeights, kernel::QKernel,
                              i, j, k, m, kappa, z₁, z₂, depth) =
-    policy.weights[i, j, k, m]
+    q_cell_integral_kernel(kernel, kappa, z₁, z₂, depth)
 
 @inline q_cell_weight_kappa_derivative_kernel(::AbstractQStoragePolicy, kernel::QKernel,
                                               i, j, k, m, kappa, z₁, z₂, depth) =
     q_cell_integral_kappa_derivative_kernel(kernel, kappa, z₁, z₂, depth)
 
 @inline q_depth_at(depth::Number, i, j) = depth
-@inline q_depth_at(depth, i, j) = depth[i, j]
+@inline q_depth_at(depth::Oceananigans.Fields.ConstantField, i, j) = depth.constant
+@inline function _q_center_index(i, N)
+    return ifelse(i < 1, 1, ifelse(i > N, N, i))
+end
+
+@inline function _q_face_left_index(i, N, periodic)
+    return ifelse(periodic, mod1(i - 1, N), ifelse(i <= 1, 1, i - 1))
+end
+
+@inline function _q_face_right_index(i, N, periodic)
+    return ifelse(periodic, mod1(i, N), ifelse(i > N, N, i))
+end
+
+@inline function q_depth_at(depth, i, j)
+    iᵈ = _q_center_index(i, size(depth, 1))
+    jᵈ = _q_center_index(j, size(depth, 2))
+    return depth[iᵈ, jᵈ]
+end
+
+@inline q_depth_at_x_face(depth::Number, i, j, xperiodic, yperiodic) = depth
+@inline q_depth_at_x_face(depth::Oceananigans.Fields.ConstantField, i, j, xperiodic, yperiodic) = depth.constant
+@inline function q_depth_at_x_face(depth, i, j, xperiodic, yperiodic)
+    Nx = size(depth, 1)
+    Ny = size(depth, 2)
+    i₋ = _q_face_left_index(i, Nx, xperiodic)
+    i₊ = _q_face_right_index(i, Nx, xperiodic)
+    jᵈ = ifelse(yperiodic, mod1(j, Ny), _q_center_index(j, Ny))
+    d₋ = depth[i₋, jᵈ]
+    d₊ = depth[i₊, jᵈ]
+    return (d₋ + d₊) / (one(d₋) + one(d₋))
+end
+
+@inline q_depth_at_y_face(depth::Number, i, j, xperiodic, yperiodic) = depth
+@inline q_depth_at_y_face(depth::Oceananigans.Fields.ConstantField, i, j, xperiodic, yperiodic) = depth.constant
+@inline function q_depth_at_y_face(depth, i, j, xperiodic, yperiodic)
+    Nx = size(depth, 1)
+    Ny = size(depth, 2)
+    iᵈ = ifelse(xperiodic, mod1(i, Nx), _q_center_index(i, Nx))
+    j₋ = _q_face_left_index(j, Ny, yperiodic)
+    j₊ = _q_face_right_index(j, Ny, yperiodic)
+    d₋ = depth[iᵈ, j₋]
+    d₊ = depth[iᵈ, j₊]
+    return (d₋ + d₊) / (one(d₋) + one(d₋))
+end
 
 q_depth_on_architecture(arch, depth::Number) = depth
 q_depth_on_architecture(arch, depth) = on_architecture(arch, depth)

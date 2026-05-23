@@ -66,10 +66,10 @@ ray theory is
 
 ```math
 \Omega(\mathbf{x}, \mathbf{k}, t)
-= \sigma(\kappa, d) + \mathbf{k} \cdot \mathbf{U}(\mathbf{x}, \kappa, t),
+= \sigma(\kappa, d) + \mathbf{k} \cdot \boldsymbol{u}^{D}(\mathbf{x}, \kappa, t),
 ```
 
-where ``\boldsymbol{U}`` is the vertically projected Lagrangian-mean velocity.
+where ``\boldsymbol{u}^{D}`` is the vertically projected Lagrangian-mean velocity.
 This is the Doppler-shifted action transport used in the consistent
 wave-current model of [VannesteYoung2026](@citet). Ripple's `InfiniteDepth()`
 selects the deep-water dispersion relation even when velocities are supplied on
@@ -104,7 +104,7 @@ Q(z; \kappa, d)
 The Doppler velocity for each wavenumber ring is the Q-weighted current
 
 ```math
-\mathbf{U}(\mathbf{x}, \kappa, t)
+\boldsymbol{u}^{D}(\mathbf{x}, \kappa, t)
 = \int_{-d}^{0} Q(z; \kappa, d)\,
   \mathbf{u}^{L}(\mathbf{x}, z, t)\, dz .
 ```
@@ -143,14 +143,14 @@ In Ripple's polar coordinates this becomes advection in ``\kappa`` and
 \boldsymbol{e}_{\phi} = (-\sin\phi, \cos\phi).
 ```
 
-For the Doppler part ``\boldsymbol{k}\cdot\boldsymbol{U}``, the implemented
+For the Doppler part ``\boldsymbol{k}\cdot\boldsymbol{u}^{D}``, the implemented
 current-gradient refraction velocities are
 
 ```math
 \dot{\kappa}
 = -\kappa \,
   \boldsymbol{e}_{\kappa}
-  \cdot \nabla_{\boldsymbol{x}}\boldsymbol{U}
+  \cdot \nabla_{\boldsymbol{x}}\boldsymbol{u}^{D}
   \cdot \boldsymbol{e}_{\kappa},
 ```
 
@@ -160,7 +160,7 @@ and
 \dot{\phi}
 = \boldsymbol{e}_{\phi}
   \cdot
-  \left[-(\nabla_{\boldsymbol{x}}\boldsymbol{U})^{\mathsf{T}}
+  \left[-(\nabla_{\boldsymbol{x}}\boldsymbol{u}^{D})^{\mathsf{T}}
   \boldsymbol{e}_{\kappa}\right].
 ```
 
@@ -173,9 +173,9 @@ In component form, with ``c = \cos\phi`` and ``s = \sin\phi``,
 \dot{\kappa}
 = -\kappa
 \left[
-c^2 U_{x,x}
-+ cs (U_{y,x} + U_{x,y})
-+ s^2 U_{y,y}
+c^2 u^{D}_{x,x}
++ cs (u^{D}_{y,x} + u^{D}_{x,y})
++ s^2 u^{D}_{y,y}
 \right],
 ```
 
@@ -183,9 +183,9 @@ and
 
 ```math
 \dot{\phi}
-= cs (U_{x,x} - U_{y,y})
-+ s^2 U_{y,x}
-- c^2 U_{x,y}.
+= cs (u^{D}_{x,x} - u^{D}_{y,y})
++ s^2 u^{D}_{y,x}
+- c^2 u^{D}_{x,y}.
 ```
 
 These are the quantities read by the fused refraction kernel.
@@ -259,12 +259,17 @@ are added after transport.
 
 With CWCM coupling and `spectral_advection !== nothing`, Ripple uses a fused
 KernelAbstractions kernel over ``(i, j, m, n)``. This kernel computes the
-Doppler-shifted physical transport velocity
+Doppler-shifted physical transport velocity. Since
+``\boldsymbol{u}^{D}`` depends on ``\kappa`` through the vertical
+Q projection, the ray velocity is the full Hamiltonian derivative of
+``\Omega = \sigma(\kappa) + \boldsymbol{k}\cdot\boldsymbol{u}^{D}``:
 
 ```math
 \dot{\boldsymbol{x}}
 = c_g \boldsymbol{e}_{\kappa}
-  + \boldsymbol{U}(\boldsymbol{x}, \kappa, t)
+  + \boldsymbol{u}^{D}(\boldsymbol{x}, \kappa, t)
+  + \frac{\boldsymbol{k}\cdot\partial_\kappa \boldsymbol{u}^{D}}{\kappa}
+    \boldsymbol{k}.
 ```
 
 and the current-gradient spectral velocities ``\dot{\kappa}`` and
@@ -298,7 +303,7 @@ depth is derived from the velocity grid, including local bottom height on an
 `ImmersedBoundaryGrid`.
 
 `PrescribedVelocities` caches the Q-projected Doppler velocity
-``\boldsymbol{U}(\boldsymbol{x}, \kappa, t)`` and its ``\kappa`` derivative.
+``\boldsymbol{u}^{D}(\boldsymbol{x}, \kappa, t)`` and its ``\kappa`` derivative.
 `PseudomomentumVelocities` builds the Lagrangian-mean velocity from
 `model.action`; before each CWCM tendency evaluation, the coupling refreshes
 the pseudomomentum fields and the Doppler-velocity caches. In pseudomomentum
@@ -310,7 +315,7 @@ same vertical integrals.
 
 `time_step!(model, Δt)` advances the semi-discrete ODE with the selected
 time-stepper: forward Euler, semi-implicit Euler for split source damping, AB2,
-SSP-RK3, or low-storage RK3. Each explicit update kernel clamps action to
+or Oceananigans' `RungeKutta3TimeStepper`. Each explicit update kernel clamps action to
 ``\bar{N} \ge 0`` after a stage update. This clamp prevents negative action
 values produced by high-order advection or explicit source updates from
 propagating to diagnostics and subsequent stages; it is not a replacement for a
@@ -342,7 +347,7 @@ discrete spectral wave models by [BooijHolthuijsen1987](@citet) and treated in
 WAVEWATCH III with additional smoothing options by [Tolman2002](@citet).
 
 Ripple implements Tolman's spatial-averaging strategy as
-`SpatialAveraging(; αs, αn)`. After each full `time_step!`, each spectral bin is
+`SpatialAveraging(; αs, αn, gravity)`. After each full `time_step!`, each spectral bin is
 averaged over a small rectangle aligned with the bin's propagation direction:
 
 ```math

@@ -45,7 +45,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
-        run: julia --color=yes --startup-file=no --project=docs docs/make.jl
+          JULIA_NUM_THREADS: auto
+        run: julia --color=yes --startup-file=no --threads=auto --project=docs docs/make.jl
 
       # Documenter's built-in `documenter/deploy` commit status is posted to
       # the deploy_repo (RippleDocumentation), where the source SHA doesn't

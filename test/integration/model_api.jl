@@ -18,7 +18,7 @@ end
     @test_throws ArgumentError SpectralWaveModel(:grid, cgrid; horizontal_advection=nothing)
     @test_throws ArgumentError SpectralWaveModel(grid, :spectral_grid; horizontal_advection=nothing)
 
-    model = SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, timestepper=:RK3)
+    model = SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, timestepper = :RungeKutta3)
     set!(model, N=GaussianWavePacket(x0=1, y0=1, kx0=0.6, ky0=0.0))
 
     @test haskey(fields(model), :N)
@@ -30,6 +30,9 @@ end
     @test model.sources === nothing
     @test model.horizontal_advection === nothing
     @test model.coupling === nothing
+    @test model.timestepper isa RungeKutta3TimeStepper
+    @test model.tendencies === model.timestepper.Gⁿ
+    @test model.previous_tendencies === model.timestepper.G⁻
     @test eltype(model) === eltype(model.action)
     @test model.clock.iteration == 0
     @test_throws ArgumentError time_step!(model, 0.0)
@@ -80,8 +83,11 @@ end
     @test_throws ArgumentError SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, action=mismatched_spectral_action)
     @test_throws ArgumentError SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, action=zeros(4, 3, 3, 3))
 
-    for timestepper in (:ForwardEuler, :SemiImplicitEuler, :AB2, :RK3, :LowStorageRK3, :LSRK3)
+    for timestepper in (:ForwardEuler, :SemiImplicitEuler, :AB2)
         @test SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, timestepper).timestepper === timestepper
+    end
+    for timestepper in (:RungeKutta3, :RK3, :LowStorageRK3, :LSRK3)
+        @test SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, timestepper).timestepper isa RungeKutta3TimeStepper
     end
     @test_throws ArgumentError SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, timestepper=:RK4)
     @test_throws ArgumentError SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, timestepper="RK3")
@@ -136,8 +142,8 @@ end
     cgrid = PolarWaveVectorGrid(; κ=[0.5, 1.0],
                                   φ=[0.0, pi/2, pi, 3pi/2])
 
-    u = Oceananigans.Fields.CenterField(q_grid)
-    v = Oceananigans.Fields.CenterField(q_grid)
+    u = Oceananigans.Fields.Field{Face, Center, Center}(q_grid)
+    v = Oceananigans.Fields.Field{Center, Face, Center}(q_grid)
     Oceananigans.set!(u, 1)
     Oceananigans.set!(v, 2)
 
@@ -151,10 +157,10 @@ end
     @test model.coupling.qtransform.grid === q_grid
     @test model.coupling.current.depth ≈ 2
     @test size(model.action) == (4, 3, 2, 4)
-    @test size(model.coupling.Ux) == (4, 3, 2)
-    @test model.coupling.Ux[1, 1, 1] ≈ 1 atol=1e-12
-    @test model.coupling.Uy[4, 3, 2] ≈ 2 atol=1e-12
-    @test maximum(abs.(model.coupling.dUxdkappa)) < 1e-10
+    @test size(model.coupling.uᴰx) == (4, 3, 2)
+    @test model.coupling.uᴰx[1, 1, 1] ≈ 1 atol=1e-12
+    @test model.coupling.uᴰy[4, 3, 2] ≈ 2 atol=1e-12
+    @test maximum(abs.(model.coupling.duᴰxdκ)) < 1e-10
 
     array_model = SpectralWaveModel(wave_grid, cgrid;
                                     velocities=(; u=ones(4, 3, vertical_size(q_grid)),
@@ -164,13 +170,13 @@ end
                                     timestepper=:ForwardEuler)
 
     @test array_model.coupling.qtransform.grid === q_grid
-    @test array_model.coupling.Ux[1, 1, 1] ≈ 1 atol=1e-12
-    @test array_model.coupling.Uy[1, 1, 1] ≈ 0 atol=1e-12
+    @test array_model.coupling.uᴰx[1, 1, 1] ≈ 1 atol=1e-12
+    @test array_model.coupling.uᴰy[1, 1, 1] ≈ 0 atol=1e-12
 
     bottom_height = [-(1 + 0.1i + 0.05j) for i in 1:4, j in 1:3]
     ib_q_grid = Oceananigans.ImmersedBoundaryGrid(q_grid, Oceananigans.GridFittedBottom(bottom_height))
-    ib_u = Oceananigans.Fields.CenterField(ib_q_grid)
-    ib_v = Oceananigans.Fields.CenterField(ib_q_grid)
+    ib_u = Oceananigans.Fields.Field{Face, Center, Center}(ib_q_grid)
+    ib_v = Oceananigans.Fields.Field{Center, Face, Center}(ib_q_grid)
     Oceananigans.set!(ib_u, 1)
     Oceananigans.set!(ib_v, 0)
     ib_model = SpectralWaveModel(wave_grid, cgrid;
@@ -195,8 +201,8 @@ end
     @test auto_array_model.depth isa Oceananigans.Fields.ConstantField
     @test auto_array_model.depth.constant == 2.0
     @test auto_array_model.coupling.current.depth == 2.0
-    @test auto_array_model.coupling.Ux[1, 1, 1] ≈ 1 atol=1e-12
-    @test auto_array_model.coupling.Uy[1, 1, 1] ≈ 0 atol=1e-12
+    @test auto_array_model.coupling.uᴰx[1, 1, 1] ≈ 1 atol=1e-12
+    @test auto_array_model.coupling.uᴰy[1, 1, 1] ≈ 0 atol=1e-12
 
     pseudomomentum_model = SpectralWaveModel(wave_grid, cgrid;
                                              velocities=PseudomomentumVelocities(; q_grid),
@@ -213,26 +219,26 @@ end
     px, py = compute_pseudomomentum_cell_averages(pseudomomentum_model.action,
                                                   coupling.depth,
                                                   coupling.qtransform)
-    expected_Ux = similar(coupling.Ux); fill!(expected_Ux, 0)
-    expected_Uy = similar(coupling.Uy); fill!(expected_Uy, 0)
-    expected_dUxdkappa = similar(coupling.dUxdkappa); fill!(expected_dUxdkappa, 0)
-    expected_dUydkappa = similar(coupling.dUydkappa); fill!(expected_dUydkappa, 0)
-    compute_doppler_velocity!(expected_Ux, expected_Uy,
+    expected_uᴰx = similar(coupling.uᴰx); fill!(expected_uᴰx, 0)
+    expected_uᴰy = similar(coupling.uᴰy); fill!(expected_uᴰy, 0)
+    expected_duᴰxdκ = similar(coupling.duᴰxdκ); fill!(expected_duᴰxdκ, 0)
+    expected_duᴰydκ = similar(coupling.duᴰydκ); fill!(expected_duᴰydκ, 0)
+    compute_doppler_velocity!(expected_uᴰx, expected_uᴰy,
                               px, py, coupling.depth,
                               coupling.kappa, coupling.qtransform)
-    compute_doppler_velocity_derivative!(expected_dUxdkappa, expected_dUydkappa,
+    compute_doppler_velocity_derivative!(expected_duᴰxdκ, expected_duᴰydκ,
                                          px, py, coupling.depth,
                                          coupling.kappa, coupling.qtransform)
 
-    @test coupling.Ux ≈ expected_Ux atol=1e-12
-    @test coupling.Uy ≈ expected_Uy atol=1e-12
-    @test coupling.dUxdkappa ≈ expected_dUxdkappa atol=1e-12
-    @test coupling.dUydkappa ≈ expected_dUydkappa atol=1e-12
+    @test coupling.uᴰx ≈ expected_uᴰx atol=1e-12
+    @test coupling.uᴰy ≈ expected_uᴰy atol=1e-12
+    @test coupling.duᴰxdκ ≈ expected_duᴰxdκ atol=1e-12
+    @test coupling.duᴰydκ ≈ expected_duᴰydκ atol=1e-12
 
-    previous_Ux = copy(coupling.Ux)
+    previous_uᴰx = copy(coupling.uᴰx)
     set!(pseudomomentum_model.action, 2 .* interior(pseudomomentum_model.action))
     compute_tendencies!(pseudomomentum_model)
-    @test coupling.Ux ≈ 2 .* previous_Ux atol=1e-12
+    @test coupling.uᴰx ≈ 2 .* previous_uᴰx atol=1e-12
 
     auto_pseudomomentum_model = SpectralWaveModel(wave_grid, cgrid;
                                                   velocities=PseudomomentumVelocities(; Nz=7),
@@ -322,7 +328,7 @@ end
     expected = 1.1 + 0.5 * (1.5 * 0.2 * 1.1 - 0.5 * 0.2)
     @test model.action[1, 1, 1, 1] ≈ expected
 
-    rk3 = SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, sources=BottomFriction(rate=1.0), timestepper=:RK3)
+    rk3 = SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, sources=BottomFriction(rate=1.0), timestepper = :RungeKutta3)
     low_storage = SpectralWaveModel(grid, cgrid; horizontal_advection=nothing, sources=BottomFriction(rate=1.0), timestepper=:LowStorageRK3)
     set!(rk3, N=1.0)
     set!(low_storage, N=1.0)

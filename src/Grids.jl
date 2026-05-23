@@ -51,11 +51,18 @@ horizontal_size(g::AbstractGrid) = (g.Nx, g.Ny)
 vertical_size(g::AbstractGrid) = g.Nz
 
 cpu_nodes(nodes) = collect(on_architecture(Oceananigans.CPU(), nodes))
-has_flat_vertical_topology(g::AbstractGrid) = OceanGrids.topology(g, 3) === Flat
+has_flat_topology(g::AbstractGrid, dim) = OceanGrids.topology(g, dim) === Flat
+has_flat_vertical_topology(g::AbstractGrid) = has_flat_topology(g, 3)
 
-xnodes(g::AbstractGrid) = cpu_nodes(OceanGrids.xnodes(g, Center()))
-ynodes(g::AbstractGrid) = cpu_nodes(OceanGrids.ynodes(g, Center()))
-znodes(g::AbstractGrid) = has_flat_vertical_topology(g) ? grid_float_type(g)[] : cpu_nodes(OceanGrids.znodes(g, Center()))
+empty_coordinate_vector(g::AbstractGrid) = grid_float_type(g)[]
+flat_spacing(g::AbstractGrid) = grid_float_type(g)[Inf]
+
+coordinate_nodes(g::AbstractGrid, nodes, dim) =
+    has_flat_topology(g, dim) ? empty_coordinate_vector(g) : cpu_nodes(nodes)
+
+xnodes(g::AbstractGrid) = coordinate_nodes(g, OceanGrids.xnodes(g, Center()), 1)
+ynodes(g::AbstractGrid) = coordinate_nodes(g, OceanGrids.ynodes(g, Center()), 2)
+znodes(g::AbstractGrid) = coordinate_nodes(g, OceanGrids.znodes(g, Center()), 3)
 dimension_size(g, dim) = dim == 1 ? g.Nx : dim == 2 ? g.Ny : g.Nz
 dimension_length(g, dim) = dim == 1 ? g.Lx : dim == 2 ? g.Ly : g.Lz
 
@@ -66,12 +73,22 @@ function closed_faces(g::AbstractGrid, faces, dim)
     return faces
 end
 
-xfaces(g::AbstractGrid) = closed_faces(g, cpu_nodes(OceanGrids.xnodes(g, Face())), 1)
-yfaces(g::AbstractGrid) = closed_faces(g, cpu_nodes(OceanGrids.ynodes(g, Face())), 2)
-zfaces(g::AbstractGrid) = has_flat_vertical_topology(g) ? grid_float_type(g)[] : closed_faces(g, cpu_nodes(OceanGrids.znodes(g, Face())), 3)
+xfaces(g::AbstractGrid) = closed_faces(g, coordinate_nodes(g, OceanGrids.xnodes(g, Face()), 1), 1)
+yfaces(g::AbstractGrid) = closed_faces(g, coordinate_nodes(g, OceanGrids.ynodes(g, Face()), 2), 2)
+zfaces(g::AbstractGrid) = closed_faces(g, coordinate_nodes(g, OceanGrids.znodes(g, Face()), 3), 3)
 
-xspacings(g::AbstractGrid) = diff(xfaces(g))
-yspacings(g::AbstractGrid) = diff(yfaces(g))
-zspacings(g::AbstractGrid) = diff(zfaces(g))
+xspacings(g::AbstractGrid) = has_flat_topology(g, 1) ? flat_spacing(g) : diff(xfaces(g))
+yspacings(g::AbstractGrid) = has_flat_topology(g, 2) ? flat_spacing(g) : diff(yfaces(g))
+zspacings(g::AbstractGrid) = has_flat_topology(g, 3) ? flat_spacing(g) : diff(zfaces(g))
+
+function cgrid_velocity_cache_size(grid::AbstractGrid, component::Symbol, Nκ)
+    Nx, Ny = horizontal_size(grid)
+    topology = OceanGrids.topology(grid)
+    Nxᶠ = topology[1] === OceanGrids.Bounded ? Nx + 1 : Nx
+    Nyᶠ = topology[2] === OceanGrids.Bounded ? Ny + 1 : Ny
+    component === :x && return (Nxᶠ, Ny, Nκ)
+    component === :y && return (Nx, Nyᶠ, Nκ)
+    throw(ArgumentError("C-grid velocity component must be :x or :y; got $component"))
+end
 
 @inline periodic_index(i, N) = mod1(i, N)

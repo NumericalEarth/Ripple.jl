@@ -2,7 +2,7 @@ import Oceananigans
 import Oceananigans: AbstractModel, fields, prognostic_fields
 import Oceananigans.Architectures: architecture
 import Oceananigans.Advection: WENO
-import Oceananigans.TimeSteppers: Clock
+import Oceananigans.TimeSteppers: Clock, RungeKutta3TimeStepper
 
 validate_model_clock(clock::Clock) = clock
 validate_model_clock(clock) =
@@ -99,12 +99,12 @@ function validate_model_coupling(coupling::AbstractCWCMCurrentCoupling, grid, sp
     coupling.kappa == spectral_kappa ||
         throw(ArgumentError("CWCM current coupling kappa does not match the model spectral grid"))
 
-    Nx, Ny = horizontal_size(grid)
-    expected_size = (Nx, Ny, length(spectral_kappa))
-    validate_cwcm_coupling_cache_shape(coupling, "Ux", coupling.Ux, expected_size)
-    validate_cwcm_coupling_cache_shape(coupling, "Uy", coupling.Uy, expected_size)
-    validate_cwcm_coupling_cache_shape(coupling, "dUxdkappa", coupling.dUxdkappa, expected_size)
-    validate_cwcm_coupling_cache_shape(coupling, "dUydkappa", coupling.dUydkappa, expected_size)
+    u_expected_size = cgrid_velocity_cache_size(grid, :x, length(spectral_kappa))
+    v_expected_size = cgrid_velocity_cache_size(grid, :y, length(spectral_kappa))
+    validate_cwcm_coupling_cache_shape(coupling, "uᴰx", coupling.uᴰx, u_expected_size)
+    validate_cwcm_coupling_cache_shape(coupling, "uᴰy", coupling.uᴰy, v_expected_size)
+    validate_cwcm_coupling_cache_shape(coupling, "duᴰxdκ", coupling.duᴰxdκ, u_expected_size)
+    validate_cwcm_coupling_cache_shape(coupling, "duᴰydκ", coupling.duᴰydκ, v_expected_size)
     return coupling
 end
 
@@ -114,23 +114,74 @@ function validate_model_coupling(coupling, grid, spectral_grid)
     return coupling
 end
 
+fused_refraction_supported_coordinate_bcs(bcs) =
+    bcs[1] isa NoFlux && bcs[2] isa Oceananigans.Grids.Periodic
+
+function validate_regular_full_period_direction_grid(spectral_grid)
+    hasproperty(spectral_grid, :φ_faces) || return nothing
+
+    φ_faces = collect(Array(spectral_grid.φ_faces))
+    φ = collect(Array(spectral_grid.φ))
+    FT = eltype(φ_faces)
+    Δφ = diff(φ_faces)
+    period = FT(2pi)
+    tolerance = sqrt(eps(FT))
+
+    isapprox(last(φ_faces) - first(φ_faces), period; rtol=tolerance, atol=tolerance) ||
+        throw(ArgumentError("fused spectral refraction requires φ faces to span exactly 2π"))
+
+    all(δ -> isapprox(δ, first(Δφ); rtol=tolerance, atol=tolerance), Δφ) ||
+        throw(ArgumentError("fused spectral refraction currently requires uniformly-spaced φ faces"))
+
+    for n in eachindex(φ)
+        midpoint = (φ_faces[n] + φ_faces[n+1]) / 2
+        isapprox(φ[n], midpoint; rtol=tolerance, atol=tolerance) ||
+            throw(ArgumentError("fused spectral refraction requires φ centers at cell midpoints; φ[$n]=$(φ[n]) but midpoint is $midpoint"))
+    end
+
+    return nothing
+end
+
+function validate_fused_refraction_configuration(coupling, spectral_advection, spectral_grid, boundary_conditions)
+    coupling isa AbstractCWCMCurrentCoupling || return nothing
+    spectral_advection === nothing && return nothing
+
+    fused_refraction_supported_coordinate_bcs(Tuple(spectral_grid.boundary_conditions)) ||
+        throw(ArgumentError("fused CWCM spectral refraction supports only NoFlux radial and Periodic directional spectral-grid boundary conditions"))
+
+    fused_refraction_supported_coordinate_bcs(Tuple(boundary_conditions.coordinate)) ||
+        throw(ArgumentError("fused CWCM spectral refraction supports only NoFlux radial and Periodic directional model boundary conditions"))
+
+    validate_regular_full_period_direction_grid(spectral_grid)
+    return nothing
+end
+
 supported_model_timestepper(timestepper::Symbol) =
     timestepper === :ForwardEuler ||
     timestepper === :SemiImplicitEuler ||
     timestepper === :AB2 ||
+    timestepper === :RungeKutta3 ||
     timestepper === :RK3 ||
     is_low_storage_rk3(timestepper)
 
 function canonical_model_timestepper(timestepper::Symbol)
     supported_model_timestepper(timestepper) ||
         throw(ArgumentError("unsupported timestepper $timestepper"))
+    timestepper === :RK3 && return :RungeKutta3
+    is_low_storage_rk3(timestepper) && return :RungeKutta3
     return timestepper
 end
 
 canonical_model_timestepper(timestepper) =
     throw(ArgumentError("timestepper must be a Symbol; got $(typeof(timestepper))"))
 
-mutable struct SpectralWaveModel{Arch, G, SG, Depth, A, HAdv, SAdv, Sources, Coupling, GA, BCs, Tend, PrevTend, C} <: AbstractModel{Nothing, Arch}
+function materialize_model_timestepper(timestepper::Symbol, grid, action, tendencies, previous_tendencies)
+    timestepper === :RungeKutta3 &&
+        return RungeKutta3TimeStepper(grid, action; Gⁿ=tendencies, G⁻=previous_tendencies)
+    return timestepper
+end
+
+mutable struct SpectralWaveModel{Arch, G, SG, Depth, A, HAdv, SAdv, Sources, Coupling, GA, BCs, TS, Tend, PrevTend, C} <: AbstractModel{Nothing, Arch}
     grid :: G
     spectral_grid :: SG
     depth :: Depth
@@ -141,7 +192,7 @@ mutable struct SpectralWaveModel{Arch, G, SG, Depth, A, HAdv, SAdv, Sources, Cou
     coupling :: Coupling
     propagation_smoothing :: GA
     boundary_conditions :: BCs
-    timestepper :: Symbol
+    timestepper :: TS
     tendencies :: Tend
     previous_tendencies :: PrevTend
     previous_tendencies_ready :: Bool
@@ -187,6 +238,7 @@ function SpectralWaveModel(grid, spectral_grid;
     boundary_conditions = boundary_conditions === nothing ?
                           default_wave_action_bcs(grid, spectral_grid) :
                           validate_model_boundary_conditions(boundary_conditions, grid, spectral_grid)
+    validate_fused_refraction_configuration(coupling, spectral_advection, spectral_grid, boundary_conditions)
 
     if coupling isa AbstractCWCMCurrentCoupling && spectral_advection !== nothing &&
        horizontal_advection !== nothing
@@ -195,12 +247,14 @@ function SpectralWaveModel(grid, spectral_grid;
 
     tendencies = similar(action)
     previous_tendencies = similar(action)
+    timestepper = materialize_model_timestepper(timestepper, grid, action, tendencies, previous_tendencies)
     Arch = typeof(architecture(grid))
     model = SpectralWaveModel{Arch, typeof(grid), typeof(spectral_grid), typeof(depth), typeof(action),
                               typeof(horizontal_advection), typeof(spectral_advection),
                               typeof(sources), typeof(coupling),
                               typeof(propagation_smoothing),
                               typeof(boundary_conditions),
+                              typeof(timestepper),
                               typeof(tendencies), typeof(previous_tendencies), typeof(clock)}(
         grid, spectral_grid, depth, action, horizontal_advection, spectral_advection, sources, coupling,
         propagation_smoothing, boundary_conditions,
@@ -210,10 +264,6 @@ function SpectralWaveModel(grid, spectral_grid;
     return model
 end
 
-# Currently a passthrough — the fused refraction kernel hardcodes no-flux
-# at κ faces regardless of what the user requests, so the BC slot is
-# informational. Validate the type so we can wire kernel sensitivity to
-# user-supplied BCs in a follow-up without an API break.
 validate_model_boundary_conditions(bcs::ProductBoundaryConditions, grid, spectral_grid) = bcs
 validate_model_boundary_conditions(bcs, grid, spectral_grid) =
     throw(ArgumentError("boundary_conditions must be a ProductBoundaryConditions; got $(typeof(bcs))"))
@@ -230,3 +280,59 @@ fields(model::SpectralWaveModel) = (N=model.action, G=model.tendencies)
 prognostic_fields(model::SpectralWaveModel) = (N=model.action,)
 Base.eltype(model::SpectralWaveModel) = eltype(model.action)
 architecture(model::SpectralWaveModel) = architecture(model.grid)
+
+spectral_coupling_summary(::Nothing) = "none"
+spectral_coupling_summary(::CWCMPrescribedCurrentCoupling) = "CWCM prescribed velocities"
+spectral_coupling_summary(::CWCMPseudomomentumCoupling) = "CWCM pseudomomentum velocities"
+spectral_coupling_summary(c) = string(nameof(typeof(c)))
+
+# `velocities(model)` returns the (u, v) Lagrangian-mean current the wave
+# model is coupled to (same contract as `MonobandedWaveModel`).
+velocities(model::SpectralWaveModel) = velocities(model.coupling)
+velocities(c::CWCMPrescribedCurrentCoupling) = (u=c.current.u, v=c.current.v)
+velocities(c::CWCMPseudomomentumCoupling) = nothing  # self-coupled; no externally-set u/v
+
+# `pseudomomentum_fields(model::SpectralWaveModel; location)` mirrors the
+# monobanded API: returns center-by-default fields px, py constructed from
+# the model's coupling Q-transform.
+function pseudomomentum_fields(model::SpectralWaveModel; location=(Center, Center, Center))
+    coupling = model.coupling
+    coupling isa AbstractCWCMCurrentCoupling ||
+        throw(ArgumentError("pseudomomentum_fields(::SpectralWaveModel) requires a CWCM coupling that owns a Q-transform; got $(typeof(coupling))"))
+    return pseudomomentum_fields(model.action, model.depth, coupling.qtransform; location)
+end
+
+# Project the analytic action tendency `model.tendencies` onto Q(z) to return
+# (∂t uˢ, ∂t vˢ). The caller is expected to have called
+# `compute_tendencies!(model)` so that `model.tendencies` reflects the desired
+# tendency operator (transport + refraction + sources).
+function pseudomomentum_tendency_fields(model::SpectralWaveModel;
+                                        location=(Center, Center, Center))
+    coupling = model.coupling
+    coupling isa AbstractCWCMCurrentCoupling ||
+        throw(ArgumentError("pseudomomentum_tendency_fields(::SpectralWaveModel) requires a CWCM coupling that owns a Q-transform; got $(typeof(coupling))"))
+    return pseudomomentum_fields(model.tendencies, model.depth, coupling.qtransform; location)
+end
+
+spectral_sources_summary(::Nothing) = "none"
+spectral_sources_summary(s) = string(nameof(typeof(s)))
+
+spectral_timestepper_name(ts::RungeKutta3TimeStepper) = :RungeKutta3
+spectral_timestepper_name(ts) = ts isa Symbol ? ts : nameof(typeof(ts))
+
+function Base.show(io::IO, model::SpectralWaveModel)
+    println(io, summary(model))
+    println(io, "├── grid: ", summary(model.grid))
+    println(io, "├── spectral grid: ", summary(model.spectral_grid))
+    println(io, "├── prognostic fields: N")
+    println(io, "├── horizontal advection: ",
+                model.horizontal_advection === nothing ? "none" : nameof(typeof(model.horizontal_advection)))
+    println(io, "├── spectral advection: ",
+                model.spectral_advection === nothing ? "none" : nameof(typeof(model.spectral_advection)))
+    println(io, "├── coupling: ", spectral_coupling_summary(model.coupling))
+    println(io, "├── sources: ", spectral_sources_summary(model.sources))
+    println(io, "├── propagation smoothing: ",
+                model.propagation_smoothing === nothing ? "none" : nameof(typeof(model.propagation_smoothing)))
+    println(io, "├── timestepper: ", spectral_timestepper_name(model.timestepper))
+    print(io,   "└── clock: time=", model.clock.time, ", iteration=", model.clock.iteration)
+end

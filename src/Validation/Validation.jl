@@ -109,6 +109,12 @@ function default_validation_cases()
         ValidationCase(:finite_volume_source_rates,
                        "Power-law source rates use exact spectral finite-volume averages.",
                        finite_volume_source_rates_validation),
+        ValidationCase(:monobanded_pseudomomentum_is_stokes_drift,
+                       "Calibrated monobanded pseudomomentum cell averages equal the deep-water Stokes-drift cell averages.",
+                       monobanded_pseudomomentum_is_stokes_drift_validation),
+        ValidationCase(:wave_action_conservation_under_refraction,
+                       "Closed periodic spectral refraction with prescribed solenoidal current conserves total wave action.",
+                       wave_action_conservation_under_refraction_validation),
     )
 end
 
@@ -190,16 +196,16 @@ function q_precomputed_weights_validation()
 
     u = [0.1i - 0.2j + 0.05znodes(grid)[k] for i in 1:2, j in 1:1, k in 1:vertical_size(grid)]
     v = [-0.3i + 0.1j - 0.02znodes(grid)[k] for i in 1:2, j in 1:1, k in 1:vertical_size(grid)]
-    Ux = zeros(2, 1, length(kappa))
-    Uy = zeros(2, 1, length(kappa))
-    cached_Ux = similar(Ux)
-    cached_Uy = similar(Uy)
-    compute_doppler_velocity!(Ux, Uy, u, v, depth, kappa, qtransform)
-    compute_doppler_velocity!(cached_Ux, cached_Uy, u, v, depth, kappa, cached)
+    uᴰx = zeros(2, 1, length(kappa))
+    uᴰy = zeros(2, 1, length(kappa))
+    cached_uᴰx = similar(uᴰx)
+    cached_uᴰy = similar(uᴰy)
+    compute_doppler_velocity!(uᴰx, uᴰy, u, v, depth, kappa, qtransform)
+    compute_doppler_velocity!(cached_uᴰx, cached_uᴰy, u, v, depth, kappa, cached)
 
-    metrics = Dict(:Ux_error => maximum(abs.(cached_Ux .- Ux)),
-                   :Uy_error => maximum(abs.(cached_Uy .- Uy)))
-    tolerances = Dict(:Ux_error => 1e-14, :Uy_error => 1e-14)
+    metrics = Dict(:uᴰx_error => maximum(abs.(cached_uᴰx .- uᴰx)),
+                   :uᴰy_error => maximum(abs.(cached_uᴰy .- uᴰy)))
+    tolerances = Dict(:uᴰx_error => 1e-14, :uᴰy_error => 1e-14)
     return ValidationResult(:q_precomputed_weights, "cached Q weights match exact integration", metrics, tolerances)
 end
 
@@ -353,6 +359,98 @@ function finite_volume_source_rates_validation()
     tolerances = Dict(:finite_volume_rate_error => 1e-14,
                       :midpoint_difference => Inf)
     return ValidationResult(:finite_volume_source_rates, "exact finite-volume source rates", metrics, tolerances)
+end
+
+function monobanded_pseudomomentum_is_stokes_drift_validation()
+    # Calibration: ε = wave steepness, κ = wavenumber, c = √(g/κ) = phase speed.
+    # Wave action calibrated so the monobanded pseudomomentum equals the
+    # deep-water Stokes drift exactly: A·K·Q(0) = ε²·c → A = ε²·c/(2κ²).
+    grid = RectilinearGrid(CPU(); size=(1, 1, 12), x=(0, 1), y=(0, 1), z=(-1, 0),
+                           topology=(Periodic, Periodic, Bounded))
+    g = 9.81
+    ε = 0.1
+    κ = 20.0  # κ·h = 20 → deep-water finite-depth corrections ≪ machine ε
+    c = sqrt(g / κ)
+    A_init   = ε^2 * c / (2κ^2)
+    AKx_init = ε^2 * c / (2κ)
+
+    model = MonobandedWaveModel(grid; advection=nothing,
+                                gravitational_acceleration=g,
+                                velocities=PseudomomentumVelocities())
+    set!(model; A=A_init, AKx=AKx_init, AKy=0)
+    update_coupling!(model)
+
+    px, py = pseudomomentum_fields(model)
+    px_col = vec(interior(px)[1, 1, :])
+    py_col = vec(interior(py)[1, 1, :])
+
+    zf = zfaces(grid)
+    expected_px = [ε^2 * c * (exp(2κ * zf[k+1]) - exp(2κ * zf[k])) /
+                   (2κ * (zf[k+1] - zf[k]))
+                   for k in 1:vertical_size(grid)]
+
+    metrics = Dict(:max_x_error => maximum(abs, px_col .- expected_px),
+                   :max_y_error => maximum(abs, py_col))
+    tolerances = Dict(:max_x_error => 1e-12,
+                      :max_y_error => 1e-12)
+    return ValidationResult(:monobanded_pseudomomentum_is_stokes_drift,
+                            "monobanded pseudomomentum cell averages equal deep-water Stokes drift cell averages",
+                            metrics, tolerances)
+end
+
+function wave_action_conservation_under_refraction_validation()
+    # Closed periodic 2D + spectral. Solenoidal current (streamfunction
+    # Ψ = sin(2πx/Lx)·cos(2πy/Ly)) drives refraction; periodic boundaries in
+    # (x, y, φ) and no-flux in κ. The fused CWCM refraction kernel's discrete
+    # divergence telescopes to zero: ∑_cells G^n · cell_measure ≡ 0 to roundoff
+    # for any state and any prescribed current. We verify this at a non-trivial
+    # state, isolating the operator-level conservation property from any
+    # time-integrator truncation.
+    Lx, Ly = 1.0, 1.0
+    Nx, Ny = 6, 6
+    grid = RectilinearGrid(CPU(); size=(Nx, Ny, 1), halo=(3, 3, 3),
+                           x=(0, Lx), y=(0, Ly), z=(-0.5, 0),
+                           topology=(Periodic, Periodic, Bounded))
+
+    κ0 = 50.0
+    spectral = PolarWaveVectorGrid(; κ=range(0.5κ0, 2.0κ0; length=6),
+                                     φ=range(-π, π; length=13)[1:12])
+
+    uL = Field{Face,   Center, Center}(grid)
+    vL = Field{Center, Face,   Center}(grid)
+    set!(uL, (x, y, z) -> -(2π / Ly) * sin(2π * x / Lx) * sin(2π * y / Ly))
+    set!(vL, (x, y, z) -> -(2π / Lx) * cos(2π * x / Lx) * cos(2π * y / Ly))
+    fill_halo_regions!((uL, vL))
+
+    model = SpectralWaveModel(grid, spectral; depth=0.5,
+                              velocities=(; u=uL, v=vL),
+                              sources=nothing,
+                              timestepper=:RungeKutta3)
+    set!(model.action, (x, y, kx, ky) ->
+         (1 + 0.5 * sin(2π * x / Lx)) * (1 + 0.3 * cos(2π * y / Ly)) *
+         exp(-((hypot(kx, ky) - κ0) / (0.2 * κ0))^2))
+    update_coupling!(model)
+    compute_tendencies!(model)
+
+    weights = model.spectral_grid.weights
+    dxdy = grid.Δxᶜᵃᵃ * grid.Δyᵃᶜᵃ
+    Nint = interior(model.action)
+    Gint = interior(model.tendencies)
+    Nm, Nn = size(weights)
+
+    tendency_sum = zero(eltype(Gint))
+    action_sum   = zero(eltype(Nint))
+    @inbounds for n in 1:Nn, m in 1:Nm, j in 1:size(Nint, 2), i in 1:size(Nint, 1)
+        w = weights[m, n] * dxdy
+        tendency_sum += Gint[i, j, m, n] * w
+        action_sum   += Nint[i, j, m, n] * w
+    end
+
+    metrics = Dict(:relative_tendency_sum => tendency_sum / action_sum)
+    tolerances = Dict(:relative_tendency_sum => 1e-12)
+    return ValidationResult(:wave_action_conservation_under_refraction,
+                            "fused CWCM refraction kernel: ∑ Gⁿ · cell_measure / ∫A is roundoff",
+                            metrics, tolerances)
 end
 
 function write_validation_summary(path::AbstractString, results)

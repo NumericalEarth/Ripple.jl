@@ -28,7 +28,15 @@ The example pages walk a deliberate arc:
    production-resolution version of the quick start, with a three-panel
    animation showing `m₀`, `κᵣₘₛ`, and the mean direction evolving under
    the fused Doppler + refraction kernel.
-6. **[Swell Generation by a Translating Idealized Hurricane](@ref)** — the
+6. **[Monobanded Linear-Shear Refraction](@ref)** — a quasi-analytic
+   `MonobandedWaveModel` validation in a barotropic linear shear, comparing
+   packet contours, action conservation, centroid motion, and the predicted
+   ``K_y(t) = K_{y0} - S K_{x0} t`` refraction law.
+7. **[Coupled Wind-Drift Instability](@ref)** — a compact Oceananigans
+   wind-drift-layer instability with a `MonobandedWaveModel` advanced from
+   an Oceananigans callback that copies the current and refreshes the
+   Stokes-drift shear every step.
+8. **[Swell Generation by a Translating Idealized Hurricane](@ref)** — the
    ST3/ST4-equivalent physics bundle (Janssen wind input, saturation
    dissipation, Hasselmann DIA) driven by a translating Holland (1980)
    hurricane, showing the right-front extended-fetch enhancement and the
@@ -53,6 +61,8 @@ Pages = [
     "generated/examples/bounded_wave_packet_dispersion.md",
     "generated/examples/spectral_refraction_by_shear.md",
     "generated/examples/vortex_refraction.md",
+    "generated/examples/monobanded_linear_shear_refraction.md",
+    "generated/examples/coupled_wind_drift_instability.md",
     "generated/examples/translating_hurricane_swell.md",
 ]
 Depth = 1

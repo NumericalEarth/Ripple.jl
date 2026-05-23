@@ -4,9 +4,10 @@
 # to ship a paper-quality figure: wave action refracted through a barotropic
 # Gaussian vortex. Wave action lives on the product of a 3-D physical
 # `RectilinearGrid` and a 2-D `PolarWaveVectorGrid`. The fused refraction
-# kernel applies Doppler-shifted physical transport at ``c_g + u^L``
+# kernel applies Doppler-shifted physical transport at ``c_g + u^D``
 # together with kinematic spectral refraction ``\nabla_k \cdot (c_k N)`` in
-# a single pass, advanced with SSP-RK3 via an `Oceananigans.Simulation`.
+# a single pass, advanced with `RungeKutta3TimeStepper` via an
+# `Oceananigans.Simulation`.
 #
 # This example targets clarity over performance: small grid, small spectrum,
 # short trajectory. The
@@ -81,7 +82,7 @@ ys = ynodes(grid)
 model = SpectralWaveModel(grid, spectral_grid;
                           velocities  = (; u = u_field, v = v_field),
                           sources     = nothing,
-                          timestepper = :RK3);
+                          timestepper = :RungeKutta3);
 
 # Narrow-banded Gaussian initial condition, uniform in ``(x, y)``, peaking
 # at ``\kappa \approx 0.4`` and direction ``\varphi \approx 0`` (waves
@@ -99,7 +100,7 @@ end);
 
 # ## Time stepping
 #
-# 200 RK3 steps of ``\Delta t = 0.05\,\mathrm{s}``.
+# 200 Runge-Kutta steps of ``\Delta t = 0.05\,\mathrm{s}``.
 
 simulation = Simulation(model; Δt = 0.05, stop_iteration = 200)
 run!(simulation);
