@@ -192,10 +192,8 @@ function compute_wave_current_refraction_tendency!(G, N,
     ensure_current_gradients!(coupling, grid)
     ensure_refraction_tables!(coupling, cgrid, model.depth, grid, Nκ, Nφ, FT)
 
-    # Refresh halos so periodic stencils see correct neighbours.
-    for n in 1:Nφ, m in 1:Nκ
-        fill_halo_regions!(physical_field(N, m, n))
-    end
+    # Refresh halos once on the ProductField so the physical stencils see current neighbours.
+    fill_halo_regions!(N)
 
     Δx = first(xspacings(grid))
     Δy = first(yspacings(grid))

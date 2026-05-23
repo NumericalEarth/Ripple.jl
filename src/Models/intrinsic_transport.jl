@@ -93,7 +93,9 @@ end
 
 # Driver: write the source-free transport tendency into G using the fused
 # kernel. Halos are refreshed once; sources (if any) are added by the
-# dispatch in `compute_tendencies!`.
+# dispatch in `compute_tendencies!`. The kernel supports periodic and
+# bounded physical topologies via wrapped/clamped indices plus first-order
+# fallback at insufficient stencils.
 function compute_intrinsic_transport_tendency!(G, N, model)
     grid = model.grid
     Nx, Ny, Nκ, Nφ = size(N)

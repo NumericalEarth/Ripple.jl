@@ -7,8 +7,8 @@ end
 # No-coupling + multi-bin WENO horizontal advection → fused KA kernel. Avoids the
 # 480 × Nx × Ny FluxFormAdvection / ConstantField allocations the legacy
 # bin loop costs per step. The single-bin path stays on Oceananigans' exact
-# tracer-advection fallback for validation against analytical transport tests;
-# bounded physical topologies also stay on Oceananigans for boundary fluxes.
+# tracer-advection fallback for validation against analytical transport tests.
+# The fused kernel handles periodic and bounded x/y topologies directly.
 # Sources, if any, are added in a second pass.
 function compute_tendencies!(G::ProductField, model::SpectralWaveModel, coupling::Nothing)
     if intrinsic_transport_kernel_enabled(model)
@@ -28,9 +28,7 @@ function intrinsic_transport_kernel_enabled(model)
     model.horizontal_advection isa WENO || return false
     Nκ, Nφ = coordinate_size(model.spectral_grid)
     Nκ * Nφ > 1 || return false
-    topology = Oceananigans.Grids.topology(model.grid)
-    return topology[1] === Oceananigans.Grids.Periodic &&
-           topology[2] === Oceananigans.Grids.Periodic
+    return true
 end
 
 # Generic per-bin fallback (used for non-WENO horizontal advection schemes

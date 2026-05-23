@@ -130,7 +130,7 @@ end
 canonical_model_timestepper(timestepper) =
     throw(ArgumentError("timestepper must be a Symbol; got $(typeof(timestepper))"))
 
-mutable struct SpectralWaveModel{Arch, G, SG, Depth, A, HAdv, SAdv, Sources, Coupling, GA, Tend, PrevTend, C} <: AbstractModel{Nothing, Arch}
+mutable struct SpectralWaveModel{Arch, G, SG, Depth, A, HAdv, SAdv, Sources, Coupling, GA, Tend, PrevTend, StageScratch, StageReference, C} <: AbstractModel{Nothing, Arch}
     grid :: G
     spectral_grid :: SG
     depth :: Depth
@@ -143,6 +143,8 @@ mutable struct SpectralWaveModel{Arch, G, SG, Depth, A, HAdv, SAdv, Sources, Cou
     timestepper :: Symbol
     tendencies :: Tend
     previous_tendencies :: PrevTend
+    stage_scratch :: StageScratch
+    stage_reference :: StageReference
     previous_tendencies_ready :: Bool
     clock :: C
     intrinsic_transport_workspace :: Any  # lazy cache for the fused source-free transport kernel
@@ -190,15 +192,18 @@ function SpectralWaveModel(grid, spectral_grid;
 
     tendencies = similar(action)
     previous_tendencies = similar(action)
+    stage_scratch = similar(action)
+    stage_reference = similar(action)
     Arch = typeof(architecture(grid))
     model = SpectralWaveModel{Arch, typeof(grid), typeof(spectral_grid), typeof(depth), typeof(action),
                               typeof(horizontal_advection), typeof(spectral_advection),
                               typeof(sources), typeof(coupling),
                               typeof(propagation_smoothing),
-                              typeof(tendencies), typeof(previous_tendencies), typeof(clock)}(
+                              typeof(tendencies), typeof(previous_tendencies),
+                              typeof(stage_scratch), typeof(stage_reference), typeof(clock)}(
         grid, spectral_grid, depth, action, horizontal_advection, spectral_advection, sources, coupling,
         propagation_smoothing,
-        timestepper, tendencies, previous_tendencies, false, clock,
+        timestepper, tendencies, previous_tendencies, stage_scratch, stage_reference, false, clock,
         nothing)
     update_coupling!(model)
     return model

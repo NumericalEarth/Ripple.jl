@@ -136,30 +136,30 @@ function time_step!(model::SpectralWaveModel, dt; callbacks=[])
         model.previous_tendencies_ready = true
     elseif model.timestepper === :RK3
         model.previous_tendencies_ready = false
-        N0 = copy(model.action)
+        copy_field!(model.stage_reference, model.action)
         compute_tendencies!(model)
         add_scaled!(model.action, model.tendencies, dt)
 
         compute_tendencies!(model)
-        stage = copy(model.action)
-        add_scaled!(stage, model.tendencies, dt)
-        combine!(model.action, 0.75, N0, 0.25, stage)
+        copy_field!(model.stage_scratch, model.action)
+        add_scaled!(model.stage_scratch, model.tendencies, dt)
+        combine!(model.action, 0.75, model.stage_reference, 0.25, model.stage_scratch)
 
         compute_tendencies!(model)
-        stage = copy(model.action)
-        add_scaled!(stage, model.tendencies, dt)
-        combine!(model.action, 1/3, N0, 2/3, stage)
+        copy_field!(model.stage_scratch, model.action)
+        add_scaled!(model.stage_scratch, model.tendencies, dt)
+        combine!(model.action, 1/3, model.stage_reference, 2/3, model.stage_scratch)
     elseif is_low_storage_rk3(model.timestepper)
         model.previous_tendencies_ready = false
-        N0 = copy(model.action)
+        copy_field!(model.stage_reference, model.action)
         compute_tendencies!(model)
         add_scaled!(model.action, model.tendencies, dt)
 
         compute_tendencies!(model)
-        combine_with_increment!(model.action, 0.75, N0, 0.25, dt, model.tendencies)
+        combine_with_increment!(model.action, 0.75, model.stage_reference, 0.25, dt, model.tendencies)
 
         compute_tendencies!(model)
-        combine_with_increment!(model.action, 1/3, N0, 2/3, dt, model.tendencies)
+        combine_with_increment!(model.action, 1/3, model.stage_reference, 2/3, dt, model.tendencies)
     else
         throw(ArgumentError("unsupported timestepper $(model.timestepper)"))
     end
