@@ -1,6 +1,8 @@
 import KernelAbstractions
 import KernelAbstractions: @kernel, @index
 import Oceananigans.Architectures: architecture, device, on_architecture
+import Oceananigans.Grids: Center, Face, xnode, ynode
+import Oceananigans.Operators: δxᶜᵃᵃ, δyᵃᶜᵃ
 
 """
     AbstractPropagationSmoothing
@@ -19,7 +21,7 @@ The §3 divergent-advection method has its own slot reserved for a future
 abstract type AbstractPropagationSmoothing end
 
 """
-    SpatialAveraging(; αs=0.5, αn=0.5)
+    SpatialAveraging(; αs=0.5, αn=0.5, gravity=9.81)
 
 Tolman 2002 spatial-averaging GSE alleviation. After each full
 `time_step!`, each spectral cell's physical field is replaced by a local
@@ -41,6 +43,7 @@ the cost of additional smearing.
 mutable struct SpatialAveraging{FT} <: AbstractPropagationSmoothing
     αs :: FT
     αn :: FT
+    gravity :: FT
     cg_table :: Any
     Δcg_table :: Any
     cos_table :: Any
@@ -49,11 +52,29 @@ mutable struct SpatialAveraging{FT} <: AbstractPropagationSmoothing
     scratch :: Any
 end
 
-SpatialAveraging(; αs = 0.5, αn = 0.5) =
-    SpatialAveraging(promote(float(αs), float(αn))..., nothing, nothing, nothing, nothing, nothing, nothing)
+function SpatialAveraging(; αs = 0.5, αn = 0.5, gravity = 9.81)
+    FT = promote_type(typeof(float(αs)), typeof(float(αn)), typeof(float(gravity)))
+    return SpatialAveraging(FT(αs), FT(αn), FT(gravity), nothing, nothing, nothing, nothing, nothing, nothing)
+end
 
-@inline _gse_periodic(i, N) = ifelse(i < 1, i + N, ifelse(i > N, i - N, i))
+@inline _gse_periodic(i, N) = mod1(i, N)
 @inline _gse_clamp(i, N) = ifelse(i < 1, 1, ifelse(i > N, N, i))
+
+@inline function _gse_inverse_δx(i, j, k, grid)
+    δx = δxᶜᵃᵃ(i, j, k, grid, xnode, Face(), Center(), Center())
+    nonzero_δx = δx != zero(δx)
+    numerator = ifelse(nonzero_δx, one(δx), zero(δx))
+    denominator = ifelse(nonzero_δx, δx, one(δx))
+    return numerator / denominator
+end
+
+@inline function _gse_inverse_δy(i, j, k, grid)
+    δy = δyᵃᶜᵃ(i, j, k, grid, ynode, Center(), Face(), Center())
+    nonzero_δy = δy != zero(δy)
+    numerator = ifelse(nonzero_δy, one(δy), zero(δy))
+    denominator = ifelse(nonzero_δy, δy, one(δy))
+    return numerator / denominator
+end
 
 # Tolman 2002 Eq. 15 averaging kernel. For each (i, j, m, n) target cell, the
 # four corners of the averaging rectangle (aligned with the bin's propagation
@@ -62,7 +83,7 @@ SpatialAveraging(; αs = 0.5, αn = 0.5) =
 @kernel function _spatial_averaging_kernel!(
     N_out, N_in,
     cg_table, Δcg_table, cos_table, sin_table, Δφ,
-    αs, αn, dt, Δx_inv, Δy_inv,
+    αs, αn, dt, grid,
     Hx, Hy, iz, Nx, Ny,
     periodic_x, periodic_y)
     i, j, m, n = @index(Global, NTuple)
@@ -74,6 +95,8 @@ SpatialAveraging(; αs = 0.5, αn = 0.5) =
 
     Ls = αs * Δcg * dt
     Ln = αn * cg * Δφ * dt
+    Δx_inv = _gse_inverse_δx(i, j, 1, grid)
+    Δy_inv = _gse_inverse_δy(i, j, 1, grid)
 
     Ls_x = Ls * cosθ * Δx_inv
     Ls_y = Ls * sinθ * Δy_inv
@@ -118,7 +141,7 @@ function ensure_spatial_averaging_tables!(averaging::SpatialAveraging, model)
     cgrid = model.spectral_grid
     Nx, Ny, Nκ, Nφ = size(model.action)
     FT = eltype(model.action)
-    gravity = FT(9.81)
+    gravity = FT(averaging.gravity)
     arch = architecture(model.grid)
 
     if averaging.cg_table === nothing || length(averaging.cg_table) != Nκ
@@ -169,9 +192,6 @@ function apply_propagation_smoothing!(model, averaging::SpatialAveraging, dt)
     Nx, Ny, Nκ, Nφ = size(model.action)
     Hx, Hy, iz = product_field_data_indices(model.action)
 
-    Δx = first(xspacings(grid))
-    Δy = first(yspacings(grid))
-
     topology = Oceananigans.Grids.topology(grid)
     periodic_x = topology[1] === Oceananigans.Grids.Periodic
     periodic_y = topology[2] === Oceananigans.Grids.Periodic
@@ -184,7 +204,7 @@ function apply_propagation_smoothing!(model, averaging::SpatialAveraging, dt)
            convert(eltype(model.action), averaging.αs),
            convert(eltype(model.action), averaging.αn),
            convert(eltype(model.action), dt),
-           1 / Δx, 1 / Δy,
+           grid,
            Hx, Hy, iz, Nx, Ny,
            periodic_x, periodic_y)
     KernelAbstractions.synchronize(device(arch))

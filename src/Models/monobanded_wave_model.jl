@@ -4,9 +4,10 @@ import Oceananigans.Advection: WENO
 import Oceananigans.Architectures: architecture, device, on_architecture
 import Oceananigans.BoundaryConditions: DefaultBoundaryCondition, FieldBoundaryConditions, fill_halo_regions!
 import Oceananigans.BoundaryConditions: regularize_field_boundary_conditions
-import Oceananigans.Fields: Field, CenterField, interior, set!
-import Oceananigans.Grids: Center, Flat, Periodic
-import Oceananigans.Operators: Δxᶜᵃᵃ, Δyᵃᶜᵃ
+import Oceananigans.Fields: Field, CenterField, interior, location, set!
+import Oceananigans.Grids: Center, Face, Flat, Periodic
+import Oceananigans.Operators: ∂xᶜᶜᶜ, ∂yᶜᶜᶜ, ∂xᶠᶜᶜ, ∂yᶜᶠᶜ
+import Oceananigans.Operators: ℑxᶜᵃᵃ, ℑxᶠᵃᵃ, ℑyᵃᶜᵃ, ℑyᵃᶠᵃ
 import Oceananigans.TimeSteppers: Clock, RungeKutta3TimeStepper, time_step!, update_state!, tick!
 import KernelAbstractions
 import KernelAbstractions: @kernel, @index
@@ -234,6 +235,13 @@ end
 canonical_monobanded_timestepper(timestepper) =
     throw(ArgumentError("timestepper must be a Symbol; got $(typeof(timestepper))"))
 
+validate_monobanded_advection(::Nothing) = nothing
+function validate_monobanded_advection(advection)
+    advection isa WENO && return advection
+    advection isa AbstractCenteredAdvectionScheme && return advection
+    throw(ArgumentError("MonobandedWaveModel currently supports `advection=nothing`, `Centered()`, or `WENO()`; got $(summary(advection))"))
+end
+
 monobanded_validate_scalar_source_parameter(value::Number, name) = nothing
 monobanded_validate_scalar_source_parameter(::Nothing, name) = nothing
 monobanded_validate_scalar_source_parameter(value, name) =
@@ -282,6 +290,8 @@ monobanded_prescribed_q_grid(v::PrescribedVelocities, model_grid) = begin
     validate_q_grid(q_grid, model_grid)
     validate_velocity_field_grid(u_grid, q_grid, "u")
     validate_velocity_field_grid(v_grid, q_grid, "v")
+    validate_velocity_component_location(v.u, "u")
+    validate_velocity_component_location(v.v, "v")
     return q_grid
 end
 
@@ -302,8 +312,8 @@ function build_monobanded_coupling(v::PseudomomentumVelocities, grid, ::Type{FT}
     validate_q_grid(q_grid, grid)
     qtransform = QTransform(QKernel(FT), q_grid)
     depth = grid_depth(q_grid)
-    px = pseudomomentum_field(q_grid; eltype=FT)
-    py = pseudomomentum_field(q_grid; eltype=FT)
+    px = pseudomomentum_field(q_grid; location=(Face, Center, Center), eltype=FT)
+    py = pseudomomentum_field(q_grid; location=(Center, Face, Center), eltype=FT)
     return MonobandedPseudomomentumCoupling(qtransform, depth, px, py)
 end
 
@@ -382,7 +392,7 @@ function MonobandedWaveModel(grid;
     diagnostics = monobanded_diagnostic_fields(grid, FT)
     sources = validate_monobanded_sources(canonical_model_sources(sources))
     coupling = validate_monobanded_coupling(velocities, coupling, grid, FT)
-    advection = validate_model_advection(canonical_model_advection(advection), grid, nothing)
+    advection = validate_monobanded_advection(validate_model_advection(canonical_model_advection(advection), grid, nothing))
     timestepper_name = canonical_monobanded_timestepper(timestepper)
     clock = clock === nothing ? Clock(time=zero(FT)) : validate_model_clock(clock)
 
@@ -486,19 +496,47 @@ end
 monobanded_parent(field) = parent(field.data)
 
 @inline monobanded_data_index(i, offset) = i - offset
-@inline monobanded_left_index(i, N, periodic) = ifelse(i == 1, ifelse(periodic, N, 1), i - 1)
-@inline monobanded_right_index(i, N, periodic) = ifelse(i == N, ifelse(periodic, 1, N), i + 1)
 @inline monobanded_stencil_index(i, N, periodic) = ifelse(periodic, _periodic(i, N), _clamp_idx(i, N))
 
-@inline function monobanded_x_flux(q, Cx, iₗ, iᵣ, j, k, Nx, Ox, Oy, Oz, xperiodic, use_weno)
-    ixₗ = monobanded_data_index(iₗ, Ox)
-    ixᵣ = monobanded_data_index(iᵣ, Ox)
+@inline function monobanded_center_value(i, j, k, grid, q, Nx, Ny, Ox, Oy, Oz, xperiodic, yperiodic)
+    ii = monobanded_stencil_index(i, Nx, xperiodic)
+    jj = monobanded_stencil_index(j, Ny, yperiodic)
+    ix = monobanded_data_index(ii, Ox)
+    jy = monobanded_data_index(jj, Oy)
+    kz = monobanded_data_index(k, Oz)
+    return @inbounds q[ix, jy, kz]
+end
+
+@inline function monobanded_x_gradient_value(i, j, k, grid, q, Nx, Ox, Oy, Oz, xperiodic)
+    ii = monobanded_stencil_index(i, Nx, xperiodic)
+    ix = monobanded_data_index(ii, Ox)
     jy = monobanded_data_index(j, Oy)
     kz = monobanded_data_index(k, Oz)
-    half = inv(eltype(q)(2))
-    u = half * (Cx[ixₗ, jy, kz] + Cx[ixᵣ, jy, kz])
-    q_upwind = ifelse(u >= zero(u), q[ixₗ, jy, kz], q[ixᵣ, jy, kz])
+    return @inbounds q[ix, jy, kz]
+end
 
+@inline function monobanded_y_gradient_value(i, j, k, grid, q, Ny, Ox, Oy, Oz, yperiodic)
+    jj = monobanded_stencil_index(j, Ny, yperiodic)
+    ix = monobanded_data_index(i, Ox)
+    jy = monobanded_data_index(jj, Oy)
+    kz = monobanded_data_index(k, Oz)
+    return @inbounds q[ix, jy, kz]
+end
+
+@inline function monobanded_x_flux(iᶠ, j, k, grid, q, Cx,
+                                   Nx, Ny, Ox, Oy, Oz,
+                                   xperiodic, yperiodic, xflat, use_weno, use_centered)
+    iₗ = iᶠ - 1
+    boundary_face = xflat | (!xperiodic & ((iᶠ == 1) | (iᶠ == Nx + 1)))
+
+    u = ℑxᶠᵃᵃ(iᶠ, j, k, grid, monobanded_center_value,
+              Cx, Nx, Ny, Ox, Oy, Oz, xperiodic, yperiodic)
+    qₗ = monobanded_center_value(iₗ, j, k, grid, q, Nx, Ny, Ox, Oy, Oz, xperiodic, yperiodic)
+    qᵣ = monobanded_center_value(iₗ + 1, j, k, grid, q, Nx, Ny, Ox, Oy, Oz, xperiodic, yperiodic)
+    q_upwind = ifelse(u >= zero(u), qₗ, qᵣ)
+
+    jy = monobanded_data_index(j, Oy)
+    kz = monobanded_data_index(k, Oz)
     im2 = monobanded_data_index(monobanded_stencil_index(iₗ - 2, Nx, xperiodic), Ox)
     im1 = monobanded_data_index(monobanded_stencil_index(iₗ - 1, Nx, xperiodic), Ox)
     i0  = monobanded_data_index(monobanded_stencil_index(iₗ,     Nx, xperiodic), Ox)
@@ -511,17 +549,26 @@ monobanded_parent(field) = parent(field.data)
                                q[ip2, jy, kz], q[ip3, jy, kz],
                                u, has_stencil)
 
-    return u * ifelse(use_weno, q_weno, q_upwind)
+    q_centered = (qₗ + qᵣ) / (one(qₗ) + one(qₗ))
+    q_face = ifelse(use_weno, q_weno, ifelse(use_centered, q_centered, q_upwind))
+    flux = u * q_face
+    return ifelse(boundary_face, zero(flux), flux)
 end
 
-@inline function monobanded_y_flux(q, Cy, i, jₗ, jᵣ, k, Ny, Ox, Oy, Oz, yperiodic, use_weno)
+@inline function monobanded_y_flux(i, jᶠ, k, grid, q, Cy,
+                                   Nx, Ny, Ox, Oy, Oz,
+                                   xperiodic, yperiodic, yflat, use_weno, use_centered)
+    jₗ = jᶠ - 1
+    boundary_face = yflat | (!yperiodic & ((jᶠ == 1) | (jᶠ == Ny + 1)))
+
+    v = ℑyᵃᶠᵃ(i, jᶠ, k, grid, monobanded_center_value,
+              Cy, Nx, Ny, Ox, Oy, Oz, xperiodic, yperiodic)
+    qₗ = monobanded_center_value(i, jₗ, k, grid, q, Nx, Ny, Ox, Oy, Oz, xperiodic, yperiodic)
+    qᵣ = monobanded_center_value(i, jₗ + 1, k, grid, q, Nx, Ny, Ox, Oy, Oz, xperiodic, yperiodic)
+    q_upwind = ifelse(v >= zero(v), qₗ, qᵣ)
+
     ix = monobanded_data_index(i, Ox)
-    jyₗ = monobanded_data_index(jₗ, Oy)
-    jyᵣ = monobanded_data_index(jᵣ, Oy)
     kz = monobanded_data_index(k, Oz)
-    half = inv(eltype(q)(2))
-    v = half * (Cy[ix, jyₗ, kz] + Cy[ix, jyᵣ, kz])
-    q_upwind = ifelse(v >= zero(v), q[ix, jyₗ, kz], q[ix, jyᵣ, kz])
 
     jm2 = monobanded_data_index(monobanded_stencil_index(jₗ - 2, Ny, yperiodic), Oy)
     jm1 = monobanded_data_index(monobanded_stencil_index(jₗ - 1, Ny, yperiodic), Oy)
@@ -535,68 +582,44 @@ end
                                q[ix, jp2, kz], q[ix, jp3, kz],
                                v, has_stencil)
 
-    return v * ifelse(use_weno, q_weno, q_upwind)
+    q_centered = (qₗ + qᵣ) / (one(qₗ) + one(qₗ))
+    q_face = ifelse(use_weno, q_weno, ifelse(use_centered, q_centered, q_upwind))
+    flux = v * q_face
+    return ifelse(boundary_face, zero(flux), flux)
 end
 
 @inline function monobanded_transport_divergence(q, Cx, Cy, grid, i, j, k,
                                                  Nx, Ny, Ox, Oy, Oz,
-                                                 xperiodic, yperiodic, xflat, yflat, use_weno)
-    i₋ = monobanded_left_index(i, Nx, xperiodic)
-    i₊ = monobanded_right_index(i, Nx, xperiodic)
-    j₋ = monobanded_left_index(j, Ny, yperiodic)
-    j₊ = monobanded_right_index(j, Ny, yperiodic)
-
-    Fᵢ₊ = monobanded_x_flux(q, Cx, i, i₊, j, k, Nx, Ox, Oy, Oz, xperiodic, use_weno)
-    Fᵢ₋ = monobanded_x_flux(q, Cx, i₋, i, j, k, Nx, Ox, Oy, Oz, xperiodic, use_weno)
-    Fⱼ₊ = monobanded_y_flux(q, Cy, i, j, j₊, k, Ny, Ox, Oy, Oz, yperiodic, use_weno)
-    Fⱼ₋ = monobanded_y_flux(q, Cy, i, j₋, j, k, Ny, Ox, Oy, Oz, yperiodic, use_weno)
-
-    Fᵢ₋ = ifelse(xflat | ((i == 1) & !xperiodic), zero(Fᵢ₋), Fᵢ₋)
-    Fᵢ₊ = ifelse(xflat | ((i == Nx) & !xperiodic), zero(Fᵢ₊), Fᵢ₊)
-    Fⱼ₋ = ifelse(yflat | ((j == 1) & !yperiodic), zero(Fⱼ₋), Fⱼ₋)
-    Fⱼ₊ = ifelse(yflat | ((j == Ny) & !yperiodic), zero(Fⱼ₊), Fⱼ₊)
-
-    Δx = Δxᶜᵃᵃ(i, j, k, grid)
-    Δy = Δyᵃᶜᵃ(i, j, k, grid)
-    safe_Δx = ifelse(xflat, one(Δx), Δx)
-    safe_Δy = ifelse(yflat, one(Δy), Δy)
-    x_divergence = ifelse(xflat, zero(Fᵢ₊), (Fᵢ₊ - Fᵢ₋) / safe_Δx)
-    y_divergence = ifelse(yflat, zero(Fⱼ₊), (Fⱼ₊ - Fⱼ₋) / safe_Δy)
-
-    return x_divergence + y_divergence
+                                                 xperiodic, yperiodic, xflat, yflat, use_weno, use_centered)
+    return ∂xᶜᶜᶜ(i, j, k, grid, monobanded_x_flux,
+                  q, Cx, Nx, Ny, Ox, Oy, Oz,
+                  xperiodic, yperiodic, xflat, use_weno, use_centered) +
+           ∂yᶜᶜᶜ(i, j, k, grid, monobanded_y_flux,
+                  q, Cy, Nx, Ny, Ox, Oy, Oz,
+                  xperiodic, yperiodic, yflat, use_weno, use_centered)
 end
 
 @inline function monobanded_centered_gradient_x(q, grid, i, j, k, Nx, Ox, Oy, Oz, xperiodic, xflat)
-    i₋ = monobanded_left_index(i, Nx, xperiodic)
-    i₊ = monobanded_right_index(i, Nx, xperiodic)
-    ix₋ = monobanded_data_index(i₋, Ox)
-    ix₊ = monobanded_data_index(i₊, Ox)
-    jy = monobanded_data_index(j, Oy)
-    kz = monobanded_data_index(k, Oz)
-    numerator = q[ix₊, jy, kz] - q[ix₋, jy, kz]
-    Δx = Δxᶜᵃᵃ(i, j, k, grid)
-    denominator = (one(eltype(q)) + one(eltype(q))) * ifelse(xflat, one(Δx), Δx)
-    gradient = numerator / denominator
+    gradient = ℑxᶜᵃᵃ(i, j, k, grid, monobanded_∂x_at_face,
+                      q, Nx, Ox, Oy, Oz, xperiodic)
     return ifelse(xflat, zero(gradient),
                   ifelse((i == 1) & !xperiodic, zero(gradient),
                          ifelse((i == Nx) & !xperiodic, zero(gradient), gradient)))
 end
 
 @inline function monobanded_centered_gradient_y(q, grid, i, j, k, Ny, Ox, Oy, Oz, yperiodic, yflat)
-    j₋ = monobanded_left_index(j, Ny, yperiodic)
-    j₊ = monobanded_right_index(j, Ny, yperiodic)
-    ix = monobanded_data_index(i, Ox)
-    jy₋ = monobanded_data_index(j₋, Oy)
-    jy₊ = monobanded_data_index(j₊, Oy)
-    kz = monobanded_data_index(k, Oz)
-    numerator = q[ix, jy₊, kz] - q[ix, jy₋, kz]
-    Δy = Δyᵃᶜᵃ(i, j, k, grid)
-    denominator = (one(eltype(q)) + one(eltype(q))) * ifelse(yflat, one(Δy), Δy)
-    gradient = numerator / denominator
+    gradient = ℑyᵃᶜᵃ(i, j, k, grid, monobanded_∂y_at_face,
+                      q, Ny, Ox, Oy, Oz, yperiodic)
     return ifelse(yflat, zero(gradient),
                   ifelse((j == 1) & !yperiodic, zero(gradient),
                          ifelse((j == Ny) & !yperiodic, zero(gradient), gradient)))
 end
+
+@inline monobanded_∂x_at_face(i, j, k, grid, q, Nx, Ox, Oy, Oz, xperiodic) =
+    ∂xᶠᶜᶜ(i, j, k, grid, monobanded_x_gradient_value, q, Nx, Ox, Oy, Oz, xperiodic)
+
+@inline monobanded_∂y_at_face(i, j, k, grid, q, Ny, Ox, Oy, Oz, yperiodic) =
+    ∂yᶜᶠᶜ(i, j, k, grid, monobanded_y_gradient_value, q, Ny, Ox, Oy, Oz, yperiodic)
 
 function update_monobanded_local_diagnostics!(model::MonobandedWaveModel, ::Nothing)
     diagnostics = model.diagnostics
@@ -625,18 +648,29 @@ end
 function update_monobanded_prescribed_current_local_diagnostics!(model::MonobandedWaveModel,
                                                                  uᴸ, vᴸ, depth, qtransform)
     diagnostics = model.diagnostics
-    Nx, Ny, Nz = size(uᴸ)
-    size(vᴸ) == size(uᴸ) || throw(ArgumentError("u and v current fields must have matching size"))
-    horizontal_size(model.grid) == (Nx, Ny) ||
-        throw(ArgumentError("current fields must match the monobanded model grid horizontally"))
+    _, _, Nzᵘ = size(uᴸ)
+    _, _, Nzᵛ = size(vᴸ)
+    Nzᵛ == Nzᵘ || throw(ArgumentError("u and v current fields must have matching vertical size"))
+
+    u_expected_size = cgrid_velocity_cache_size(model.grid, :x, Nzᵘ)
+    v_expected_size = cgrid_velocity_cache_size(model.grid, :y, Nzᵘ)
+    size(uᴸ) == u_expected_size ||
+        throw(ArgumentError("u current field must have C-grid size $u_expected_size; got $(size(uᴸ))"))
+    size(vᴸ) == v_expected_size ||
+        throw(ArgumentError("v current field must have C-grid size $v_expected_size; got $(size(vᴸ))"))
 
     faces = vertical_faces(qtransform)
-    length(faces) == Nz + 1 ||
+    length(faces) == Nzᵘ + 1 ||
         throw(ArgumentError("Q-transform vertical grid does not match velocity fields"))
 
     arch = architecture(qtransform.grid)
     faces = on_architecture(arch, faces)
     depth = q_depth_on_architecture(arch, depth)
+    topology = Oceananigans.Grids.topology(model.grid)
+    xperiodic = topology[1] === Periodic
+    yperiodic = topology[2] === Periodic
+    Nxᵘ, Nyᵘ, _ = size(uᴸ)
+    Nxᵛ, Nyᵛ, _ = size(vᴸ)
 
     launch_monobanded_kernel!(_monobanded_prescribed_current_local_diagnostics!, model.action,
                               monobanded_parent(model.action),
@@ -657,7 +691,8 @@ function update_monobanded_prescribed_current_local_diagnostics!(model::Monoband
                               uᴸ, vᴸ, depth, faces,
                               qtransform.kernel,
                               OnTheFlyQ(),
-                              Nz,
+                              Nzᵘ, Nxᵘ, Nyᵘ, Nxᵛ, Nyᵛ,
+                              xperiodic, yperiodic,
                               model.gravitational_acceleration,
                               model.minimum_action,
                               model.minimum_wavenumber)
@@ -756,12 +791,11 @@ function compute_pseudomomentum_cell_averages!(px, py,
 
     px_data = field_storage(px)
     py_data = field_storage(py)
-    Nx, Ny, Nz = size(px_data)
-    size(py_data) == (Nx, Ny, Nz) ||
-        throw(ArgumentError("monobanded pseudomomentum fields must have matching size"))
-    horizontal_size(model.grid) == (Nx, Ny) ||
-        throw(ArgumentError("monobanded pseudomomentum fields must match the model grid horizontally"))
-    qtransform.grid.Nz == Nz ||
+    Nzˣ = size(px_data, 3)
+    Nzʸ = size(py_data, 3)
+    Nzʸ == Nzˣ ||
+        throw(ArgumentError("monobanded pseudomomentum fields must have matching vertical size"))
+    qtransform.grid.Nz == Nzˣ ||
         throw(ArgumentError("monobanded pseudomomentum fields must use the Q-transform vertical grid"))
 
     arch = architecture(px)
@@ -770,7 +804,44 @@ function compute_pseudomomentum_cell_averages!(px, py,
     k = active_monobanded_k(model.action)
     Ox, Oy, Oz = monobanded_data_offsets(model.action)
 
-    kernel = _monobanded_pseudomomentum_cells_kernel!(device(arch), (8, 8, 1), (Nx, Ny, Nz))
+    if px isa Field && py isa Field &&
+       location(px) == (Face, Center, Center) &&
+       location(py) == (Center, Face, Center)
+        px_expected_size = cgrid_velocity_cache_size(model.grid, :x, Nzˣ)
+        py_expected_size = cgrid_velocity_cache_size(model.grid, :y, Nzˣ)
+        size(px_data) == px_expected_size ||
+            throw(ArgumentError("monobanded x pseudomomentum field must have C-grid size $px_expected_size; got $(size(px_data))"))
+        size(py_data) == py_expected_size ||
+            throw(ArgumentError("monobanded y pseudomomentum field must have C-grid size $py_expected_size; got $(size(py_data))"))
+
+        topology = Oceananigans.Grids.topology(model.grid)
+        xperiodic = topology[1] === Periodic
+        yperiodic = topology[2] === Periodic
+        Nx, Ny = horizontal_size(model.grid)
+
+        x_kernel = _monobanded_x_pseudomomentum_cells_kernel!(device(arch), (8, 8, 1), size(px_data))
+        y_kernel = _monobanded_y_pseudomomentum_cells_kernel!(device(arch), (8, 8, 1), size(py_data))
+        x_kernel(px_data,
+                 monobanded_parent(model.wavenumber_moment.x),
+                 monobanded_parent(model.diagnostics.κ),
+                 depth, faces, qtransform.kernel, OnTheFlyQ(),
+                 k, Ox, Oy, Oz, Nx, Ny, xperiodic, yperiodic, model.grid)
+        y_kernel(py_data,
+                 monobanded_parent(model.wavenumber_moment.y),
+                 monobanded_parent(model.diagnostics.κ),
+                 depth, faces, qtransform.kernel, OnTheFlyQ(),
+                 k, Ox, Oy, Oz, Nx, Ny, xperiodic, yperiodic, model.grid)
+        KernelAbstractions.synchronize(device(arch))
+        return px, py
+    end
+
+    Nx, Ny = horizontal_size(model.grid)
+    size(px_data) == (Nx, Ny, Nzˣ) ||
+        throw(ArgumentError("monobanded x pseudomomentum field must have center size $((Nx, Ny, Nzˣ)); got $(size(px_data))"))
+    size(py_data) == (Nx, Ny, Nzˣ) ||
+        throw(ArgumentError("monobanded y pseudomomentum field must have center size $((Nx, Ny, Nzˣ)); got $(size(py_data))"))
+
+    kernel = _monobanded_pseudomomentum_cells_kernel!(device(arch), (8, 8, 1), (Nx, Ny, Nzˣ))
     kernel(px_data, py_data,
            monobanded_parent(model.wavenumber_moment.x),
            monobanded_parent(model.wavenumber_moment.y),
@@ -782,11 +853,21 @@ function compute_pseudomomentum_cell_averages!(px, py,
     return px, py
 end
 
+function monobanded_pseudomomentum_fields(qtransform, ::Type{FT}, location) where FT
+    if location == (Face, Center, Center) || location == (Center, Face, Center)
+        px = pseudomomentum_field(qtransform.grid; location=(Face, Center, Center), eltype=FT)
+        py = pseudomomentum_field(qtransform.grid; location=(Center, Face, Center), eltype=FT)
+    else
+        px = pseudomomentum_field(qtransform.grid; location, eltype=FT)
+        py = pseudomomentum_field(qtransform.grid; location, eltype=FT)
+    end
+    return px, py
+end
+
 function pseudomomentum_fields(model::MonobandedWaveModel;
                                location=(Center, Center, Center))
     qtransform, depth = monobanded_pseudomomentum_context(model, model.coupling)
-    px = pseudomomentum_field(qtransform.grid; location, eltype=eltype(model))
-    py = pseudomomentum_field(qtransform.grid; location, eltype=eltype(model))
+    px, py = monobanded_pseudomomentum_fields(qtransform, eltype(model), location)
     compute_pseudomomentum_cell_averages!(px, py, model, depth, qtransform)
     return px, py
 end
@@ -807,18 +888,16 @@ end
 function pseudomomentum_tendency_fields(model::MonobandedWaveModel;
                                         location=(Center, Center, Center))
     qtransform, depth = monobanded_pseudomomentum_context(model, model.coupling)
-    ptx = pseudomomentum_field(qtransform.grid; location, eltype=eltype(model))
-    pty = pseudomomentum_field(qtransform.grid; location, eltype=eltype(model))
+    ptx, pty = monobanded_pseudomomentum_fields(qtransform, eltype(model), location)
 
     G = model.timestepper.Gⁿ
     ptx_data = field_storage(ptx)
     pty_data = field_storage(pty)
-    Nx, Ny, Nz = size(ptx_data)
-    size(pty_data) == (Nx, Ny, Nz) ||
-        throw(ArgumentError("monobanded pseudomomentum-tendency fields must have matching size"))
-    horizontal_size(model.grid) == (Nx, Ny) ||
-        throw(ArgumentError("monobanded pseudomomentum-tendency fields must match the model grid horizontally"))
-    qtransform.grid.Nz == Nz ||
+    Nzˣ = size(ptx_data, 3)
+    Nzʸ = size(pty_data, 3)
+    Nzʸ == Nzˣ ||
+        throw(ArgumentError("monobanded pseudomomentum-tendency fields must have matching vertical size"))
+    qtransform.grid.Nz == Nzˣ ||
         throw(ArgumentError("monobanded pseudomomentum-tendency fields must use the Q-transform vertical grid"))
 
     arch = architecture(ptx)
@@ -827,7 +906,57 @@ function pseudomomentum_tendency_fields(model::MonobandedWaveModel;
     k = active_monobanded_k(model.action)
     Ox, Oy, Oz = monobanded_data_offsets(model.action)
 
-    kernel = _monobanded_pseudomomentum_tendency_kernel!(device(arch), (8, 8, 1), (Nx, Ny, Nz))
+    if Oceananigans.Fields.location(ptx) == (Face, Center, Center) &&
+       Oceananigans.Fields.location(pty) == (Center, Face, Center)
+        ptx_expected_size = cgrid_velocity_cache_size(model.grid, :x, Nzˣ)
+        pty_expected_size = cgrid_velocity_cache_size(model.grid, :y, Nzˣ)
+        size(ptx_data) == ptx_expected_size ||
+            throw(ArgumentError("monobanded x pseudomomentum-tendency field must have C-grid size $ptx_expected_size; got $(size(ptx_data))"))
+        size(pty_data) == pty_expected_size ||
+            throw(ArgumentError("monobanded y pseudomomentum-tendency field must have C-grid size $pty_expected_size; got $(size(pty_data))"))
+
+        topology = Oceananigans.Grids.topology(model.grid)
+        xperiodic = topology[1] === Periodic
+        yperiodic = topology[2] === Periodic
+        Nx, Ny = horizontal_size(model.grid)
+
+        x_kernel = _monobanded_x_pseudomomentum_tendency_kernel!(device(arch), (8, 8, 1), size(ptx_data))
+        y_kernel = _monobanded_y_pseudomomentum_tendency_kernel!(device(arch), (8, 8, 1), size(pty_data))
+        x_kernel(ptx_data,
+                 monobanded_parent(G.AKx),
+                 monobanded_parent(model.wavenumber_moment.x),
+                 monobanded_parent(G.A),
+                 monobanded_parent(G.AKx),
+                 monobanded_parent(G.AKy),
+                 monobanded_parent(model.action),
+                 monobanded_parent(model.diagnostics.Kx),
+                 monobanded_parent(model.diagnostics.Ky),
+                 monobanded_parent(model.diagnostics.κ),
+                 depth_on_arch, faces, qtransform.kernel, OnTheFlyQ(),
+                 k, Ox, Oy, Oz, Nx, Ny, xperiodic, yperiodic, model.grid)
+        y_kernel(pty_data,
+                 monobanded_parent(G.AKy),
+                 monobanded_parent(model.wavenumber_moment.y),
+                 monobanded_parent(G.A),
+                 monobanded_parent(G.AKx),
+                 monobanded_parent(G.AKy),
+                 monobanded_parent(model.action),
+                 monobanded_parent(model.diagnostics.Kx),
+                 monobanded_parent(model.diagnostics.Ky),
+                 monobanded_parent(model.diagnostics.κ),
+                 depth_on_arch, faces, qtransform.kernel, OnTheFlyQ(),
+                 k, Ox, Oy, Oz, Nx, Ny, xperiodic, yperiodic, model.grid)
+        KernelAbstractions.synchronize(device(arch))
+        return ptx, pty
+    end
+
+    Nx, Ny = horizontal_size(model.grid)
+    size(ptx_data) == (Nx, Ny, Nzˣ) ||
+        throw(ArgumentError("monobanded x pseudomomentum-tendency field must have center size $((Nx, Ny, Nzˣ)); got $(size(ptx_data))"))
+    size(pty_data) == (Nx, Ny, Nzˣ) ||
+        throw(ArgumentError("monobanded y pseudomomentum-tendency field must have center size $((Nx, Ny, Nzˣ)); got $(size(pty_data))"))
+
+    kernel = _monobanded_pseudomomentum_tendency_kernel!(device(arch), (8, 8, 1), (Nx, Ny, Nzˣ))
     kernel(ptx_data, pty_data,
            monobanded_parent(G.A),
            monobanded_parent(G.AKx),
@@ -862,6 +991,106 @@ end
         px[i, j, k] = AKx[ix, jy, kz] * qΔz * scale
         py[i, j, k] = AKy[ix, jy, kz] * qΔz * scale
     end
+end
+
+@inline function monobanded_pseudomomentum_projection_value(i, j, k, grid,
+                                                        AK, κ, depth, faces, qkernel, qpolicy,
+                                                        surface_k, Ox, Oy, Oz,
+                                                        Nx, Ny, xperiodic, yperiodic)
+    ii = monobanded_stencil_index(i, Nx, xperiodic)
+    jj = monobanded_stencil_index(j, Ny, yperiodic)
+    ix = monobanded_data_index(ii, Ox)
+    jy = monobanded_data_index(jj, Oy)
+    kz = monobanded_data_index(surface_k, Oz)
+    d = q_depth_at(depth, ii, jj)
+    z₁ = faces[k]
+    z₂ = faces[k+1]
+    qΔz = q_cell_weight_kernel(qpolicy, qkernel, ii, jj, k, 1, κ[ix, jy, kz], z₁, z₂, d)
+    value = @inbounds AK[ix, jy, kz]
+    return value * qΔz / abs(z₂ - z₁)
+end
+
+@kernel function _monobanded_x_pseudomomentum_cells_kernel!(px, AKx, κ,
+                                                            depth, faces, qkernel, qpolicy,
+                                                            surface_k, Ox, Oy, Oz,
+                                                            Nx, Ny, xperiodic, yperiodic, grid)
+    i, j, k = @index(Global, NTuple)
+    @inbounds px[i, j, k] = ℑxᶠᵃᵃ(i, j, k, grid, monobanded_pseudomomentum_projection_value,
+                                    AKx, κ, depth, faces, qkernel, qpolicy,
+                                    surface_k, Ox, Oy, Oz, Nx, Ny, xperiodic, yperiodic)
+end
+
+@kernel function _monobanded_y_pseudomomentum_cells_kernel!(py, AKy, κ,
+                                                            depth, faces, qkernel, qpolicy,
+                                                            surface_k, Ox, Oy, Oz,
+                                                            Nx, Ny, xperiodic, yperiodic, grid)
+    i, j, k = @index(Global, NTuple)
+    @inbounds py[i, j, k] = ℑyᵃᶠᵃ(i, j, k, grid, monobanded_pseudomomentum_projection_value,
+                                    AKy, κ, depth, faces, qkernel, qpolicy,
+                                    surface_k, Ox, Oy, Oz, Nx, Ny, xperiodic, yperiodic)
+end
+
+@inline function monobanded_pseudomomentum_tendency_projection_value(i, j, k, grid,
+                                                                 GAK, AK, GA, GAKx, GAKy,
+                                                                 A, Kx, Ky, κ,
+                                                                 depth, faces, qkernel, qpolicy,
+                                                                 surface_k, Ox, Oy, Oz,
+                                                                 Nx, Ny, xperiodic, yperiodic)
+    ii = monobanded_stencil_index(i, Nx, xperiodic)
+    jj = monobanded_stencil_index(j, Ny, yperiodic)
+    ix = monobanded_data_index(ii, Ox)
+    jy = monobanded_data_index(jj, Oy)
+    kz = monobanded_data_index(surface_k, Oz)
+    d = q_depth_at(depth, ii, jj)
+    z₁ = faces[k]
+    z₂ = faces[k+1]
+
+    @inbounds begin
+        κ_loc = κ[ix, jy, kz]
+        A_loc = A[ix, jy, kz]
+        Kx_loc = Kx[ix, jy, kz]
+        Ky_loc = Ky[ix, jy, kz]
+        AK_loc = AK[ix, jy, kz]
+        GAK_loc = GAK[ix, jy, kz]
+        GA_loc = GA[ix, jy, kz]
+        GAKx_loc = GAKx[ix, jy, kz]
+        GAKy_loc = GAKy[ix, jy, kz]
+    end
+
+    qΔz   = q_cell_weight_kernel(qpolicy, qkernel, ii, jj, k, 1, κ_loc, z₁, z₂, d)
+    dqΔdκ = q_cell_weight_kappa_derivative_kernel(qpolicy, qkernel, ii, jj, k, 1, κ_loc, z₁, z₂, d)
+
+    Aκ = A_loc * κ_loc
+    Aκ_safe = ifelse(Aκ > zero(Aκ), Aκ, one(Aκ))
+    A_safe = ifelse(A_loc > zero(A_loc), A_loc, one(A_loc))
+    ∂tκ_raw = (Kx_loc * GAKx_loc + Ky_loc * GAKy_loc) / Aκ_safe - κ_loc * GA_loc / A_safe
+    ∂tκ = ifelse(Aκ > zero(Aκ), ∂tκ_raw, zero(∂tκ_raw))
+
+    return (GAK_loc * qΔz + AK_loc * dqΔdκ * ∂tκ) / abs(z₂ - z₁)
+end
+
+@kernel function _monobanded_x_pseudomomentum_tendency_kernel!(ptx, GAKx_component, AKx_component,
+                                                               GA, GAKx, GAKy, A, Kx, Ky, κ,
+                                                               depth, faces, qkernel, qpolicy,
+                                                               surface_k, Ox, Oy, Oz,
+                                                               Nx, Ny, xperiodic, yperiodic, grid)
+    i, j, k = @index(Global, NTuple)
+    @inbounds ptx[i, j, k] = ℑxᶠᵃᵃ(i, j, k, grid, monobanded_pseudomomentum_tendency_projection_value,
+                                     GAKx_component, AKx_component, GA, GAKx, GAKy,
+                                     A, Kx, Ky, κ, depth, faces, qkernel, qpolicy,
+                                     surface_k, Ox, Oy, Oz, Nx, Ny, xperiodic, yperiodic)
+end
+
+@kernel function _monobanded_y_pseudomomentum_tendency_kernel!(pty, GAKy_component, AKy_component,
+                                                               GA, GAKx, GAKy, A, Kx, Ky, κ,
+                                                               depth, faces, qkernel, qpolicy,
+                                                               surface_k, Ox, Oy, Oz,
+                                                               Nx, Ny, xperiodic, yperiodic, grid)
+    i, j, k = @index(Global, NTuple)
+    @inbounds pty[i, j, k] = ℑyᵃᶠᵃ(i, j, k, grid, monobanded_pseudomomentum_tendency_projection_value,
+                                     GAKy_component, AKy_component, GA, GAKx, GAKy,
+                                     A, Kx, Ky, κ, depth, faces, qkernel, qpolicy,
+                                     surface_k, Ox, Oy, Oz, Nx, Ny, xperiodic, yperiodic)
 end
 
 @kernel function _monobanded_pseudomomentum_tendency_kernel!(ptx, pty,
@@ -951,12 +1180,26 @@ end
     end
 end
 
+@inline function monobanded_x_current_value(i, j, k, grid, u, Nxᵘ, Nyᵘ, xperiodic, yperiodic)
+    ii = monobanded_stencil_index(i, Nxᵘ, xperiodic)
+    jj = monobanded_stencil_index(j, Nyᵘ, yperiodic)
+    return @inbounds u[ii, jj, k]
+end
+
+@inline function monobanded_y_current_value(i, j, k, grid, v, Nxᵛ, Nyᵛ, xperiodic, yperiodic)
+    ii = monobanded_stencil_index(i, Nxᵛ, xperiodic)
+    jj = monobanded_stencil_index(j, Nyᵛ, yperiodic)
+    return @inbounds v[ii, jj, k]
+end
+
 @kernel function _monobanded_prescribed_current_local_diagnostics!(A, AKx, AKy,
                                                                   Kx, Ky, κ,
                                                                   uᴰx, uᴰy, Hx, Hy,
                                                                   Cx, Cy, Ω, Ĉx, Ĉy,
                                                                   uᴸ, vᴸ, depth, faces,
                                                                   qkernel, qpolicy, Nz,
+                                                                  Nxᵘ, Nyᵘ, Nxᵛ, Nyᵛ,
+                                                                  xperiodic, yperiodic,
                                                                   g, minimum_action, minimum_wavenumber,
                                                                   grid, Nx, Ny, k, Ox, Oy, Oz)
     i, j = @index(Global, NTuple)
@@ -983,8 +1226,10 @@ end
         for ℓ in 1:Nz
             qΔz = q_cell_weight_kernel(qpolicy, qkernel, i, j, ℓ, 1, κᵢ, faces[ℓ], faces[ℓ+1], d)
             dqΔz = q_cell_weight_kappa_derivative_kernel(qpolicy, qkernel, i, j, ℓ, 1, κᵢ, faces[ℓ], faces[ℓ+1], d)
-            uᵢ = uᴸ[i, j, ℓ]
-            vᵢ = vᴸ[i, j, ℓ]
+            uᵢ = ℑxᶜᵃᵃ(i, j, ℓ, grid, monobanded_x_current_value,
+                         uᴸ, Nxᵘ, Nyᵘ, xperiodic, yperiodic)
+            vᵢ = ℑyᵃᶜᵃ(i, j, ℓ, grid, monobanded_y_current_value,
+                         vᴸ, Nxᵛ, Nyᵛ, xperiodic, yperiodic)
             uᴰxᵢ += uᵢ * qΔz
             uᴰyᵢ += vᵢ * qΔz
             Hxᵢ += uᵢ * dqΔz
@@ -1056,6 +1301,7 @@ function compute_monobanded_transport_tendency!(G, model)
     xflat = topology[1] === Flat
     yflat = topology[2] === Flat
     use_weno = model.advection isa WENO
+    use_centered = model.advection isa AbstractCenteredAdvectionScheme
 
     launch_monobanded_kernel!(_monobanded_transport_tendency!, model.action,
                               monobanded_parent(G.A),
@@ -1066,13 +1312,13 @@ function compute_monobanded_transport_tendency!(G, model)
                               monobanded_parent(model.wavenumber_moment.y),
                               monobanded_parent(diagnostics.Cx),
                               monobanded_parent(diagnostics.Cy),
-                              xperiodic, yperiodic, xflat, yflat, use_weno)
+                              xperiodic, yperiodic, xflat, yflat, use_weno, use_centered)
     return G
 end
 
 @kernel function _monobanded_transport_tendency!(GA, GAKx, GAKy,
                                                  A, AKx, AKy, Cx, Cy,
-                                                 xperiodic, yperiodic, xflat, yflat, use_weno,
+                                                 xperiodic, yperiodic, xflat, yflat, use_weno, use_centered,
                                                  grid, Nx, Ny, k, Ox, Oy, Oz)
     i, j = @index(Global, NTuple)
     ix = monobanded_data_index(i, Ox)
@@ -1082,13 +1328,13 @@ end
     @inbounds begin
         GA[ix, jy, kz] = -monobanded_transport_divergence(A, Cx, Cy, grid, i, j, k,
                                                           Nx, Ny, Ox, Oy, Oz,
-                                                          xperiodic, yperiodic, xflat, yflat, use_weno)
+                                                          xperiodic, yperiodic, xflat, yflat, use_weno, use_centered)
         GAKx[ix, jy, kz] = -monobanded_transport_divergence(AKx, Cx, Cy, grid, i, j, k,
                                                             Nx, Ny, Ox, Oy, Oz,
-                                                            xperiodic, yperiodic, xflat, yflat, use_weno)
+                                                            xperiodic, yperiodic, xflat, yflat, use_weno, use_centered)
         GAKy[ix, jy, kz] = -monobanded_transport_divergence(AKy, Cx, Cy, grid, i, j, k,
                                                             Nx, Ny, Ox, Oy, Oz,
-                                                            xperiodic, yperiodic, xflat, yflat, use_weno)
+                                                            xperiodic, yperiodic, xflat, yflat, use_weno, use_centered)
     end
 end
 

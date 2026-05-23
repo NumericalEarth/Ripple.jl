@@ -20,7 +20,6 @@
 # are filled by `compute_stokes_drift!` from continuity inside `update_state!`.
 
 using Oceananigans, Ripple
-using Oceananigans.AbstractOperations: @at
 using CairoMakie, Printf, Random, Statistics
 
 CairoMakie.activate!(type = "png")
@@ -32,15 +31,15 @@ Ly, Lz = 0.060, 0.020
 g, ν = 9.81, 1.1e-6
 λ_wave = 0.030; κ0 = 2π / λ_wave
 surface_stress, noise_speed = -4.8e-5, 0.001
-Δt, spinup_iterations, continuation_iterations = 0.001, 500, 1500
-frame_stride = 20
+Δt, spinup_iterations, continuation_iterations = 0.0005, 4000, 8000
+frame_stride = 40
 monobanded_wave_substeps, spectral_wave_substeps = 32, 4
 
 λ_instability = Ly / 3
 ℓ, m = 2π / λ_instability, π / Lz
 
-spectral_Nκ, spectral_Nφ = 7, 12
-spectral_σκ, spectral_σφ = 0.18κ0, 0.18
+spectral_Nκ, spectral_Nφ = 7, 24
+spectral_σκ, spectral_σφ = 0.18κ0, 0.45
 spectral_κ_range = range(0.5κ0, 2.0κ0; length = spectral_Nκ)
 spectral_φ_range = range(-π, π; length = spectral_Nφ + 1)[1:spectral_Nφ]
 
@@ -86,8 +85,13 @@ function build_wave_model(::Val{:monobanded}, grid, uᴸ, vᴸ)
 end
 
 function build_wave_model(::Val{:spectral}, grid, uᴸ, vᴸ)
+    ## Small angular diffusion to keep the spectral peak resolved on the 24-bin
+    ## directional grid as wave-current refraction tries to focus action into
+    ## a narrow band. Without it, the focusing rate of the coupled instability
+    ## overwhelms the angular resolution and ∂t uˢ blows up.
+    spectral_sources = DirectionalDiffusion(rate=0.5)
     m = SpectralWaveModel(grid, spectral_wave_grid(); velocities=(; u=uᴸ, v=vᴸ),
-                          depth=Lz, sources=nothing, timestepper=:RungeKutta3)
+                          depth=Lz, sources=spectral_sources, timestepper=:RungeKutta3)
     set_spectral_wave_state!(m; action=A_init)
     Ripple.update_coupling!(m)
     return m
@@ -120,9 +124,10 @@ function build_case(; coupled_waves, wave_model_kind=:monobanded, seed=1234)
 
     Random.seed!(seed); set!(ocean; u=noisy, v=noisy, w=noisy)
 
-    uᴸ = Field(@at (Center, Center, Center) ocean.velocities.u)
-    vᴸ = Field(@at (Center, Center, Center) ocean.velocities.v)
-    compute!(uᴸ); compute!(vᴸ); fill_halo_regions!((uᴸ, vᴸ))
+    uᴸ = Field{Face, Center, Center}(grid)
+    vᴸ = Field{Center, Face, Center}(grid)
+    set!(uᴸ, ocean.velocities.u); set!(vᴸ, ocean.velocities.v)
+    fill_halo_regions!((uᴸ, vᴸ))
 
     wave_model = build_wave_model(Val(wave_model_kind), grid, uᴸ, vᴸ)
 
@@ -145,7 +150,8 @@ function build_case(; coupled_waves, wave_model_kind=:monobanded, seed=1234)
     refresh_stokes_drift!()
 
     function update_wave_model!(sim)
-        compute!(uᴸ); compute!(vᴸ); fill_halo_regions!((uᴸ, vᴸ))
+        set!(uᴸ, ocean.velocities.u); set!(vᴸ, ocean.velocities.v)
+        fill_halo_regions!((uᴸ, vᴸ))
         remaining = sim.model.clock.time - wave_model.clock.time
         if coupled_waves && remaining > 0
             substeps = wave_substeps(wave_model)
@@ -154,7 +160,36 @@ function build_case(; coupled_waves, wave_model_kind=:monobanded, seed=1234)
         end
     end
 
-    return (; grid, ocean, wave_model, update_wave_model!, coupled_waves)
+    return (; grid, ocean, wave_model, update_wave_model!, refresh_stokes_drift!, coupled_waves)
+end
+
+# ## State snapshot / restore
+#
+# `snapshot_state` captures the ocean velocity arrays at the end of a spinup
+# run; `load_state!` injects that state into a freshly-built case so all
+# three coupled continuations start from the same ocean configuration.
+
+snapshot_state(case) = (
+    u = copy(interior(case.ocean.velocities.u)),
+    v = copy(interior(case.ocean.velocities.v)),
+    w = copy(interior(case.ocean.velocities.w)),
+    time = case.ocean.clock.time,
+    iteration = case.ocean.clock.iteration,
+)
+
+function load_state!(case, state)
+    interior(case.ocean.velocities.u) .= state.u
+    interior(case.ocean.velocities.v) .= state.v
+    interior(case.ocean.velocities.w) .= state.w
+    fill_halo_regions!((case.ocean.velocities.u,
+                        case.ocean.velocities.v,
+                        case.ocean.velocities.w))
+    case.ocean.clock.time           = state.time
+    case.ocean.clock.iteration      = state.iteration
+    case.wave_model.clock.time      = state.time
+    case.wave_model.clock.iteration = state.iteration
+    case.refresh_stokes_drift!()
+    return case
 end
 
 # ## Diagnostics
@@ -193,8 +228,11 @@ end
 
 # ## Run loop
 #
-# Three cases, each seeded identically so the spinup transient is shared and
-# the divergence after `spinup_iterations` reflects the coupling treatment.
+# Spinup once with prescribed waves, snapshot the ocean state at the end of
+# spinup, then run each of the three coupling treatments from that same
+# state for `continuation_iterations` more iterations. All three cases
+# therefore see exactly the same starting flow, and any divergence over
+# the continuation window reflects the coupling treatment.
 
 function run_case!(case, stop_iteration; capture=true)
     frames = empty_frames()
@@ -206,11 +244,16 @@ function run_case!(case, stop_iteration; capture=true)
     return merge(case, (; frames, growth_rate=σ))
 end
 
-spinup           = run_case!(build_case(coupled_waves=false), spinup_iterations; capture=false)
-total_iterations = spinup_iterations + continuation_iterations
-prescribed       = run_case!(build_case(coupled_waves=false),                                  total_iterations)
-mono_coupled     = run_case!(build_case(coupled_waves=true,  wave_model_kind=:monobanded),     total_iterations)
-spec_coupled     = run_case!(build_case(coupled_waves=true,  wave_model_kind=:spectral),       total_iterations)
+continue_from_state(case, state, n_iters) =
+    run_case!(load_state!(case, state), state.iteration + n_iters)
+
+spinup       = run_case!(build_case(coupled_waves=false), spinup_iterations; capture=false)
+spinup_state = snapshot_state(spinup)
+@info "spinup complete" t=spinup_state.time iter=spinup_state.iteration max_u=maximum(abs, spinup_state.u)
+
+prescribed   = continue_from_state(build_case(coupled_waves=false),                              spinup_state, continuation_iterations)
+mono_coupled = continue_from_state(build_case(coupled_waves=true,  wave_model_kind=:monobanded), spinup_state, continuation_iterations)
+spec_coupled = continue_from_state(build_case(coupled_waves=true,  wave_model_kind=:spectral),   spinup_state, continuation_iterations)
 
 @info "growth rates" prescribed=prescribed.growth_rate monobanded=mono_coupled.growth_rate spectral=spec_coupled.growth_rate
 model = spec_coupled.wave_model  # exposed for the smoke harness
@@ -218,10 +261,18 @@ model = spec_coupled.wave_model  # exposed for the smoke harness
 # ## Animation
 
 let
+    ## A case that hit a NaN may have a final frame full of NaNs; drop those
+    ## from each frame stack so the heatmap colormap never sees a NaN value.
+    valid_frames(c) = (idx = findall(f -> all(isfinite, f), c.frames.v);
+                       (; times = c.frames.times[idx], v = c.frames.v[idx]))
+    prescribed_f = valid_frames(prescribed)
+    mono_f       = valid_frames(mono_coupled)
+    spec_f       = valid_frames(spec_coupled)
+
     ys = collect(ynodes(spec_coupled.grid) .* 100)
     zs = collect(znodes(spec_coupled.grid) .* 100)
-    frame_count = min(length(prescribed.frames.v), length(mono_coupled.frames.v), length(spec_coupled.frames.v))
-    vmax = maximum(maximum(abs, f) for f in (prescribed.frames.v..., mono_coupled.frames.v..., spec_coupled.frames.v...))
+    frame_count = min(length(prescribed_f.v), length(mono_f.v), length(spec_f.v))
+    vmax = maximum(maximum(abs, f) for f in (prescribed_f.v..., mono_f.v..., spec_f.v...))
 
     fig = Figure(size=(1500, 480))
     axes_ = (Axis(fig[1, k]; xlabel="y (cm)", ylabel="z (cm)", title=t)
@@ -234,11 +285,11 @@ let
     Label(fig[0, :], title_obs; fontsize=16, halign=:center)
 
     record(fig, "coupled_wind_drift_instability.mp4", 1:frame_count; framerate=10) do n
-        obs[1][] = prescribed.frames.v[n]
-        obs[2][] = mono_coupled.frames.v[n]
-        obs[3][] = spec_coupled.frames.v[n]
+        obs[1][] = prescribed_f.v[n]
+        obs[2][] = mono_f.v[n]
+        obs[3][] = spec_f.v[n]
         title_obs[] = @sprintf("t = %.2f s  |  σ_fixed = %.3f, σ_mono = %.3f, σ_spec = %.3f s⁻¹",
-                               prescribed.frames.times[n],
+                               prescribed_f.times[n],
                                prescribed.growth_rate, mono_coupled.growth_rate, spec_coupled.growth_rate)
     end
 end

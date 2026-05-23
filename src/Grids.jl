@@ -81,4 +81,14 @@ xspacings(g::AbstractGrid) = has_flat_topology(g, 1) ? flat_spacing(g) : diff(xf
 yspacings(g::AbstractGrid) = has_flat_topology(g, 2) ? flat_spacing(g) : diff(yfaces(g))
 zspacings(g::AbstractGrid) = has_flat_topology(g, 3) ? flat_spacing(g) : diff(zfaces(g))
 
+function cgrid_velocity_cache_size(grid::AbstractGrid, component::Symbol, Nκ)
+    Nx, Ny = horizontal_size(grid)
+    topology = OceanGrids.topology(grid)
+    Nxᶠ = topology[1] === OceanGrids.Bounded ? Nx + 1 : Nx
+    Nyᶠ = topology[2] === OceanGrids.Bounded ? Ny + 1 : Ny
+    component === :x && return (Nxᶠ, Ny, Nκ)
+    component === :y && return (Nx, Nyᶠ, Nκ)
+    throw(ArgumentError("C-grid velocity component must be :x or :y; got $component"))
+end
+
 @inline periodic_index(i, N) = mod1(i, N)

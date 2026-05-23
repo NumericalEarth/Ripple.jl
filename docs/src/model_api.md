@@ -31,8 +31,10 @@ methods, and how they map to model kwargs.
   inputs and normalize to `nothing`.
 - With all optional dynamics absent, `time_step!` advances the clock and leaves
   the action field unchanged.
-- The CFL diagnostic is zero when `horizontal_advection=nothing` and uses the
-  active transport velocities otherwise.
+- The CFL diagnostic uses the same active physical transport velocities as the
+  model step. For fused CWCM refraction this includes the current and
+  ``\partial_\kappa u^D`` ray-velocity correction even though
+  `horizontal_advection` is ignored by that fused path.
 - `advection=` is a convenience shortcut that sets both `horizontal_advection`
   and `spectral_advection` to the same scheme.
 
@@ -67,11 +69,12 @@ currently supports scalar action-only `LinearWindInput`, scalar action-only
 growth or decay.
 `advection=nothing` disables physical transport but leaves refraction and
 sources active. The default `advection=WENO()` uses Ripple's monobanded
-conservative transport kernel with WENO5 face reconstruction, while other
-accepted Oceananigans advection schemes currently fall back to conservative
-upwind reconstruction. The monobanded kernels require uniform horizontal
-spacing and currently support only default NoFlux/Periodic prognostic boundary
-conditions.
+conservative transport kernel with WENO5 face reconstruction.
+`advection=Centered()` uses the same conservative flux form with centered face
+values. Other Oceananigans advection schemes are rejected until they are wired
+to their corresponding reconstruction. The monobanded kernels require uniform
+horizontal spacing and currently support only default NoFlux/Periodic
+prognostic boundary conditions.
 
 ## Product Fields
 
@@ -100,9 +103,10 @@ on the horizontal wave grid. Scalars are materialized as Oceananigans
 arrays are intentionally not part of the public depth interface.
 
 A CWCM Q transform also needs a resolved vertical coordinate. When
-`velocities=(; u, v)` passes Oceananigans `Field`s, Ripple infers the Q grid
-from those fields and, if `depth=InfiniteDepth()`, derives the finite Q
-projection depth from that grid. Array-valued velocities and
+`velocities=(; u, v)` passes Oceananigans `Field`s, provide C-grid components
+`u::Field{Face, Center, Center}` and `v::Field{Center, Face, Center}`; Ripple
+infers the Q grid from those fields and, if `depth=InfiniteDepth()`, derives
+the finite Q projection depth from that grid. Array-valued velocities and
 `PseudomomentumVelocities` can either pass an explicit `q_grid` or let Ripple
 build one from finite model `depth`:
 

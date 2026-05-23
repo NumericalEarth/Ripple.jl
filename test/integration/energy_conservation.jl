@@ -305,14 +305,24 @@ end
              v=(x, y, z) -> 0.03 * sin(2π * y) * exp(z / 0.2),
              w=0)
 
+        uᴸ = Field{Face, Center, Center}(grid)
+        vᴸ = Field{Center, Face, Center}(grid)
+        set!(uᴸ, ocean.velocities.u); set!(vᴸ, ocean.velocities.v)
+        Oceananigans.BoundaryConditions.fill_halo_regions!((uᴸ, vᴸ))
+
         wave = MonobandedWaveModel(grid; advection=Centered(),
-                                   velocities=(; u=ocean.velocities.u,
-                                                 v=ocean.velocities.v),
+                                   velocities=(; u=uᴸ, v=vᴸ),
                                    timestepper=:RungeKutta3,
                                    gravitational_acceleration=g_test)
         A0(x, y, z) = 0.02 + 0.005 * sin(2π * x)
         set!(wave; A=A0, AKx=(x,y,z)->100*A0(x,y,z), AKy=0.0)
         Ripple.update_coupling!(wave)
+
+        function refresh_lagrangian_velocity_snapshot!()
+            set!(uᴸ, ocean.velocities.u); set!(vᴸ, ocean.velocities.v)
+            Oceananigans.BoundaryConditions.fill_halo_regions!((uᴸ, vᴸ))
+            Ripple.update_coupling!(wave)
+        end
 
         function refresh_stokes!()
             Ripple.compute_tendencies!(wave)
@@ -340,10 +350,12 @@ end
             return W + K
         end
 
+        refresh_lagrangian_velocity_snapshot!()
         refresh_stokes!()
         E0 = total_energy()
         nsteps = round(Int, T / Δt)
         for _ in 1:nsteps
+            refresh_lagrangian_velocity_snapshot!()
             refresh_stokes!()
             Oceananigans.TimeSteppers.time_step!(ocean, Δt)
             Ripple.time_step!(wave, Δt)

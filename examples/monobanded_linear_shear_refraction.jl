@@ -69,8 +69,8 @@ U0 = 0.10
 S = 0.045
 yc = Ly / 2
 
-u = Oceananigans.Fields.CenterField(grid)
-v = Oceananigans.Fields.CenterField(grid)
+u = Oceananigans.Fields.Field{Face, Center, Center}(grid)
+v = Oceananigans.Fields.Field{Center, Face, Center}(grid)
 set!(u, (x, y, z) -> U0 + S * (y - yc))
 set!(v, 0)
 

@@ -99,13 +99,8 @@ function validate_model_coupling(coupling::AbstractCWCMCurrentCoupling, grid, sp
     coupling.kappa == spectral_kappa ||
         throw(ArgumentError("CWCM current coupling kappa does not match the model spectral grid"))
 
-    expected_size = (grid.Nx, grid.Ny, length(spectral_kappa))
-    u_expected_size = coupling isa CWCMPrescribedCurrentCoupling ?
-                      cgrid_velocity_cache_size(grid, :x, length(spectral_kappa)) :
-                      expected_size
-    v_expected_size = coupling isa CWCMPrescribedCurrentCoupling ?
-                      cgrid_velocity_cache_size(grid, :y, length(spectral_kappa)) :
-                      expected_size
+    u_expected_size = cgrid_velocity_cache_size(grid, :x, length(spectral_kappa))
+    v_expected_size = cgrid_velocity_cache_size(grid, :y, length(spectral_kappa))
     validate_cwcm_coupling_cache_shape(coupling, "uᴰx", coupling.uᴰx, u_expected_size)
     validate_cwcm_coupling_cache_shape(coupling, "uᴰy", coupling.uᴰy, v_expected_size)
     validate_cwcm_coupling_cache_shape(coupling, "duᴰxdκ", coupling.duᴰxdκ, u_expected_size)
@@ -117,6 +112,48 @@ function validate_model_coupling(coupling, grid, spectral_grid)
     coupling isa AbstractCurrentCoupling ||
         throw(ArgumentError("coupling must be nothing or an AbstractCurrentCoupling; got $(typeof(coupling))"))
     return coupling
+end
+
+fused_refraction_supported_coordinate_bcs(bcs) =
+    bcs[1] isa NoFlux && bcs[2] isa Oceananigans.Grids.Periodic
+
+function validate_regular_full_period_direction_grid(spectral_grid)
+    hasproperty(spectral_grid, :φ_faces) || return nothing
+
+    φ_faces = collect(Array(spectral_grid.φ_faces))
+    φ = collect(Array(spectral_grid.φ))
+    FT = eltype(φ_faces)
+    Δφ = diff(φ_faces)
+    period = FT(2pi)
+    tolerance = sqrt(eps(FT))
+
+    isapprox(last(φ_faces) - first(φ_faces), period; rtol=tolerance, atol=tolerance) ||
+        throw(ArgumentError("fused spectral refraction requires φ faces to span exactly 2π"))
+
+    all(δ -> isapprox(δ, first(Δφ); rtol=tolerance, atol=tolerance), Δφ) ||
+        throw(ArgumentError("fused spectral refraction currently requires uniformly-spaced φ faces"))
+
+    for n in eachindex(φ)
+        midpoint = (φ_faces[n] + φ_faces[n+1]) / 2
+        isapprox(φ[n], midpoint; rtol=tolerance, atol=tolerance) ||
+            throw(ArgumentError("fused spectral refraction requires φ centers at cell midpoints; φ[$n]=$(φ[n]) but midpoint is $midpoint"))
+    end
+
+    return nothing
+end
+
+function validate_fused_refraction_configuration(coupling, spectral_advection, spectral_grid, boundary_conditions)
+    coupling isa AbstractCWCMCurrentCoupling || return nothing
+    spectral_advection === nothing && return nothing
+
+    fused_refraction_supported_coordinate_bcs(Tuple(spectral_grid.boundary_conditions)) ||
+        throw(ArgumentError("fused CWCM spectral refraction supports only NoFlux radial and Periodic directional spectral-grid boundary conditions"))
+
+    fused_refraction_supported_coordinate_bcs(Tuple(boundary_conditions.coordinate)) ||
+        throw(ArgumentError("fused CWCM spectral refraction supports only NoFlux radial and Periodic directional model boundary conditions"))
+
+    validate_regular_full_period_direction_grid(spectral_grid)
+    return nothing
 end
 
 supported_model_timestepper(timestepper::Symbol) =
@@ -201,6 +238,7 @@ function SpectralWaveModel(grid, spectral_grid;
     boundary_conditions = boundary_conditions === nothing ?
                           default_wave_action_bcs(grid, spectral_grid) :
                           validate_model_boundary_conditions(boundary_conditions, grid, spectral_grid)
+    validate_fused_refraction_configuration(coupling, spectral_advection, spectral_grid, boundary_conditions)
 
     if coupling isa AbstractCWCMCurrentCoupling && spectral_advection !== nothing &&
        horizontal_advection !== nothing
@@ -226,10 +264,6 @@ function SpectralWaveModel(grid, spectral_grid;
     return model
 end
 
-# Currently a passthrough — the fused refraction kernel hardcodes no-flux
-# at κ faces regardless of what the user requests, so the BC slot is
-# informational. Validate the type so we can wire kernel sensitivity to
-# user-supplied BCs in a follow-up without an API break.
 validate_model_boundary_conditions(bcs::ProductBoundaryConditions, grid, spectral_grid) = bcs
 validate_model_boundary_conditions(bcs, grid, spectral_grid) =
     throw(ArgumentError("boundary_conditions must be a ProductBoundaryConditions; got $(typeof(bcs))"))

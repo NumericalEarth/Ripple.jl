@@ -15,6 +15,10 @@ source_split(s, ::Nothing, model, i, j, m, n) =
 source_split(::Nothing, ::Nothing, model, i, j, m, n) =
     (zero(eltype(model.action)), zero(eltype(model.action)))
 
+host_tendency_loop_supported(model, operation) =
+    Oceananigans.Architectures.architecture(model.grid) isa Oceananigans.Architectures.CPU ||
+    throw(ArgumentError("$operation currently uses a host loop and is only supported on CPU grids; use a fused kernel path or disable the unsupported source/fallback configuration on GPU"))
+
 function compute_tendencies!(G::ProductField, model::SpectralWaveModel)
     return compute_tendencies!(G, model, model.coupling)
 end
@@ -29,6 +33,7 @@ function compute_tendencies!(G::ProductField, model::SpectralWaveModel, coupling
     if intrinsic_transport_kernel_enabled(model)
         compute_intrinsic_transport_tendency!(G, model.action, model)
         if model.sources !== nothing
+            host_tendency_loop_supported(model, "source tendency accumulation after fused intrinsic transport")
             state = prepare_sources(model.sources, model)
             Nx, Ny, Nκ, Nφ = size(model.action)
             @inbounds for n in 1:Nφ, m in 1:Nκ, j in 1:Ny, i in 1:Nx
@@ -62,6 +67,7 @@ function _per_bin_tendencies!(G::ProductField, model::SpectralWaveModel)
         return G
     end
 
+    host_tendency_loop_supported(model, "generic per-bin tendency computation")
     fill_halo_regions!(model.action)
     state = prepare_sources(model.sources, model)
     for n in 1:Neta, m in 1:Nxi
@@ -86,6 +92,7 @@ function cwcm_tendencies!(G::ProductField, model::SpectralWaveModel, coupling)
     end
     compute_wave_current_refraction_tendency!(G, model.action, coupling, model)
     if model.sources !== nothing
+        host_tendency_loop_supported(model, "source tendency accumulation after fused wave-current refraction")
         state = prepare_sources(model.sources, model)
         Nx, Ny, Nκ, Nφ = size(model.action)
         for n in 1:Nφ, m in 1:Nκ, j in 1:Ny, i in 1:Nx

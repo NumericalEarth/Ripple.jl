@@ -1,6 +1,7 @@
+import Oceananigans.Grids: Center, Face
 import Oceananigans.Grids: column_depthᶜᶜᵃ
 import Oceananigans.Architectures: architecture, device
-import Oceananigans.Fields: ConstantField, Field, field
+import Oceananigans.Fields: ConstantField, Field, field, location
 import KernelAbstractions
 import KernelAbstractions: @kernel, @index
 
@@ -253,6 +254,17 @@ function validate_velocity_field_grid(field_grid, q_grid, name)
     return nothing
 end
 
+validate_velocity_component_location(field, name) = nothing
+
+function validate_velocity_component_location(field::Field, name)
+    expected_location = name == "u" ? (Face, Center, Center) :
+                        name == "v" ? (Center, Face, Center) :
+                        throw(ArgumentError("unknown velocity component `$name`"))
+    location(field) == expected_location ||
+        throw(ArgumentError("velocity field `$name` must be located at $expected_location; got $(location(field))"))
+    return nothing
+end
+
 function prescribed_q_grid(v::PrescribedVelocities, model_grid, spectral_grid, model_depth;
                            FT=grid_float_type(model_grid))
     u_grid = velocity_grid(v.u)
@@ -277,6 +289,8 @@ function prescribed_q_grid(v::PrescribedVelocities, model_grid, spectral_grid, m
     validate_q_grid(q_grid, model_grid)
     validate_velocity_field_grid(u_grid, q_grid, "u")
     validate_velocity_field_grid(v_grid, q_grid, "v")
+    validate_velocity_component_location(v.u, "u")
+    validate_velocity_component_location(v.v, "v")
 
     return q_grid
 end

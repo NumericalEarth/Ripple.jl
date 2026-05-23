@@ -9,10 +9,11 @@ struct PrescribedLagrangianMeanCurrent{U, V, D}
     depth :: D
 end
 
-current_data(a) = Base.invokelatest(field_storage, a)
+current_data(a) = field_storage(a)
 
 function PrescribedLagrangianMeanCurrent(; u, v, depth)
-    size(current_data(u)) == size(current_data(v)) || throw(ArgumentError("u and v must have matching size"))
+    size(current_data(u), 3) == size(current_data(v), 3) ||
+        throw(ArgumentError("u and v must have matching vertical size"))
     return PrescribedLagrangianMeanCurrent(u, v, depth)
 end
 
@@ -24,7 +25,7 @@ mutable struct CWCMPrescribedCurrentCoupling{Current, QT, K, UᴰxCache, UᴰyCa
     uᴰy :: UᴰyCache
     duᴰxdκ :: DκUᴰx
     duᴰydκ :: DκUᴰy
-    u_transport_scratch :: Any  # lazily allocated CenterField, reused across transport_velocity_fields calls
+    u_transport_scratch :: Any  # lazily allocated C-grid velocity fields, reused across transport_velocity_fields calls
     v_transport_scratch :: Any
     uᴰx_x :: Any                 # spatial gradients of Doppler velocity caches, lazily allocated
     uᴰx_y :: Any
@@ -75,10 +76,11 @@ function CWCMPrescribedCurrentCoupling(current::PrescribedLagrangianMeanCurrent,
                                        kappa)
     u = current_data(current.u)
     v = current_data(current.v)
-    Nx, Ny, _ = size(u)
+    Nxᵘ, Nyᵘ, _ = size(u)
+    Nxᵛ, Nyᵛ, _ = size(v)
     kc = collect(float.(kappa))
-    uᴰx = current_cache_like(u, eltype(u), (Nx, Ny, length(kc)))
-    uᴰy = current_cache_like(v, eltype(v), (Nx, Ny, length(kc)))
+    uᴰx = current_cache_like(u, eltype(u), (Nxᵘ, Nyᵘ, length(kc)))
+    uᴰy = current_cache_like(v, eltype(v), (Nxᵛ, Nyᵛ, length(kc)))
     duᴰxdκ = similar(uᴰx)
     duᴰydκ = similar(uᴰy)
     coupling = CWCMPrescribedCurrentCoupling(current, qtransform, kc, uᴰx, uᴰy, duᴰxdκ, duᴰydκ,
@@ -94,15 +96,14 @@ function CWCMPseudomomentumCoupling(model_grid,
                                     qtransform::QTransform,
                                     spectral_grid::PolarWaveVectorGrid,
                                     depth)
-    Nx, Ny = horizontal_size(model_grid)
     arch = architecture(model_grid)
     DepthFT = depth isa Number ? typeof(float(depth)) : eltype(depth)
     FT = promote_type(grid_float_type(model_grid), coordinate_float_type(spectral_grid), DepthFT)
     kappa = collect(FT, Array(spectral_grid.κ))
     Nκ, Nφ = coordinate_size(spectral_grid)
 
-    uᴰx = device_zeros(arch, FT, (Nx, Ny, Nκ))
-    uᴰy = device_zeros(arch, FT, (Nx, Ny, Nκ))
+    uᴰx = device_zeros(arch, FT, cgrid_velocity_cache_size(model_grid, :x, Nκ))
+    uᴰy = device_zeros(arch, FT, cgrid_velocity_cache_size(model_grid, :y, Nκ))
     duᴰxdκ = similar(uᴰx)
     duᴰydκ = similar(uᴰy)
     fill!(duᴰxdκ, zero(FT))

@@ -259,12 +259,17 @@ are added after transport.
 
 With CWCM coupling and `spectral_advection !== nothing`, Ripple uses a fused
 KernelAbstractions kernel over ``(i, j, m, n)``. This kernel computes the
-Doppler-shifted physical transport velocity
+Doppler-shifted physical transport velocity. Since
+``\boldsymbol{u}^{D}`` depends on ``\kappa`` through the vertical
+Q projection, the ray velocity is the full Hamiltonian derivative of
+``\Omega = \sigma(\kappa) + \boldsymbol{k}\cdot\boldsymbol{u}^{D}``:
 
 ```math
 \dot{\boldsymbol{x}}
 = c_g \boldsymbol{e}_{\kappa}
   + \boldsymbol{u}^{D}(\boldsymbol{x}, \kappa, t)
+  + \frac{\boldsymbol{k}\cdot\partial_\kappa \boldsymbol{u}^{D}}{\kappa}
+    \boldsymbol{k}.
 ```
 
 and the current-gradient spectral velocities ``\dot{\kappa}`` and
@@ -342,7 +347,7 @@ discrete spectral wave models by [BooijHolthuijsen1987](@citet) and treated in
 WAVEWATCH III with additional smoothing options by [Tolman2002](@citet).
 
 Ripple implements Tolman's spatial-averaging strategy as
-`SpatialAveraging(; αs, αn)`. After each full `time_step!`, each spectral bin is
+`SpatialAveraging(; αs, αn, gravity)`. After each full `time_step!`, each spectral bin is
 averaged over a small rectangle aligned with the bin's propagation direction:
 
 ```math

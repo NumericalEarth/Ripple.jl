@@ -128,13 +128,14 @@ end
                            size=(2, 2, 32),
                            x=(0, 2),
                            y=(0, 2),
-                           z=(-1, 0))
+                           z=(-1, 0),
+                           topology=(Bounded, Bounded, Bounded))
     qt = QTransform(QKernel(Float64), grid)
     cgrid = PolarWaveVectorGrid(;
                                 κ=[0.5, 1.0],
                                 φ=[0.0, pi/2, pi, 3pi/2])
-    u = ones(2, 2, vertical_size(grid))
-    v = 2 .* ones(2, 2, vertical_size(grid))
+    u = ones(3, 2, vertical_size(grid))
+    v = 2 .* ones(2, 3, vertical_size(grid))
     current = PrescribedLagrangianMeanCurrent(u=u, v=v, depth=1.0)
     coupling = CWCMPrescribedCurrentCoupling(current, qt, cgrid.κ)
 
@@ -147,8 +148,8 @@ end
     time_step!(model, 0.001)
     @test all(interior(model.action) .>= 0)
 
-    backend_u = MockBackendArray(ones(2, 2, vertical_size(grid)))
-    backend_v = MockBackendArray(2 .* ones(2, 2, vertical_size(grid)))
+    backend_u = MockBackendArray(ones(3, 2, vertical_size(grid)))
+    backend_v = MockBackendArray(2 .* ones(2, 3, vertical_size(grid)))
     backend_current = PrescribedLagrangianMeanCurrent(u=backend_u, v=backend_v, depth=1.0)
     backend_coupling = CWCMPrescribedCurrentCoupling(backend_current, qt, cgrid.κ)
     @test backend_coupling.uᴰx isa MockBackendArray

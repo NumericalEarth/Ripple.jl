@@ -142,8 +142,8 @@ end
     cgrid = PolarWaveVectorGrid(; κ=[0.5, 1.0],
                                   φ=[0.0, pi/2, pi, 3pi/2])
 
-    u = Oceananigans.Fields.CenterField(q_grid)
-    v = Oceananigans.Fields.CenterField(q_grid)
+    u = Oceananigans.Fields.Field{Face, Center, Center}(q_grid)
+    v = Oceananigans.Fields.Field{Center, Face, Center}(q_grid)
     Oceananigans.set!(u, 1)
     Oceananigans.set!(v, 2)
 
@@ -175,8 +175,8 @@ end
 
     bottom_height = [-(1 + 0.1i + 0.05j) for i in 1:4, j in 1:3]
     ib_q_grid = Oceananigans.ImmersedBoundaryGrid(q_grid, Oceananigans.GridFittedBottom(bottom_height))
-    ib_u = Oceananigans.Fields.CenterField(ib_q_grid)
-    ib_v = Oceananigans.Fields.CenterField(ib_q_grid)
+    ib_u = Oceananigans.Fields.Field{Face, Center, Center}(ib_q_grid)
+    ib_v = Oceananigans.Fields.Field{Center, Face, Center}(ib_q_grid)
     Oceananigans.set!(ib_u, 1)
     Oceananigans.set!(ib_v, 0)
     ib_model = SpectralWaveModel(wave_grid, cgrid;

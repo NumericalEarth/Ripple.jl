@@ -3,10 +3,11 @@ import Oceananigans.Advection: AbstractCenteredAdvectionScheme
 import Oceananigans.Advection: AbstractUpwindBiasedAdvectionScheme
 import Oceananigans.Advection: div_Uc, materialize_advection
 import Oceananigans.Advection: Centered, UpwindBiased, WENO, FluxFormAdvection
+import KernelAbstractions
 import KernelAbstractions: @kernel, @index
-import Oceananigans.Architectures: architecture
-import Oceananigans.Fields: CenterField, ConstantField, Field, ZeroField, fill_halo_regions!, interior
-import Oceananigans.Utils: launch!
+import Oceananigans.Architectures: architecture, device
+import Oceananigans.Fields: ConstantField, Field, ZeroField, fill_halo_regions!
+import Oceananigans.Grids: Center, Face
 import Oceananigans.Grids: halo_size, required_halo_size_x, required_halo_size_y
 
 is_tracer_direction_advection(::Nothing) = true
@@ -69,17 +70,47 @@ function deep_water_group_velocity(cgrid::Union{PolarWaveVectorGrid, FrequencyDi
     return scale * radial * angular_x, scale * radial * angular_y
 end
 
+function finite_depth_group_speed(κ, depth; gravity=9.81)
+    iszero(κ) && return zero(float(κ))
+    h = float(depth)
+    h > 0 || throw(ArgumentError("finite-depth dispersion requires positive depth"))
+    μ = κ * h
+    phase_speed = sqrt(gravity * tanh(μ) / κ)
+    group_factor = (one(μ) + 2μ / sinh(2μ)) / 2
+    return group_factor * phase_speed
+end
+
 function finite_depth_group_velocity(cgrid, m, n, depth; gravity=9.81)
     kx, ky = k_components(cgrid, m, n)
     k = radial_wavenumber(cgrid, m, n)
     iszero(k) && return (zero(float(kx)), zero(float(ky)))
-    h = float(depth)
-    h > 0 || throw(ArgumentError("finite-depth dispersion requires positive depth"))
-    μ = k * h
-    phase_speed = sqrt(gravity * tanh(μ) / k)
-    group_factor = (one(μ) + 2μ / sinh(2μ)) / 2
-    cg = group_factor * phase_speed
+    cg = finite_depth_group_speed(k, depth; gravity)
     return cg * kx / k, cg * ky / k
+end
+
+function finite_depth_group_velocity(cgrid::Union{PolarWaveVectorGrid, FrequencyDirectionGrid},
+                                     m, n, depth; gravity=9.81)
+    k1, k2 = cgrid.κ_faces[m], cgrid.κ_faces[m+1]
+    φ1, φ2 = cgrid.φ_faces[n], cgrid.φ_faces[n+1]
+
+    FT = typeof(float(k1 + k2))
+    half_width = (k2 - k1) / FT(2)
+    midpoint = (k1 + k2) / FT(2)
+    ξ₀ = sqrt(FT(3) / FT(5))
+    ξ = (-ξ₀, zero(FT), ξ₀)
+    w = (FT(5) / FT(9), FT(8) / FT(9), FT(5) / FT(9))
+
+    radial = zero(FT)
+    @inbounds for q in 1:3
+        κq = midpoint + half_width * ξ[q]
+        radial += w[q] * finite_depth_group_speed(κq, depth; gravity) * κq
+    end
+    radial *= half_width
+
+    angular_x = sin(φ2) - sin(φ1)
+    angular_y = cos(φ1) - cos(φ2)
+    scale = radial / spectral_cell_measure(cgrid, m, n)
+    return scale * angular_x, scale * angular_y
 end
 
 intrinsic_group_velocity(cgrid, m, n, depth::InfiniteDepth; gravity=9.81) =
@@ -148,9 +179,22 @@ advection_y_component(advection) = advection
 advection_x_component(advection::FluxFormAdvection) = advection.x
 advection_y_component(advection::FluxFormAdvection) = advection.y
 
+is_zero_transport_velocity(u) = iszero(u)
+is_zero_transport_velocity(u::ZeroField) = true
+is_zero_transport_velocity(u::ConstantField) = iszero(u.constant)
+is_zero_transport_velocity(u::Field) = false
+
 function bin_horizontal_advection(advection, u, v)
     x_advection = iszero(u) ? nothing : advection_x_component(advection)
     y_advection = iszero(v) ? nothing : advection_y_component(advection)
+    H = max(required_halo_size_x(x_advection), required_halo_size_y(y_advection))
+    FT = eltype(advection)
+    return FluxFormAdvection{H, FT}(x_advection, y_advection, nothing)
+end
+
+function bin_horizontal_advection(advection, U::NamedTuple)
+    x_advection = is_zero_transport_velocity(U.u) ? nothing : advection_x_component(advection)
+    y_advection = is_zero_transport_velocity(U.v) ? nothing : advection_y_component(advection)
     H = max(required_halo_size_x(x_advection), required_halo_size_y(y_advection))
     FT = eltype(advection)
     return FluxFormAdvection{H, FT}(x_advection, y_advection, nothing)
@@ -167,26 +211,54 @@ function transport_velocity_fields(::Any, model, m, n)
             w=ZeroField(FT))
 end
 
-@kernel function _doppler_shift_velocity_fields!(u, v, cg_x, cg_y, uᴰx, uᴰy, m)
+@kernel function _doppler_shift_velocity_component!(u, cg, uᴰ, m)
     i, j, k = @index(Global, NTuple)
-    @inbounds u[i, j, k] = cg_x + uᴰx[i, j, m]
-    @inbounds v[i, j, k] = cg_y + uᴰy[i, j, m]
+    @inbounds u[i, j, k] = cg + uᴰ[i, j, m]
 end
 
-function transport_velocity_fields(coupling::CWCMPrescribedCurrentCoupling, model, m, n)
+@kernel function _doppler_shift_x_velocity_component!(u, cg, uᴰx, duᴰxdκ, duᴰydκ,
+                                                      Kx, Ky, κ, grid, xperiodic, yperiodic, m)
+    i, j, k = @index(Global, NTuple)
+    Hx = _x_face_cache_value(i, j, 1, grid, duᴰxdκ, m, xperiodic, yperiodic)
+    Hy = ℑxyᶠᶜᵃ(i, j, 1, grid, _y_face_cache_value, duᴰydκ, m, xperiodic, yperiodic)
+    KH_over_κ = (Kx * Hx + Ky * Hy) / κ
+    @inbounds u[i, j, k] = cg + uᴰx[i, j, m] + KH_over_κ * Kx
+end
+
+@kernel function _doppler_shift_y_velocity_component!(v, cg, uᴰy, duᴰxdκ, duᴰydκ,
+                                                      Kx, Ky, κ, grid, xperiodic, yperiodic, m)
+    i, j, k = @index(Global, NTuple)
+    Hx = ℑxyᶜᶠᵃ(i, j, 1, grid, _x_face_cache_value, duᴰxdκ, m, xperiodic, yperiodic)
+    Hy = _y_face_cache_value(i, j, 1, grid, duᴰydκ, m, xperiodic, yperiodic)
+    KH_over_κ = (Kx * Hx + Ky * Hy) / κ
+    @inbounds v[i, j, k] = cg + uᴰy[i, j, m] + KH_over_κ * Ky
+end
+
+function transport_velocity_fields(coupling::AbstractCWCMCurrentCoupling, model, m, n)
     cg_x, cg_y = transport_velocity(model, m, n)
+    Kx, Ky = k_components(model.spectral_grid, m, n)
+    κ = radial_wavenumber(model.spectral_grid, m, n)
     FT = eltype(model.action)
     grid = model.grid
     if coupling.u_transport_scratch === nothing
-        coupling.u_transport_scratch = CenterField(grid)
-        coupling.v_transport_scratch = CenterField(grid)
+        coupling.u_transport_scratch = Field{Face, Center, Center}(grid)
+        coupling.v_transport_scratch = Field{Center, Face, Center}(grid)
     end
     u_field = coupling.u_transport_scratch
     v_field = coupling.v_transport_scratch
+    u_data = field_storage(u_field)
+    v_data = field_storage(v_field)
     arch = architecture(grid)
-    launch!(arch, grid, :xyz, _doppler_shift_velocity_fields!,
-            u_field, v_field, convert(FT, cg_x), convert(FT, cg_y),
-            coupling.uᴰx, coupling.uᴰy, m)
+    topology = Oceananigans.Grids.topology(grid)
+    xperiodic = topology[1] === Oceananigans.Grids.Periodic
+    yperiodic = topology[2] === Oceananigans.Grids.Periodic
+    u_kernel = _doppler_shift_x_velocity_component!(device(arch), (8, 8, 1), size(u_data))
+    v_kernel = _doppler_shift_y_velocity_component!(device(arch), (8, 8, 1), size(v_data))
+    u_kernel(u_data, convert(FT, cg_x), coupling.uᴰx, coupling.duᴰxdκ, coupling.duᴰydκ,
+             convert(FT, Kx), convert(FT, Ky), convert(FT, κ), grid, xperiodic, yperiodic, m)
+    v_kernel(v_data, convert(FT, cg_y), coupling.uᴰy, coupling.duᴰxdκ, coupling.duᴰydκ,
+             convert(FT, Kx), convert(FT, Ky), convert(FT, κ), grid, xperiodic, yperiodic, m)
+    KernelAbstractions.synchronize(device(arch))
     fill_halo_regions!(u_field)
     fill_halo_regions!(v_field)
     return (u=u_field, v=v_field, w=ZeroField(FT))
@@ -196,8 +268,7 @@ transport_tendency(::Nothing, model, c, i, j, m, n) = zero(eltype(model.action))
 
 function transport_tendency(advection::AbstractAdvectionScheme, model, c, i, j, m, n)
     k = active_physical_k(model.action)
-    u, v = transport_velocity(model, m, n)
-    horizontal = bin_horizontal_advection(advection, u, v)
     U = transport_velocity_fields(model, m, n)
+    horizontal = bin_horizontal_advection(advection, U)
     return -div_Uc(i, j, k, model.grid, horizontal, U, c)
 end

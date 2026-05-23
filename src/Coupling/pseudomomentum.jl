@@ -1,4 +1,6 @@
-import Oceananigans.Fields: Field
+import Oceananigans.Fields: Field, location
+import Oceananigans.Grids: Center, Face
+import Oceananigans.Operators: ℑxᶠᵃᵃ, ℑyᵃᶠᵃ
 import Oceananigans.Architectures: architecture, device, on_architecture
 import KernelAbstractions
 import KernelAbstractions: @kernel, @index
@@ -123,18 +125,29 @@ end
 
 function compute_pseudomomentum_doppler_velocity!(coupling, N::ProductField)
     Nx, Ny, Nκ, Nφ = size(N)
-    size(coupling.uᴰx) == (Nx, Ny, Nκ) ||
-        throw(ArgumentError("pseudomomentum coupling caches do not match the wave-action field"))
+    grid = physical_grid(N)
+    u_size = cgrid_velocity_cache_size(grid, :x, Nκ)
+    v_size = cgrid_velocity_cache_size(grid, :y, Nκ)
+    size(coupling.uᴰx) == u_size ||
+        throw(ArgumentError("pseudomomentum coupling uᴰx cache has wrong size; expected $u_size, got $(size(coupling.uᴰx))"))
+    size(coupling.uᴰy) == v_size ||
+        throw(ArgumentError("pseudomomentum coupling uᴰy cache has wrong size; expected $v_size, got $(size(coupling.uᴰy))"))
 
     Hx, Hy, iz = product_field_data_indices(N)
     arch = architecture(N)
-    kernel = _compute_pseudomomentum_doppler_velocity_kernel!(device(arch), (8, 8, 1), (Nx, Ny, Nκ))
-    kernel(coupling.uᴰx, coupling.uᴰy,
-           coupling.duᴰxdκ, coupling.duᴰydκ,
-           flat_data(N),
-           coupling.overlap, coupling.derivative_overlap,
-           coupling.kx_measure, coupling.ky_measure,
-           Hx, Hy, iz, Nκ, Nφ)
+    topology = Oceananigans.Grids.topology(grid)
+    xperiodic = topology[1] === Oceananigans.Grids.Periodic
+    yperiodic = topology[2] === Oceananigans.Grids.Periodic
+    u_kernel = _compute_x_pseudomomentum_doppler_velocity_kernel!(device(arch), (8, 8, 1), u_size)
+    v_kernel = _compute_y_pseudomomentum_doppler_velocity_kernel!(device(arch), (8, 8, 1), v_size)
+    u_kernel(coupling.uᴰx, coupling.duᴰxdκ,
+             flat_data(N), coupling.overlap, coupling.derivative_overlap,
+             coupling.kx_measure, grid, Hx, Hy, iz, Nx, Ny, Nκ, Nφ,
+             xperiodic, yperiodic)
+    v_kernel(coupling.uᴰy, coupling.duᴰydκ,
+             flat_data(N), coupling.overlap, coupling.derivative_overlap,
+             coupling.ky_measure, grid, Hx, Hy, iz, Nx, Ny, Nκ, Nφ,
+             xperiodic, yperiodic)
     KernelAbstractions.synchronize(device(arch))
     return coupling
 end
@@ -167,14 +180,39 @@ function compute_pseudomomentum_cells!(px, py, N::ProductField, depth, qtransfor
     px_data = field_storage(px)
     py_data = field_storage(py)
 
-    size(px_data) == (Nx, Ny, Nz) || throw(ArgumentError("px has wrong size"))
-    size(py_data) == (Nx, Ny, Nz) || throw(ArgumentError("py has wrong size"))
-
     arch = architecture(N)
     tables = pseudomomentum_spectral_tables(N)
     Hx, Hy, iz = product_field_data_indices(N)
     faces_on_arch = on_architecture(arch, faces)
     depth_on_arch = q_depth_on_architecture(arch, depth)
+
+    if px isa Field && py isa Field &&
+       location(px) == (Face, Center, Center) &&
+       location(py) == (Center, Face, Center)
+        px_expected_size = cgrid_velocity_cache_size(physical_grid(N), :x, Nz)
+        py_expected_size = cgrid_velocity_cache_size(physical_grid(N), :y, Nz)
+        size(px_data) == px_expected_size || throw(ArgumentError("px has wrong C-grid size"))
+        size(py_data) == py_expected_size || throw(ArgumentError("py has wrong C-grid size"))
+
+        topology = Oceananigans.Grids.topology(physical_grid(N))
+        xperiodic = topology[1] === Oceananigans.Grids.Periodic
+        yperiodic = topology[2] === Oceananigans.Grids.Periodic
+        x_kernel = _compute_x_pseudomomentum_cells_kernel!(device(arch), (8, 8, 1), size(px_data))
+        y_kernel = _compute_y_pseudomomentum_cells_kernel!(device(arch), (8, 8, 1), size(py_data))
+        x_kernel(px_data, flat_data(N), depth_on_arch, faces_on_arch,
+                 tables.kappa, tables.kx_measure, qtransform.kernel, qtransform.cache_policy,
+                 physical_grid(N), Hx, Hy, iz, Nx, Ny, Nxi, Neta, cell_average,
+                 xperiodic, yperiodic)
+        y_kernel(py_data, flat_data(N), depth_on_arch, faces_on_arch,
+                 tables.kappa, tables.ky_measure, qtransform.kernel, qtransform.cache_policy,
+                 physical_grid(N), Hx, Hy, iz, Nx, Ny, Nxi, Neta, cell_average,
+                 xperiodic, yperiodic)
+        KernelAbstractions.synchronize(device(arch))
+        return px, py
+    end
+
+    size(px_data) == (Nx, Ny, Nz) || throw(ArgumentError("px has wrong size"))
+    size(py_data) == (Nx, Ny, Nz) || throw(ArgumentError("py has wrong size"))
 
     kernel = _compute_pseudomomentum_cells_kernel!(device(arch), (8, 8, 1), (Nx, Ny, Nz))
     kernel(px_data, py_data, flat_data(N), depth_on_arch, faces_on_arch,
@@ -231,14 +269,42 @@ function compute_pseudomomentum_tendency_cell_averages!(ptx, pty,
     ptx_data = field_storage(ptx)
     pty_data = field_storage(pty)
 
-    size(ptx_data) == (Nx, Ny, Nz) || throw(ArgumentError("ptx has wrong size"))
-    size(pty_data) == (Nx, Ny, Nz) || throw(ArgumentError("pty has wrong size"))
-
     arch = architecture(new_N)
     tables = pseudomomentum_spectral_tables(new_N)
     Hx, Hy, iz = product_field_data_indices(new_N)
     faces_on_arch = on_architecture(arch, faces)
     depth_on_arch = q_depth_on_architecture(arch, depth)
+
+    if ptx isa Field && pty isa Field &&
+       location(ptx) == (Face, Center, Center) &&
+       location(pty) == (Center, Face, Center)
+        ptx_expected_size = cgrid_velocity_cache_size(physical_grid(new_N), :x, Nz)
+        pty_expected_size = cgrid_velocity_cache_size(physical_grid(new_N), :y, Nz)
+        size(ptx_data) == ptx_expected_size || throw(ArgumentError("ptx has wrong C-grid size"))
+        size(pty_data) == pty_expected_size || throw(ArgumentError("pty has wrong C-grid size"))
+
+        topology = Oceananigans.Grids.topology(physical_grid(new_N))
+        xperiodic = topology[1] === Oceananigans.Grids.Periodic
+        yperiodic = topology[2] === Oceananigans.Grids.Periodic
+        x_kernel = _compute_x_pseudomomentum_tendency_cells_kernel!(device(arch), (8, 8, 1), size(ptx_data))
+        y_kernel = _compute_y_pseudomomentum_tendency_cells_kernel!(device(arch), (8, 8, 1), size(pty_data))
+        dtᶠ = convert(eltype(new_N), dt)
+        x_kernel(ptx_data, flat_data(new_N), flat_data(old_N), dtᶠ,
+                 depth_on_arch, faces_on_arch, tables.kappa, tables.kx_measure,
+                 qtransform.kernel, qtransform.cache_policy,
+                 physical_grid(new_N), Hx, Hy, iz, Nx, Ny, Nxi, Neta,
+                 xperiodic, yperiodic)
+        y_kernel(pty_data, flat_data(new_N), flat_data(old_N), dtᶠ,
+                 depth_on_arch, faces_on_arch, tables.kappa, tables.ky_measure,
+                 qtransform.kernel, qtransform.cache_policy,
+                 physical_grid(new_N), Hx, Hy, iz, Nx, Ny, Nxi, Neta,
+                 xperiodic, yperiodic)
+        KernelAbstractions.synchronize(device(arch))
+        return ptx, pty
+    end
+
+    size(ptx_data) == (Nx, Ny, Nz) || throw(ArgumentError("ptx has wrong size"))
+    size(pty_data) == (Nx, Ny, Nz) || throw(ArgumentError("pty has wrong size"))
 
     kernel = _compute_pseudomomentum_tendency_cells_kernel!(device(arch), (8, 8, 1), (Nx, Ny, Nz))
     kernel(ptx_data, pty_data, flat_data(new_N), flat_data(old_N),
@@ -261,12 +327,24 @@ function cwcm_momentum_tendency_fields!(ut, vt,
     compute_pseudomomentum_tendency_cell_averages!(ut, vt, new_N, old_N, dt, depth, qtransform)
     ut_data = field_storage(ut)
     vt_data = field_storage(vt)
-    Nx, Ny, Nz = size(ut_data)
     arch = architecture(ut)
-    kernel = _scale_field_pair_kernel!(device(arch), (8, 8, 1), (Nx, Ny, Nz))
-    kernel(ut_data, vt_data, convert(eltype(new_N), coefficient))
+    u_kernel = _scale_field_kernel!(device(arch), (8, 8, 1), size(ut_data))
+    v_kernel = _scale_field_kernel!(device(arch), (8, 8, 1), size(vt_data))
+    u_kernel(ut_data, convert(eltype(new_N), coefficient))
+    v_kernel(vt_data, convert(eltype(new_N), coefficient))
     KernelAbstractions.synchronize(device(arch))
     return ut, vt
+end
+
+function pseudomomentum_output_fields(pgrid, ::Type{FT}, location) where FT
+    if location == (Face, Center, Center) || location == (Center, Face, Center)
+        px = pseudomomentum_field(pgrid; location=(Face, Center, Center), eltype=FT)
+        py = pseudomomentum_field(pgrid; location=(Center, Face, Center), eltype=FT)
+    else
+        px = pseudomomentum_field(pgrid; location, eltype=FT)
+        py = pseudomomentum_field(pgrid; location, eltype=FT)
+    end
+    return px, py
 end
 
 function pseudomomentum_tendency_fields(new_N::ProductField,
@@ -276,8 +354,7 @@ function pseudomomentum_tendency_fields(new_N::ProductField,
                                         qtransform::QTransform;
                                         location=(Center, Center, Center))
     pgrid = pseudomomentum_grid(new_N, qtransform)
-    ptx = pseudomomentum_field(pgrid; location, eltype=eltype(new_N))
-    pty = pseudomomentum_field(pgrid; location, eltype=eltype(new_N))
+    ptx, pty = pseudomomentum_output_fields(pgrid, eltype(new_N), location)
     compute_pseudomomentum_tendency_cell_averages!(ptx, pty, new_N, old_N, dt, depth, qtransform)
     return ptx, pty
 end
@@ -285,8 +362,7 @@ end
 function pseudomomentum_fields(N::ProductField, depth, qtransform::QTransform;
                                location=(Center, Center, Center))
     pgrid = pseudomomentum_grid(N, qtransform)
-    px = pseudomomentum_field(pgrid; location, eltype=eltype(N))
-    py = pseudomomentum_field(pgrid; location, eltype=eltype(N))
+    px, py = pseudomomentum_output_fields(pgrid, eltype(N), location)
     compute_pseudomomentum_cell_averages!(px, py, N, depth, qtransform)
     return px, py
 end
@@ -313,33 +389,157 @@ end
     @inbounds out[i, j] = total
 end
 
-@kernel function _compute_pseudomomentum_doppler_velocity_kernel!(uᴰx, uᴰy, duᴰxdκ, duᴰydκ,
-                                                                  N_data, overlap, derivative_overlap,
-                                                                  kx_measure, ky_measure,
-                                                                  Hx, Hy, iz, Nκ, Nφ)
-    i, j, target_m = @index(Global, NTuple)
-    ix = i + Hx
-    jy = j + Hy
-    ax = zero(eltype(uᴰx))
-    ay = zero(eltype(uᴰy))
-    dax = zero(eltype(duᴰxdκ))
-    day = zero(eltype(duᴰydκ))
+@inline _pseudomomentum_index(i, N, periodic) =
+    ifelse(periodic, mod1(i, N), ifelse(i < 1, 1, ifelse(i > N, N, i)))
+
+@inline function _pseudomomentum_center_projection(i, j, k, grid,
+                                                   N_data, overlap, measure,
+                                                   Hx, Hy, iz, Nx, Ny, Nκ, Nφ,
+                                                   target_m, xperiodic, yperiodic)
+    ii = _pseudomomentum_index(i, Nx, xperiodic)
+    jj = _pseudomomentum_index(j, Ny, yperiodic)
+    ix = ii + Hx
+    jy = jj + Hy
+    total = zero(eltype(N_data))
 
     @inbounds for n in 1:Nφ, source_m in 1:Nκ
         action = N_data[ix, jy, iz, source_m, n]
-        q_overlap = pseudomomentum_overlap_at(overlap, i, j, target_m, source_m)
-        dq_overlap = pseudomomentum_overlap_at(derivative_overlap, i, j, target_m, source_m)
-        ax += q_overlap * action * kx_measure[source_m, n]
-        ay += q_overlap * action * ky_measure[source_m, n]
-        dax += dq_overlap * action * kx_measure[source_m, n]
-        day += dq_overlap * action * ky_measure[source_m, n]
+        q_overlap = pseudomomentum_overlap_at(overlap, ii, jj, target_m, source_m)
+        total += q_overlap * action * measure[source_m, n]
     end
 
+    return total
+end
+
+@inline function _pseudomomentum_cell_projection(i, j, k, grid,
+                                                 N_data, depth, faces, kappa, measure,
+                                                 qkernel, qpolicy, Hx, Hy, iz,
+                                                 Nx, Ny, Nxi, Neta, cell_average,
+                                                 xperiodic, yperiodic)
+    ii = _pseudomomentum_index(i, Nx, xperiodic)
+    jj = _pseudomomentum_index(j, Ny, yperiodic)
+    d = q_depth_at(depth, ii, jj)
+    ix = ii + Hx
+    jy = jj + Hy
+    z₁ = faces[k]
+    z₂ = faces[k+1]
+    total = zero(eltype(N_data))
+
+    @inbounds for n in 1:Neta, m in 1:Nxi
+        qΔz = q_cell_weight_kernel(qpolicy, qkernel, ii, jj, k, m, kappa[m, n], z₁, z₂, d)
+        total += qΔz * N_data[ix, jy, iz, m, n] * measure[m, n]
+    end
+
+    scale = ifelse(cell_average, inv(abs(z₂ - z₁)), one(total))
+    return total * scale
+end
+
+@kernel function _compute_x_pseudomomentum_cells_kernel!(px, N_data, depth, faces,
+                                                         kappa, kx_measure,
+                                                         qkernel, qpolicy, grid,
+                                                         Hx, Hy, iz, Nx, Ny, Nxi, Neta,
+                                                         cell_average, xperiodic, yperiodic)
+    i, j, k = @index(Global, NTuple)
+    @inbounds px[i, j, k] = ℑxᶠᵃᵃ(i, j, k, grid, _pseudomomentum_cell_projection,
+                                    N_data, depth, faces, kappa, kx_measure,
+                                    qkernel, qpolicy, Hx, Hy, iz,
+                                    Nx, Ny, Nxi, Neta, cell_average,
+                                    xperiodic, yperiodic)
+end
+
+@kernel function _compute_y_pseudomomentum_cells_kernel!(py, N_data, depth, faces,
+                                                         kappa, ky_measure,
+                                                         qkernel, qpolicy, grid,
+                                                         Hx, Hy, iz, Nx, Ny, Nxi, Neta,
+                                                         cell_average, xperiodic, yperiodic)
+    i, j, k = @index(Global, NTuple)
+    @inbounds py[i, j, k] = ℑyᵃᶠᵃ(i, j, k, grid, _pseudomomentum_cell_projection,
+                                    N_data, depth, faces, kappa, ky_measure,
+                                    qkernel, qpolicy, Hx, Hy, iz,
+                                    Nx, Ny, Nxi, Neta, cell_average,
+                                    xperiodic, yperiodic)
+end
+
+@inline function _pseudomomentum_tendency_cell_projection(i, j, k, grid,
+                                                          new_N, old_N, dt, depth, faces,
+                                                          kappa, measure, qkernel, qpolicy,
+                                                          Hx, Hy, iz, Nx, Ny, Nxi, Neta,
+                                                          xperiodic, yperiodic)
+    ii = _pseudomomentum_index(i, Nx, xperiodic)
+    jj = _pseudomomentum_index(j, Ny, yperiodic)
+    d = q_depth_at(depth, ii, jj)
+    ix = ii + Hx
+    jy = jj + Hy
+    z₁ = faces[k]
+    z₂ = faces[k+1]
+    total = zero(eltype(new_N))
+
+    @inbounds for n in 1:Neta, m in 1:Nxi
+        qΔz = q_cell_weight_kernel(qpolicy, qkernel, ii, jj, k, m, kappa[m, n], z₁, z₂, d)
+        action_tendency = (new_N[ix, jy, iz, m, n] - old_N[ix, jy, iz, m, n]) / dt
+        total += qΔz * action_tendency * measure[m, n]
+    end
+
+    return total / abs(z₂ - z₁)
+end
+
+@kernel function _compute_x_pseudomomentum_tendency_cells_kernel!(ptx, new_N, old_N, dt,
+                                                                  depth, faces, kappa, kx_measure,
+                                                                  qkernel, qpolicy, grid,
+                                                                  Hx, Hy, iz, Nx, Ny, Nxi, Neta,
+                                                                  xperiodic, yperiodic)
+    i, j, k = @index(Global, NTuple)
+    @inbounds ptx[i, j, k] = ℑxᶠᵃᵃ(i, j, k, grid, _pseudomomentum_tendency_cell_projection,
+                                     new_N, old_N, dt, depth, faces, kappa, kx_measure,
+                                     qkernel, qpolicy, Hx, Hy, iz, Nx, Ny, Nxi, Neta,
+                                     xperiodic, yperiodic)
+end
+
+@kernel function _compute_y_pseudomomentum_tendency_cells_kernel!(pty, new_N, old_N, dt,
+                                                                  depth, faces, kappa, ky_measure,
+                                                                  qkernel, qpolicy, grid,
+                                                                  Hx, Hy, iz, Nx, Ny, Nxi, Neta,
+                                                                  xperiodic, yperiodic)
+    i, j, k = @index(Global, NTuple)
+    @inbounds pty[i, j, k] = ℑyᵃᶠᵃ(i, j, k, grid, _pseudomomentum_tendency_cell_projection,
+                                     new_N, old_N, dt, depth, faces, kappa, ky_measure,
+                                     qkernel, qpolicy, Hx, Hy, iz, Nx, Ny, Nxi, Neta,
+                                     xperiodic, yperiodic)
+end
+
+@kernel function _compute_x_pseudomomentum_doppler_velocity_kernel!(uᴰx, duᴰxdκ,
+                                                                    N_data, overlap, derivative_overlap,
+                                                                    kx_measure, grid,
+                                                                    Hx, Hy, iz, Nx, Ny, Nκ, Nφ,
+                                                                    xperiodic, yperiodic)
+    i, j, target_m = @index(Global, NTuple)
     @inbounds begin
-        uᴰx[i, j, target_m] = ax
-        uᴰy[i, j, target_m] = ay
-        duᴰxdκ[i, j, target_m] = dax
-        duᴰydκ[i, j, target_m] = day
+        uᴰx[i, j, target_m] = ℑxᶠᵃᵃ(i, j, 1, grid, _pseudomomentum_center_projection,
+                                      N_data, overlap, kx_measure,
+                                      Hx, Hy, iz, Nx, Ny, Nκ, Nφ,
+                                      target_m, xperiodic, yperiodic)
+        duᴰxdκ[i, j, target_m] = ℑxᶠᵃᵃ(i, j, 1, grid, _pseudomomentum_center_projection,
+                                         N_data, derivative_overlap, kx_measure,
+                                         Hx, Hy, iz, Nx, Ny, Nκ, Nφ,
+                                         target_m, xperiodic, yperiodic)
+    end
+end
+
+@kernel function _compute_y_pseudomomentum_doppler_velocity_kernel!(uᴰy, duᴰydκ,
+                                                                    N_data, overlap, derivative_overlap,
+                                                                    ky_measure, grid,
+                                                                    Hx, Hy, iz, Nx, Ny, Nκ, Nφ,
+                                                                    xperiodic, yperiodic)
+    i, j, target_m = @index(Global, NTuple)
+    @inbounds begin
+        uᴰy[i, j, target_m] = ℑyᵃᶠᵃ(i, j, 1, grid, _pseudomomentum_center_projection,
+                                      N_data, overlap, ky_measure,
+                                      Hx, Hy, iz, Nx, Ny, Nκ, Nφ,
+                                      target_m, xperiodic, yperiodic)
+        duᴰydκ[i, j, target_m] = ℑyᵃᶠᵃ(i, j, 1, grid, _pseudomomentum_center_projection,
+                                         N_data, derivative_overlap, ky_measure,
+                                         Hx, Hy, iz, Nx, Ny, Nκ, Nφ,
+                                         target_m, xperiodic, yperiodic)
     end
 end
 
@@ -427,10 +627,7 @@ end
     end
 end
 
-@kernel function _scale_field_pair_kernel!(a, b, coefficient)
+@kernel function _scale_field_kernel!(a, coefficient)
     i, j, k = @index(Global, NTuple)
-    @inbounds begin
-        a[i, j, k] *= coefficient
-        b[i, j, k] *= coefficient
-    end
+    @inbounds a[i, j, k] *= coefficient
 end

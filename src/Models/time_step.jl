@@ -48,6 +48,7 @@ function copy_field!(dest::ProductField, src::ProductField)
 end
 
 function add_scaled_semi_implicit!(N::ProductField, G::ProductField, dt, model)
+    host_tendency_loop_supported(model, "semi-implicit source splitting")
     Nx, Ny, Nxi, Neta = size(N)
     damping = similar(N)
     explicit_part = similar(N)

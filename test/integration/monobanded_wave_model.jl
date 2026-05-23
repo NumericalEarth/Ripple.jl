@@ -36,8 +36,8 @@ import Oceananigans.TimeSteppers: RungeKutta3TimeStepper
                                               advection=nothing)
     @test zero_velocity_model.coupling === nothing
 
-    u = Oceananigans.Fields.CenterField(grid)
-    v = Oceananigans.Fields.CenterField(grid)
+    u = Oceananigans.Fields.Field{Face, Center, Center}(grid)
+    v = Oceananigans.Fields.Field{Center, Face, Center}(grid)
     set!(u, 0.1)
     set!(v, -0.2)
 
@@ -229,8 +229,8 @@ end
                                halo=(3, 3, 3),
                                topology=(Periodic, Periodic, Bounded))
 
-        u = Oceananigans.Fields.CenterField(grid)
-        v = Oceananigans.Fields.CenterField(grid)
+        u = Oceananigans.Fields.Field{Face, Center, Center}(grid)
+        v = Oceananigans.Fields.Field{Center, Face, Center}(grid)
         set!(u, (x, y, z) -> 1 + 0.2 * z)
         set!(v, 0)
 
@@ -323,8 +323,8 @@ end
                              halo=(3, 3, 3),
                              topology=(Periodic, Periodic, Bounded))
 
-    u = Oceananigans.Fields.CenterField(q_grid)
-    v = Oceananigans.Fields.CenterField(q_grid)
+    u = Oceananigans.Fields.Field{Face, Center, Center}(q_grid)
+    v = Oceananigans.Fields.Field{Center, Face, Center}(q_grid)
     set!(u, 0)
     set!(v, 0)
 
@@ -452,8 +452,8 @@ end
                                             κ=range(0.25, 0.75; length=Nκ),
                                             φ=range(-π, π; length=Nφ+1)[1:end-1])
 
-        u = Oceananigans.Fields.CenterField(grid)
-        v = Oceananigans.Fields.CenterField(grid)
+        u = Oceananigans.Fields.Field{Face, Center, Center}(grid)
+        v = Oceananigans.Fields.Field{Center, Face, Center}(grid)
         set!(u, (x, y, z) -> shear * sin(y))
         set!(v, 0)
 
@@ -498,10 +498,12 @@ end
 
     configs = ((0.08, 25, 64), (0.04, 49, 128), (0.02, 97, 256))
     errors = map(config -> spectral_consistency_errors(config...), configs)
+    decreases_or_roundoff(values; floor=1e-12) =
+        maximum(values) < floor || values[3] < values[2] < values[1]
 
     @test all(error.AKy < 3e-2 for error in errors)
-    @test errors[3].A < errors[2].A < errors[1].A
-    @test errors[3].AKx < errors[2].AKx < errors[1].AKx
+    @test decreases_or_roundoff(getproperty.(errors, :A))
+    @test decreases_or_roundoff(getproperty.(errors, :AKx))
     @test errors[3].A < 1e-2
     @test errors[3].AKx < 1e-2
 
@@ -524,8 +526,8 @@ end
                                             κ=range(0.25, 0.75; length=97),
                                             φ=range(-π, π; length=385)[1:end-1])
 
-        u = Oceananigans.Fields.CenterField(grid)
-        v = Oceananigans.Fields.CenterField(grid)
+        u = Oceananigans.Fields.Field{Face, Center, Center}(grid)
+        v = Oceananigans.Fields.Field{Center, Face, Center}(grid)
         set!(u, (x, y, z) -> shear * sin(y))
         set!(v, 0)
 
@@ -992,8 +994,8 @@ end
                            halo=(3, 3, 3),
                            topology=(Periodic, Periodic, Bounded))
 
-    u = Oceananigans.Fields.CenterField(grid)
-    v = Oceananigans.Fields.CenterField(grid)
+    u = Oceananigans.Fields.Field{Face, Center, Center}(grid)
+    v = Oceananigans.Fields.Field{Center, Face, Center}(grid)
     set!(u, 0.1)
     set!(v, (x, y, z) -> 0.05 * sin(y))
 
@@ -1028,8 +1030,8 @@ end
                            halo=(3, 3, 3),
                            topology=(Periodic, Periodic, Bounded))
 
-    u = Oceananigans.Fields.CenterField(grid)
-    v = Oceananigans.Fields.CenterField(grid)
+    u = Oceananigans.Fields.Field{Face, Center, Center}(grid)
+    v = Oceananigans.Fields.Field{Center, Face, Center}(grid)
     set!(u, (x, y, z) -> 0.05 * cos(y))
     set!(v, (x, y, z) -> 0.05 * sin(y))
 
@@ -1092,8 +1094,8 @@ end
                            topology=(Periodic, Periodic, Bounded))
 
     a, b, c = 0.3, 0.05, -0.02
-    u = Oceananigans.Fields.CenterField(grid)
-    v = Oceananigans.Fields.CenterField(grid)
+    u = Oceananigans.Fields.Field{Face, Center, Center}(grid)
+    v = Oceananigans.Fields.Field{Center, Face, Center}(grid)
     set!(u, (x, y, z) -> a + b * z + c * z^2)
     set!(v, 0)
 

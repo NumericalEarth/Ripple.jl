@@ -131,7 +131,7 @@ Common keywords:
 |:--------|:--------|
 | `action` | Optional initial `Field` for ``A``. If omitted, Ripple allocates one. |
 | `wavenumber_moment` | Optional `(; x, y)` fields for ``AK_x`` and ``AK_y``. |
-| `advection` | Physical transport scheme. Default is `WENO()`. Use `nothing` to disable physical transport only. |
+| `advection` | Physical transport scheme. Default is `WENO()`. Use `Centered()` for conservative centered fluxes or `nothing` to disable physical transport only. |
 | `sources` | Supported action-only source term or `SourceTermSet`; default `nothing`. |
 | `velocities` | `nothing`, `ZeroVelocities()`, `PrescribedVelocities`, `PseudomomentumVelocities()`, or `(; u, v)`. |
 | `coupling` | Explicit monobanded coupling object. Mutually exclusive with `velocities`. |
@@ -180,11 +180,11 @@ Here ``K_x = AK_x/A \approx 0.5`` inside the packet and ``K_y = 0``.
 `velocities=nothing` and `velocities=ZeroVelocities()` both run intrinsic
 deep-water propagation with no current coupling.
 
-For prescribed currents, pass Oceananigans fields:
+For prescribed currents, pass C-grid Oceananigans velocity fields:
 
 ```@example monobanded_model
-u = CenterField(grid)
-v = CenterField(grid)
+u = Field{Face, Center, Center}(grid)
+v = Field{Center, Face, Center}(grid)
 set!(u, (x, y, z) -> 0.1 * sin(2π * y / 32))
 set!(v, 0)
 
@@ -232,8 +232,9 @@ that captures how the Q-shape changes when refraction or sources move
 ``\kappa``. These fields are exactly the ``\partial_t u^s, \partial_t v^s``
 that Oceananigans' Craik-Leibovich `StokesDrift` wants as input to evaluate
 the Stokes-acceleration term ``+\partial_t u^s`` in the momentum tendency.
-The caller is expected to have run `compute_tendencies!(model)` (or just
-finished a `time_step!`) so the tendency reflects the current state.
+The caller is expected to have run `compute_tendencies!(model)` for the state
+of interest. After `time_step!`, `G^n` is the last stage tendency, not a fresh
+tendency recomputed at the final state.
 
 ## Transport And Refraction
 
@@ -242,9 +243,10 @@ refraction or source terms. This is useful for column-style checks of
 ``d(AK_\alpha)/dt = -A K_\beta \Gamma_{\beta\alpha}``.
 
 With `advection=WENO()`, Ripple uses the monobanded conservative transport
-kernel with fifth-order WENO face reconstruction. Other accepted Oceananigans
-advection schemes currently use the same conservative transport path with
-upwind face reconstruction.
+kernel with fifth-order WENO face reconstruction. With `advection=Centered()`,
+the same flux form uses centered face values. Other Oceananigans advection
+schemes are rejected until they are implemented with their corresponding
+reconstruction.
 
 The current implementation requires uniform horizontal grid spacing. Periodic
 directions wrap; bounded directions use no-flux edge fluxes. Non-default

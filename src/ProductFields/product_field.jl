@@ -226,7 +226,7 @@ function interior(f::ProductField)
     kernel = _copy_product_field_interior!(device(arch), (8, 8, 1, 1), (Nx, Ny, Nxi, Neta))
     kernel(values, f.flat_data, Hx, Hy, iz)
     KernelAbstractions.synchronize(device(arch))
-    return Array(values)
+    return values
 end
 
 @kernel function _copy_product_field_interior!(values, data, Hx, Hy, iz)
