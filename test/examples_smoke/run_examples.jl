@@ -51,6 +51,7 @@ end
         "vortex_refraction.jl",
         "translating_hurricane_swell.jl",
         "narrow_band_packet_dispersion.jl",
+        "narrow_band_vortex_scattering.jl",
     ]
 
     discovered_examples = sort([basename(path) for path in readdir(example_dir; join=true)
@@ -99,6 +100,10 @@ end
                                                        "NarrowBandWaveModel",
                                                        "InfiniteDepth",
                                                        "reconstitut"),
+            "narrow_band_vortex_scattering.jl"     => ("# # Narrow-Band Wave Scattering by a Barotropic Vortex",
+                                                       "NarrowBandWaveModel",
+                                                       "velocities",
+                                                       "WENO"),
         )
 
         for (file, required_patterns) in semantic_examples

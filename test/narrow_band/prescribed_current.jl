@@ -90,5 +90,14 @@ end
         @test all(isfinite, amplitude(model))
         # Divergence-free current + Centered transport ⇒ action nearly conserved.
         @test abs(action(model) - 𝒜0) / abs(𝒜0) < 5e-2
+
+        # Default WENO() advection must resolve its weight-computation type for
+        # the wave grid and step without error.
+        weno_model = NarrowBandWaveModel(grid; κ, velocities=(u=uvortex, v=vvortex))
+        set!(weno_model; A=(x, y) -> cis(κ * x))
+        for _ in 1:20
+            time_step!(weno_model, Δt)
+        end
+        @test all(isfinite, amplitude(weno_model))
     end
 end

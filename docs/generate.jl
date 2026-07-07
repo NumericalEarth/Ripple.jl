@@ -9,6 +9,7 @@ const EXAMPLE_TUTORIALS = (
     ("vortex_refraction.jl",                 "Wave Refraction Through A Barotropic Vortex"),
     ("translating_hurricane_swell.jl",       "Swell Generation by a Translating Idealized Hurricane"),
     ("narrow_band_packet_dispersion.jl",     "Narrow-Band Packet Dispersion"),
+    ("narrow_band_vortex_scattering.jl",     "Narrow-Band Wave Scattering by a Vortex"),
 )
 
 example_slug(filename) = first(splitext(filename)) * ".md"

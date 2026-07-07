@@ -1,7 +1,7 @@
 import Oceananigans
 import Oceananigans: AbstractModel, fields, prognostic_fields
 import Oceananigans.Architectures: architecture
-import Oceananigans.Advection: WENO
+import Oceananigans.Advection: WENO, materialize_advection
 import Oceananigans.Grids: topology, Flat, halo_size
 import Oceananigans.Fields: CenterField, interior
 import Oceananigans.TimeSteppers: Clock
@@ -75,6 +75,10 @@ function NarrowBandWaveModel(grid;
     dispersion = NarrowBandDispersion(κ, depth; gravity)
     solver = NarrowBandHelmholtzSolver(grid, dispersion)
     wave_grid = solver.grid
+
+    # Resolve deferred advection settings (e.g. WENO's per-backend weight
+    # computation) for the wave grid, exactly as an Oceananigans model would.
+    advection = materialize_advection(advection, wave_grid)
 
     coupling = nothing
     if velocities !== nothing
