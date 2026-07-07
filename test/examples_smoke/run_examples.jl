@@ -18,10 +18,18 @@ end
 function test_example_module_artifacts(example_module)
     if isdefined(example_module, :model)
         model = getfield(example_module, :model)
-        @test model isa SpectralWaveModel
         @test model.clock.time >= 0
         @test model.clock.iteration >= 0
-        test_finite_product_field(model.action)
+        if model isa SpectralWaveModel
+            test_finite_product_field(model.action)
+        elseif model isa NarrowBandWaveModel
+            @test all(isfinite, interior(model.Gr))
+            @test all(isfinite, interior(model.Gi))
+            @test all(isfinite, interior(model.Ar))
+            @test all(isfinite, interior(model.Ai))
+        else
+            @test false  # unexpected model type in an example
+        end
     end
 end
 
@@ -42,6 +50,8 @@ end
         "spectral_refraction_by_shear.jl",
         "vortex_refraction.jl",
         "translating_hurricane_swell.jl",
+        "narrow_band_packet_dispersion.jl",
+        "narrow_band_vortex_scattering.jl",
     ]
 
     discovered_examples = sort([basename(path) for path in readdir(example_dir; join=true)
@@ -86,6 +96,14 @@ end
                                                        "HollandHurricaneWind",
                                                        "PrecomputedSources",
                                                        "PressureCorrelationInput"),
+            "narrow_band_packet_dispersion.jl"     => ("# # Narrow-Band Packet Dispersion",
+                                                       "NarrowBandWaveModel",
+                                                       "InfiniteDepth",
+                                                       "reconstitut"),
+            "narrow_band_vortex_scattering.jl"     => ("# # Narrow-Band Wave Scattering by a Barotropic Vortex",
+                                                       "NarrowBandWaveModel",
+                                                       "velocities",
+                                                       "WENO"),
         )
 
         for (file, required_patterns) in semantic_examples

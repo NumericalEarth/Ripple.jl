@@ -109,6 +109,9 @@ function default_validation_cases()
         ValidationCase(:finite_volume_source_rates,
                        "Power-law source rates use exact spectral finite-volume averages.",
                        finite_volume_source_rates_validation),
+        ValidationCase(:narrow_band_dispersion,
+                       "Narrow-band amplitude model reproduces the semi-discrete dispersion Λ_d and the reconstituted carrier frequency.",
+                       narrow_band_dispersion_validation),
     )
 end
 
@@ -353,6 +356,54 @@ function finite_volume_source_rates_validation()
     tolerances = Dict(:finite_volume_rate_error => 1e-14,
                       :midpoint_difference => Inf)
     return ValidationResult(:finite_volume_source_rates, "exact finite-volume source rates", metrics, tolerances)
+end
+
+function narrow_band_dispersion_validation()
+    Nx = 128
+    grid = RectilinearGrid(CPU(); size=(Nx, Nx, 4), x=(0, 2π), y=(0, 2π), z=(-1000, 0),
+                           topology=(Periodic, Periodic, Bounded), halo=(3, 3, 3))
+    κ = 8.0
+    model = NarrowBandWaveModel(grid; κ, depth=InfiniteDepth())
+    d = model.dispersion
+    Δt = 0.1 / d.ω
+    Δx = 2π / Nx
+
+    # The model reproduces the semi-discrete dispersion Λ_d exactly: a single grid
+    # mode advances by the SSP-RK3 amplification factor P(iΛ_d Δt) to roundoff.
+    frequency_error = 0.0
+    for n in (5, 8, 12)
+        λ = (2 * sin(n * π / Nx) / Δx)^2
+        M̂ = 1 + d.α * (κ^2 - λ)
+        Λd = (d.ω_κ / 2κ) * (κ^2 - λ) / M̂
+        z = im * Λd * Δt
+        P = 1 + z + z^2 / 2 + z^3 / 6
+        set!(model; A=(x, y) -> cis(n * x))
+        A0 = copy(amplitude(model))
+        time_step!(model, Δt)
+        A1 = amplitude(model)
+        # Single Fourier mode: A1 = P·A0 pointwise (|A0| = 1 everywhere).
+        frequency_error = max(frequency_error, maximum(abs, A1 .- P .* A0))
+    end
+
+    # The reconstituted carrier frequency matches the exact deep-water dispersion
+    # far better than the bare (α = 0) quadratic Taylor truncation.
+    gravity = d.gravity
+    k = 1.1κ
+    s_exact = sqrt(gravity * k) - sqrt(gravity * κ)          # ω(k) − ω(κ)
+    s_recon = (d.ω_κ / 2κ) * (k^2 - κ^2) / (1 + d.α * (κ^2 - k^2))
+    s_bare  = (d.ω_κ / 2κ) * (k^2 - κ^2)                     # α = 0
+    reconstituted_error = abs(s_recon - s_exact) / abs(s_exact)
+    bare_error = abs(s_bare - s_exact) / abs(s_exact)
+
+    metrics = Dict(:semidiscrete_frequency_error => frequency_error,
+                   :reconstituted_relative_error => reconstituted_error,
+                   :reconstitution_improvement_deficit => max(0.0, reconstituted_error - bare_error))
+    tolerances = Dict(:semidiscrete_frequency_error => 1e-9,
+                      :reconstituted_relative_error => 5e-3,
+                      :reconstitution_improvement_deficit => 0.0)
+    return ValidationResult(:narrow_band_dispersion,
+                            "narrow-band semi-discrete dispersion and reconstitution accuracy",
+                            metrics, tolerances)
 end
 
 function write_validation_summary(path::AbstractString, results)

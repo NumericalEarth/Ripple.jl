@@ -13,6 +13,7 @@ script_project_flag() = "--project=$(dirname(Base.active_project()))"
         :fetch_limited_source_balance,
         :hasselmann_column,
         :finite_volume_source_rates,
+        :narrow_band_dispersion,
     ]
 
     @test length(cases) == length(expected_names)
