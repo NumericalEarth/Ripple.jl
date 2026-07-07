@@ -10,9 +10,14 @@ using Printf
 using Statistics: std
 CairoMakie.activate!(type = "png")
 
-arch = GPU()
-Nx = Ny = 96
-Nz = 48
+# Defaults to CPU at modest resolution so the script runs anywhere. For a
+# full-resolution large-eddy run, add `using CUDA`, set `arch = GPU()`, and
+# raise the resolution (e.g. Nx = Ny = 96, Nz = 48). The horizontal extent must
+# be an integer number of carrier wavelengths (120 m = 2 × 60 m), because the
+# narrow-band model resolves the carrier in space and requires a periodic wave.
+arch = CPU()
+Nx = Ny = 48
+Nz = 32
 grid = RectilinearGrid(arch; size=(Nx, Ny, Nz), extent=(120, 120, 48),
                        halo=(3, 3, 3), topology=(Periodic, Periodic, Bounded))
 
@@ -67,7 +72,7 @@ initialize_coupling!(wcm)
 
 # --- coupled time stepping ---
 Δt = 1.0
-stop_time = 90minutes
+stop_time = 60minutes
 Nsteps = round(Int, stop_time / Δt)
 sample_every = round(Int, 5minutes / Δt)
 
