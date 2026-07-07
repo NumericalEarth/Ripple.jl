@@ -33,6 +33,11 @@ The example pages walk a deliberate arc:
    dissipation, Hasselmann DIA) driven by a translating Holland (1980)
    hurricane, showing the right-front extended-fetch enhancement and the
    trailing swell wake.
+7. **[Narrow-Band Packet Dispersion](@ref)** — the "hello world" of the
+   second model type, `NarrowBandWaveModel`: a Gaussian packet built on a
+   carrier translates at the group velocity ``\omega_\kappa`` and spreads
+   dispersively, illustrating the reconstituted dispersion relation and the
+   amplitude (rather than action) formulation.
 
 Run any example from the repository root:
 
@@ -54,6 +59,7 @@ Pages = [
     "generated/examples/spectral_refraction_by_shear.md",
     "generated/examples/vortex_refraction.md",
     "generated/examples/translating_hurricane_swell.md",
+    "generated/examples/narrow_band_packet_dispersion.md",
 ]
 Depth = 1
 ```
