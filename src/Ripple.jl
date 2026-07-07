@@ -105,5 +105,6 @@ export vertical_structure, vertical_structure_derivative, vertical_structure_con
 export screened_poisson_symbol
 export NarrowBandHelmholtzSolver, solve_amplitude!, amplitude_field, amplitude_solver_grid
 export NarrowBandWaveModel, amplitude, reconstituted_amplitude, reconstitute!
+export stokes_functionals, surface_elevation_amplitude
 
 end

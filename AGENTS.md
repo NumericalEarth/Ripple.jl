@@ -111,9 +111,25 @@ src/
 ├── Forcing/                    # Idealized winds, hurricanes
 ├── Sources/                    # Source-term zoo (wind, whitecapping, ...)
 ├── Models/                     # SpectralWaveModel, time-step, tendencies
+├── NarrowBand/                 # NarrowBandWaveModel (Onuki & Fujiwara 2026):
+│                               # amplitude model, screened-Poisson solve,
+│                               # vertical projection, refraction, Stokes drift
 ├── OceananigansIntegration.jl  # Hooks into Oceananigans
 └── Validation/                 # Validation cases + harness
 ```
+
+## Two wave models
+
+Ripple has two model types. `SpectralWaveModel` (`src/Models/`) is the
+WKB wave-action model. `NarrowBandWaveModel` (`src/NarrowBand/`) is the
+Onuki & Fujiwara (2026) narrow-band amplitude model for the
+no-scale-separation regime (currents at wavelength scale). It prognoses the
+reconstituted amplitude `G = [1 + α(∇² + κ²)]A` as a real pair and diagnoses
+`A` per stage via `Oceananigans.Solvers.FFTBasedPoissonSolver` on a Flat-z
+companion grid. Doppler transport reuses Oceananigans tracer advection; the
+carrier `κ` here is a fixed scalar parameter (not a spectral coordinate — see
+`docs/src/notation.md`). See `docs/design/narrow_band_model_plan.md` and
+`docs/src/narrow_band_model.md`.
 
 ## Common Pitfalls
 
