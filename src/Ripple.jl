@@ -4,6 +4,8 @@ include("Architectures.jl")
 include("Locations.jl")
 include("Grids.jl")
 
+include("NarrowBand/NarrowBand.jl")
+
 include("ProductFields/ProductFields.jl")
 include("CoordinateGrids/CoordinateGrids.jl")
 include("Diagnostics/Diagnostics.jl")
@@ -96,5 +98,11 @@ export parse_external_bulk_table, external_bulk_table_metrics
 export write_external_bulk_metrics_summary
 export PerformanceMetric, run_performance_smoke
 export write_performance_summary, read_performance_summary
+# Narrow-band amplitude model (Onuki & Fujiwara 2026) — Phase 0 scaffolding
+export NarrowBandDispersion, carrier_frequency, carrier_group_velocity
+export carrier_frequency_curvature, reconstitution_parameter
+export vertical_structure, vertical_structure_derivative, vertical_structure_constant
+export screened_poisson_symbol
+export NarrowBandHelmholtzSolver, solve_amplitude!, amplitude_field, amplitude_solver_grid
 
 end

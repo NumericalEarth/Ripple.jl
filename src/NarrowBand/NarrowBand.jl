@@ -1,0 +1,10 @@
+# Narrow-band amplitude wave–current model (Onuki & Fujiwara 2026).
+#
+# Phase 0 (scaffolding): the carrier dispersion relation and its derivatives,
+# and the diagnostic screened-Poisson solve that inverts the reconstitution
+# operator [1 + α(∇ₕ² + κ²)]. Later phases add the (G, A) prognostic pair, the
+# Doppler/refraction operators, the Stokes-drift functionals, and the coupled
+# `WaveCurrentModel`. See docs/design/narrow_band_model_plan.md.
+
+include("dispersion.jl")
+include("helmholtz_solve.jl")

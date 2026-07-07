@@ -34,6 +34,8 @@ end
 
 ripple_testset = @testset "Ripple.jl" begin
     include("product_fields/indexing.jl")
+    include("narrow_band/dispersion.jl")
+    include("narrow_band/helmholtz_solve.jl")
     include("coordinate_grids/finite_volume_integration.jl")
     include("initial_conditions/jonswap.jl")
     include("initial_conditions/gaussian_wave_packet.jl")
