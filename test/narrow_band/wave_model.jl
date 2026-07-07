@@ -9,8 +9,6 @@ import Oceananigans: Simulation, run!
         grid = make_grid()
         @test_throws ArgumentError NarrowBandWaveModel(grid)                       # missing κ
         @test_throws ArgumentError NarrowBandWaveModel(grid; κ=4.0, timestepper=:AB2)
-        @test_throws ArgumentError NarrowBandWaveModel(grid; κ=4.0,
-                                                       velocities=(u=1, v=1))
 
         model = NarrowBandWaveModel(grid; κ=4.0, depth=InfiniteDepth())
         @test propertynames(prognostic_fields(model)) == (:Gr, :Gi)

@@ -38,7 +38,7 @@ The example pages walk a deliberate arc:
    carrier translates at the group velocity ``\omega_\kappa`` and spreads
    dispersively, illustrating the reconstituted dispersion relation and the
    amplitude (rather than action) formulation.
-8. **[Narrow-Band Wave Scattering by a Vortex](@ref)** — a plane wave
+8. **[Narrow-Band Wave Scattering by a Barotropic Vortex](@ref)** — a plane wave
    refracting and scattering through a prescribed barotropic Gaussian vortex,
    with a focusing/defocusing wave-height pattern. The non-WKB regime where the
    current varies on the wavelength scale and ray theory breaks down.
