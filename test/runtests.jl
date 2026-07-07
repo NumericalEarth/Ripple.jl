@@ -40,6 +40,7 @@ ripple_testset = @testset "Ripple.jl" begin
     include("narrow_band/wave_model.jl")
     include("narrow_band/prescribed_current.jl")
     include("narrow_band/stokes_drift.jl")
+    include("narrow_band/coupled.jl")
     include("coordinate_grids/finite_volume_integration.jl")
     include("initial_conditions/jonswap.jl")
     include("initial_conditions/gaussian_wave_packet.jl")

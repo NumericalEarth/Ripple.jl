@@ -116,6 +116,32 @@ function build_narrow_band_velocities(velocities::NamedTuple, grid3d, wave_grid,
                                           Ūxᶜ, Ūyᶜ, Rr, Ri)
 end
 
+# Recompute all projected quantities from the (possibly updated) 3-D velocity
+# components `vel.u`, `vel.v`. Used by the two-way coupling to refresh the wave
+# model's Doppler transport from the evolving current each step.
+function refresh_narrow_band_velocities!(vel::NarrowBandPrescribedVelocities, wave_grid, dispersion)
+    arch = architecture(wave_grid)
+    Nz = size(vel.grid3d, 3)
+    project_velocity!(vel.Ūx, vel.u, vel.weights.Ū_weights, wave_grid, Nz)
+    project_velocity!(vel.Ūy, vel.v, vel.weights.Ū_weights, wave_grid, Nz)
+    project_velocity!(vel.Ũx, vel.u, vel.weights.Ũ_weights, wave_grid, Nz)
+    project_velocity!(vel.Ũy, vel.v, vel.weights.Ũ_weights, wave_grid, Nz)
+    for f in (vel.Ūx, vel.Ūy, vel.Ũx, vel.Ũy)
+        fill_halo_regions!(f)
+    end
+    FT = eltype(wave_grid)
+    coef = convert(FT, dispersion.κ * dispersion.ω_κ / dispersion.ω)
+    interior(vel.veffx) .= coef .* (interior(vel.Ūx) .+ interior(vel.Ũx))
+    interior(vel.veffy) .= coef .* (interior(vel.Ūy) .+ interior(vel.Ũy))
+    fill_halo_regions!(vel.veffx); fill_halo_regions!(vel.veffy)
+    launch!(arch, wave_grid, :xyz, _compressibility_source!,
+            vel.source, vel.Ūx, vel.Ūy, vel.Ũx, vel.Ũy, wave_grid, coef)
+    fill_halo_regions!(vel.source)
+    launch!(arch, wave_grid, :xyz, _interpolate_Ū_to_centers!, vel.Ūxᶜ, vel.Ūyᶜ, vel.Ūx, vel.Ūy, wave_grid)
+    fill_halo_regions!(vel.Ūxᶜ); fill_halo_regions!(vel.Ūyᶜ)
+    return vel
+end
+
 # The velocity NamedTuple that Oceananigans tracer advection (div_Uc) expects.
 # The vertical component is a ZeroField: the wave grid is Flat in z, so the
 # z-flux divergence vanishes.

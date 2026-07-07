@@ -106,5 +106,7 @@ export screened_poisson_symbol
 export NarrowBandHelmholtzSolver, solve_amplitude!, amplitude_field, amplitude_solver_grid
 export NarrowBandWaveModel, amplitude, reconstituted_amplitude, reconstitute!
 export stokes_functionals, surface_elevation_amplitude
+export NarrowBandStokesDrift, WaveCurrentModel, coupled_time_step!, initialize_coupling!
+export refresh_stokes_drift!, refresh_narrow_band_velocities!
 
 end
