@@ -1,7 +1,8 @@
 import Oceananigans
 import Oceananigans: AbstractModel, fields, prognostic_fields
 import Oceananigans.Architectures: architecture
-import Oceananigans.Grids: topology, Flat
+import Oceananigans.Advection: WENO
+import Oceananigans.Grids: topology, Flat, halo_size
 import Oceananigans.Fields: CenterField, interior
 import Oceananigans.TimeSteppers: Clock
 
@@ -63,13 +64,10 @@ function NarrowBandWaveModel(grid;
                              depth=nothing,
                              gravity=9.81,
                              velocities=nothing,
-                             advection=nothing,
+                             advection=WENO(),
                              timestepper=:RK3,
                              clock=Clock(time=0.0))
     κ === nothing && throw(ArgumentError("NarrowBandWaveModel requires a carrier wavenumber `κ`"))
-    velocities === nothing ||
-        throw(ArgumentError("NarrowBandWaveModel currently supports only `velocities = nothing` " *
-                            "(the wave-only regime); prescribed and coupled velocities arrive in later phases"))
     timestepper === :RK3 ||
         throw(ArgumentError("NarrowBandWaveModel currently supports only `timestepper = :RK3`; got $timestepper"))
 
@@ -78,6 +76,18 @@ function NarrowBandWaveModel(grid;
     solver = NarrowBandHelmholtzSolver(grid, dispersion)
     wave_grid = solver.grid
 
+    coupling = nothing
+    if velocities !== nothing
+        topology(grid, 3) === Flat &&
+            throw(ArgumentError("prescribed `velocities` require a vertically resolved grid " *
+                                "for the depth-weighted projection; the given grid is Flat in z"))
+        Hx, Hy, _ = halo_size(wave_grid)
+        (Hx ≥ 3 && Hy ≥ 3) ||
+            throw(ArgumentError("prescribed `velocities` need a horizontal halo of at least 3 " *
+                                "(WENO transport + the refraction stencil); got halo $(halo_size(wave_grid)[1:2])"))
+        coupling = build_narrow_band_velocities(velocities, grid, wave_grid, dispersion)
+    end
+
     Gr = CenterField(wave_grid); Gi = CenterField(wave_grid)
     Ar = CenterField(wave_grid); Ai = CenterField(wave_grid)
     Gr_tendency = CenterField(wave_grid); Gi_tendency = CenterField(wave_grid)
@@ -85,8 +95,8 @@ function NarrowBandWaveModel(grid;
 
     Arch = typeof(architecture(wave_grid))
     return NarrowBandWaveModel{Arch, typeof(wave_grid), typeof(dispersion), typeof(solver),
-                               typeof(advection), typeof(velocities), typeof(Gr), typeof(clock)}(
-        wave_grid, dispersion, solver, advection, velocities,
+                               typeof(advection), typeof(coupling), typeof(Gr), typeof(clock)}(
+        wave_grid, dispersion, solver, advection, coupling,
         Gr, Gi, Ar, Ai, Gr_tendency, Gi_tendency, G0r, G0i, timestepper, clock)
 end
 

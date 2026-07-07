@@ -8,6 +8,8 @@
 
 include("dispersion.jl")
 include("helmholtz_solve.jl")
+include("vertical_projection.jl")
+include("current_coupling.jl")
 include("narrow_band_wave_model.jl")
 include("wave_operators.jl")
 include("time_step.jl")
