@@ -1,6 +1,6 @@
 import Oceananigans
 import Oceananigans.Architectures: architecture
-import Oceananigans.Grids: RectilinearGrid, Flat, Periodic, topology
+import Oceananigans.Grids: RectilinearGrid, Flat, Periodic, topology, halo_size
 import Oceananigans.Fields: CenterField, interior
 import Oceananigans.Solvers: FFTBasedPoissonSolver, solve!
 
@@ -44,8 +44,9 @@ function amplitude_solver_grid(grid)
 
     x = Oceananigans.Grids.x_domain(grid)
     y = Oceananigans.Grids.y_domain(grid)
+    Hx, Hy, _ = halo_size(grid)
 
-    return RectilinearGrid(arch, FT; size=(Nx, Ny), x, y,
+    return RectilinearGrid(arch, FT; size=(Nx, Ny), x, y, halo=(Hx, Hy),
                            topology=(Periodic, Periodic, Flat))
 end
 

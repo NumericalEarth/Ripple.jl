@@ -104,5 +104,6 @@ export carrier_frequency_curvature, reconstitution_parameter
 export vertical_structure, vertical_structure_derivative, vertical_structure_constant
 export screened_poisson_symbol
 export NarrowBandHelmholtzSolver, solve_amplitude!, amplitude_field, amplitude_solver_grid
+export NarrowBandWaveModel, amplitude, reconstituted_amplitude, reconstitute!
 
 end
